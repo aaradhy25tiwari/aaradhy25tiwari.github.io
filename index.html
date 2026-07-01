@@ -2,15 +2,517 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Coming Soon</title>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; padding-top: 15%; background-color: #f4f4f4;}
-        h1 { font-size: 3em; color: #333; }
-        p { font-size: 1.2em; color: #666; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InfraQuip | B2B Heavy Construction Equipment Marketplace</title>
+    <meta name="description" content="InfraQuip is the premier two-sided B2B marketplace for renting and buying heavy construction equipment. Features 150-point mechanical certification, secure escrow, and automated logistics.">
+    <link rel="stylesheet" href="style.css">
+    <!-- Chart.js CDN for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <h1>Our New E-Commerce Store is Coming Soon</h1>
-    <p>We are currently building our website. Please check back later!</p>
+
+    <!-- ========================================================= -->
+    <!-- 1. ACTIVE INFRAQUIP PLACEHOLDER LANDING PAGE              -->
+    <!-- ========================================================= -->
+    <div class="placeholder-page" id="placeholder-view">
+        <div class="placeholder-card glass-panel">
+            <div class="placeholder-logo">
+                <div class="logo-icon">IQ</div>
+                Infra<span>Quip</span>
+            </div>
+            <h1>B2B Heavy Construction Equipment <span>Launching Soon</span></h1>
+            <p>InfraQuip is India's upcoming premier two-sided B2B marketplace for buying, selling, and renting heavy construction machinery. We are building automated escrow transaction workflows, 150-point certified engineering inspections, and integrated heavy-haul corridor logistics.</p>
+            
+            <form class="placeholder-form" id="newsletter-form" onsubmit="submitNewsletter(event)">
+                <input type="email" placeholder="Enter your business email..." required id="newsletter-email">
+                <button type="submit" class="btn btn-primary">Notify Me</button>
+            </form>
+            <p id="newsletter-message" style="display:none; color:var(--success); font-weight:600; font-size:14px; margin-top:-15px; margin-bottom:20px;"></p>
+
+            <div class="features-mini">
+                <div class="feature-mini-item"><span>✓</span> 150-Pt Inspections</div>
+                <div class="feature-mini-item"><span>✓</span> Secure B2B Escrow</div>
+                <div class="feature-mini-item"><span>✓</span> Automated Logistics</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function submitNewsletter(e) {
+            e.preventDefault();
+            const email = document.getElementById('newsletter-email').value;
+            const message = document.getElementById('newsletter-message');
+            const form = document.getElementById('newsletter-form');
+            if(email) {
+                form.style.display = 'none';
+                message.textContent = `Thank you! We've registered interest for: ${email}. We will notify you as soon as our marketplace goes live.`;
+                message.style.display = 'block';
+            }
+        }
+    </script>
+
+    <!-- ========================================================= -->
+    <!-- 2. ORIGINAL INFRAQUIP B2B APPLICATION (COMMENTED OUT)     -->
+    <!-- ========================================================= -->
+    <!-- 
+    [!-- 1. NAVIGATION BAR --]
+    <header>
+        <nav class="navbar" id="app-navbar">
+            <div class="logo" id="brand-logo">
+                <div class="logo-icon">IQ</div>
+                Infra<span>Quip</span>
+            </div>
+            <div class="nav-links" id="main-nav-links">
+                <div class="nav-item active" data-view="home" id="nav-home">Home</div>
+                <div class="nav-item" data-view="marketplace" id="nav-marketplace">Marketplace</div>
+                <div class="nav-item" data-view="portal" id="nav-portal">Client Portal</div>
+                <div class="nav-item" data-view="about" id="nav-about">About Us</div>
+            </div>
+            <button class="btn btn-primary nav-cta" onclick="openModal('sell-modal')" id="btn-post-equipment">
+                Sell / Rent Equipment
+            </button>
+        </nav>
+    </header>
+
+    [!-- MAIN BODY CONTENT --]
+    <main class="main-content" id="main-body-container">
+
+        [!-- 2. HOME VIEW --]
+        <section class="page-section active" id="home-section">
+            <div class="hero-section" id="hero-banner">
+                <div class="hero-content">
+                    <h1>The Smarter B2B Heavy <span>Equipment Hub</span></h1>
+                    <p>Rent or buy certified construction machinery with automated escrow payment, 150-point mechanical clearance, and end-to-end heavy logistics routing.</p>
+                    <div class="hero-ctas">
+                        <button class="btn btn-primary" onclick="switchView('marketplace')" id="hero-cta-browse">Browse Machinery</button>
+                        <button class="btn btn-secondary" onclick="switchView('about')" id="hero-cta-learn">Learn How It Works</button>
+                    </div>
+                </div>
+                <div class="hero-visual">
+                    <img src="hero_background.png" alt="Heavy equipment cranes and excavators in a clean dark industrial setting" class="hero-img" id="hero-visual-image">
+                    <div class="hero-overlay-stats">
+                        <div class="stat-pill">
+                            <span class="num">150+</span>
+                            <span class="lbl">Inspection Points</span>
+                        </div>
+                        <div class="stat-pill">
+                            <span class="num">₹40Cr+</span>
+                            <span class="lbl">Escrow Handled</span>
+                        </div>
+                        <div class="stat-pill">
+                            <span class="num">24h</span>
+                            <span class="lbl">Logistics Dispatch</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            [!-- Price Ticker Widget --]
+            <div class="ticker-wrap" id="ticker-widget">
+                <div class="ticker">
+                    <div class="ticker-item">💡 Market Update: <strong>Caterpillar 320</strong> Excavator rent avg: <span class="val">₹28,000/day</span></div>
+                    <div class="ticker-item">📈 Demand Spike: <strong>Liebherr Crane</strong> availability in NCR <span class="val down">-4%</span></div>
+                    <div class="ticker-item">💡 Logistics Index: <strong>Heavy flatbed</strong> freight rate: <span class="val">₹250/km</span></div>
+                    <div class="ticker-item">💡 Escrow Safety: <strong>100%</strong> transactions verified in Q2</div>
+                    <div class="ticker-item">💡 Market Update: <strong>JCB Backhoes</strong> valuation up <span class="val">+3.5%</span></div>
+                </div>
+            </div>
+
+            <div class="section-header">
+                <div class="section-title">
+                    <h2>Verified Core Value Propositions</h2>
+                    <p>Why modern project managers and fleet owners source equipment on InfraQuip.</p>
+                </div>
+            </div>
+
+            <div class="grid-3" id="value-props-container">
+                <div class="feature-box glass-panel">
+                    <div class="feature-box-icon">✓</div>
+                    <div>
+                        <h3>Rigorous Machine Inspections</h3>
+                        <p>No listings go live without a detailed 150-point diagnostic scan covering cylinder seals, engine oil compression, and undercarriage wear.</p>
+                    </div>
+                </div>
+                <div class="feature-box glass-panel">
+                    <div class="feature-box-icon">🔒</div>
+                    <div>
+                        <h3>Two-Sided B2B Escrow</h3>
+                        <p>Secured deposits are held until the machinery is delivered and passed the 24-hour jobsite test window, protecting both contractors and suppliers.</p>
+                    </div>
+                </div>
+                <div class="feature-box glass-panel">
+                    <div class="feature-box-icon">🚚</div>
+                    <div>
+                        <h3>Automated Heavy Transport</h3>
+                        <p>Integrated freight brokering matches your equipment size with lowboy trailers, handles custom road permits, and tracks shipping coordinates live.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-header">
+                <div class="section-title">
+                    <h2>Featured Heavy Equipment</h2>
+                    <p>Highly maintained listings verified by mechanical inspectors.</p>
+                </div>
+                <button class="btn btn-secondary" onclick="switchView('marketplace')">View All Machinery →</button>
+            </div>
+            
+            <div class="grid-3" id="featured-grid-home">
+                [!-- Javascript will load featured items here --]
+            </div>
+        </section>
+
+        [!-- 3. MARKETPLACE VIEW --]
+        <section class="page-section" id="marketplace-section">
+            <div class="marketplace-layout">
+                [!-- Sidebar Filters --]
+                <aside class="filter-sidebar glass-panel" id="market-filters-sidebar">
+                    <h3>
+                        <span>Filters</span>
+                        <button style="background:transparent; border:none; color:var(--bg-accent); font-size:12px; cursor:pointer;" onclick="document.getElementById('filter-form').reset(); initMarketplace();" id="btn-reset-filters">Clear All</button>
+                    </h3>
+                    <form id="filter-form" onsubmit="event.preventDefault();">
+                        <div class="filter-group">
+                            <label for="filter-category">Equipment Category</label>
+                            <select id="filter-category" class="filter-control">
+                                <option value="">All Categories</option>
+                                <option value="Excavators">Excavators</option>
+                                <option value="Cranes">Cranes</option>
+                                <option value="Loaders">Loaders</option>
+                                <option value="Bulldozers">Bulldozers</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="filter-type">Listing Type</label>
+                            <select id="filter-type" class="filter-control">
+                                <option value="">Any Type</option>
+                                <option value="buy">For Purchase</option>
+                                <option value="rent">For Rent</option>
+                            </select>
+                        </div>
+
+                        <div class="filter-group">
+                            <label for="filter-condition">Condition</label>
+                            <select id="filter-condition" class="filter-control">
+                                <option value="">Any Condition</option>
+                                <option value="Excellent">Excellent</option>
+                                <option value="Good">Good</option>
+                                <option value="Fair">Fair</option>
+                            </select>
+                        </div>
+
+                        <div class="filter-group">
+                            <label for="filter-max-price">Max Purchase Budget</label>
+                            <input type="range" id="filter-max-price" min="1000000" max="30000000" step="500000" value="30000000" style="width:100%; accent-color:var(--bg-accent);">
+                            <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-secondary); margin-top:5px;">
+                                <span>₹10 Lakhs</span>
+                                <span id="max-price-val" style="font-weight:600; color:var(--bg-accent);">₹3 Crores</span>
+                            </div>
+                        </div>
+                    </form>
+                </aside>
+
+                [!-- Grid Content Area --]
+                <div class="marketplace-content" id="market-listings-area">
+                    <div class="search-bar-row">
+                        <div class="search-input-wrap">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            <input type="text" placeholder="Search by brand, location, or vendor (e.g. Caterpillar, Houston, Apex)..." id="market-search">
+                        </div>
+                        <button class="btn btn-secondary" onclick="openModal('sell-modal')" style="flex-shrink:0;" id="btn-list-machinery">
+                            List Machinery
+                        </button>
+                    </div>
+
+                    <div class="listings-grid" id="listings-container">
+                        [!-- Javascript generates listings dynamically --]
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        [!-- 4. CLIENT PORTAL VIEW --]
+        <section class="page-section" id="portal-section">
+            <div class="portal-layout">
+                [!-- Left navigation pane --]
+                <aside class="portal-sidebar glass-panel" id="portal-nav-pane">
+                    <div style="padding: 20px 15px; border-bottom: 1px solid var(--border-color); margin-bottom: 15px;">
+                        <h4 style="font-size:16px;">B2B Workspace</h4>
+                        <span style="font-size:12px; color:var(--text-secondary);">Role: Procurement Mgr</span>
+                    </div>
+                    <div class="portal-menu">
+                        <div class="portal-menu-item active" data-portal-tab="workflow-hub" id="portal-menu-workflow">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            Workflow Tracker
+                        </div>
+                        <div class="portal-menu-item" data-portal-tab="dashboard-hub" id="portal-menu-dashboard">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                            Analytics Dashboard
+                        </div>
+                    </div>
+                </aside>
+
+                [!-- Right dynamic panel --]
+                <div class="portal-main-area" id="portal-content-pane">
+                    
+                    [!-- View A: Workflow Stepper Simulator --]
+                    <div class="portal-view active" id="workflow-hub">
+                        <div class="glass-panel workflow-section">
+                            <div class="workflow-header">
+                                <h3>Transaction Stepper & Logistics Tracker</h3>
+                                <span style="font-size:12px; color:var(--text-secondary);">Simulated Backend Workflow</span>
+                            </div>
+                            <div id="workflow-timeline-container">
+                                [!-- Generated by app.js based on contract state --]
+                            </div>
+                        </div>
+                    </div>
+
+                    [!-- View B: Data Visualization Dashboards --]
+                    <div class="portal-view" id="dashboard-hub">
+                        <div class="dashboard-stats-row" id="metrics-quick-summary">
+                            <div class="stat-card glass-panel">
+                                <div class="stat-card-header">
+                                    <span class="stat-card-title">Listings Inspected</span>
+                                    <div class="stat-card-icon green">✓</div>
+                                </div>
+                                <div class="stat-card-value">124</div>
+                                <div class="stat-card-trend trend-up">
+                                    <span>↑ 12% vs last month</span>
+                                </div>
+                            </div>
+                            <div class="stat-card glass-panel">
+                                <div class="stat-card-header">
+                                    <span class="stat-card-title">Average Escrow Release</span>
+                                    <div class="stat-card-icon blue">🔒</div>
+                                </div>
+                                <div class="stat-card-value">4.2 Days</div>
+                                <div class="stat-card-trend trend-up">
+                                    <span>↓ 1.1d logistics latency</span>
+                                </div>
+                            </div>
+                            <div class="stat-card glass-panel">
+                                <div class="stat-card-header">
+                                    <span class="stat-card-title">Market Rental Yield</span>
+                                    <div class="stat-card-icon orange">⚡</div>
+                                </div>
+                                <div class="stat-card-value">14.2%</div>
+                                <div class="stat-card-trend trend-up">
+                                    <span>↑ 0.8% Q2 infrastructure</span>
+                                </div>
+                            </div>
+                            <div class="stat-card glass-panel">
+                                <div class="stat-card-header">
+                                    <span class="stat-card-title">Active Logistics Runs</span>
+                                    <div class="stat-card-icon blue">🚚</div>
+                                </div>
+                                <div class="stat-card-value">18</div>
+                                <div class="stat-card-trend">
+                                    <span style="color:var(--text-secondary);">Currently in transit</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="charts-grid">
+                            <div class="chart-panel glass-panel" id="panel-price-trends">
+                                <h3>Machinery Valuation Trend (12 Months)</h3>
+                                <div class="chart-wrapper">
+                                    <canvas id="chart-price-trends"></canvas>
+                                </div>
+                            </div>
+                            <div class="chart-panel glass-panel" id="panel-inventory">
+                                <h3>Category Distribution</h3>
+                                <div class="chart-wrapper">
+                                    <canvas id="chart-inventory"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="charts-grid" style="grid-template-columns: 1fr;">
+                            <div class="chart-panel glass-panel" id="panel-rental-yield">
+                                <h3>Average Daily Rental yield comparison (INR ₹)</h3>
+                                <div class="chart-wrapper">
+                                    <canvas id="chart-rental-yield"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        [!-- 5. ABOUT US VIEW --]
+        <section class="page-section" id="about-section">
+            <div class="about-hero" id="about-intro">
+                <h1>Bridging Heavy Industrial Machinery With <span>Smart Workflows</span></h1>
+                <p>InfraQuip was founded in 2024 to solve fragmentation, inspection fraud, and shipping logjams in the B2B construction equipment industry.</p>
+            </div>
+
+            <div class="glass-panel about-vision" style="margin-bottom: 40px;" id="about-mission-panel">
+                <h3 style="font-size:24px; margin-bottom:12px; color:var(--bg-accent);">Our Mission</h3>
+                <p style="color:var(--text-secondary); font-size:16px;">We empower general contractors, excavation firms, and equipment dealers to coordinate assets on a reliable, frictionless digital network. By handling technical inspections, transaction escrow protection, and specialized freight logistics automatically, we turn weeks of administrative delay into a seamless 24-hour turnaround.</p>
+            </div>
+
+            <h3 style="font-size:24px; text-align:center; margin-bottom:30px;">The Leadership & Inspection Board</h3>
+            <div class="grid-3" id="about-team-grid">
+                <div class="team-card glass-panel">
+                    <div class="team-avatar" style="background-image: linear-gradient(135deg, #1e293b, #3b82f6); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:24px;">AT</div>
+                    <h3>Aradhya Tiwari</h3>
+                    <p>Chief Product Architect</p>
+                    <span class="team-bio">Spearheading core B2B automated workflows, API orchestration, and marketplace data visualization infrastructure.</span>
+                </div>
+                <div class="team-card glass-panel">
+                    <div class="team-avatar" style="background-image: linear-gradient(135deg, #1e293b, #f59e0b); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:24px;">ML</div>
+                    <h3>Marcus Vance</h3>
+                    <p>VP of Logistics & Supply</p>
+                    <span class="team-bio">20+ years coordinating heavy haul transport operations, corridor road permits, and industrial fleet allocation.</span>
+                </div>
+                <div class="team-card glass-panel">
+                    <div class="team-avatar" style="background-image: linear-gradient(135deg, #1e293b, #10b981); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:24px;">SR</div>
+                    <h3>Sarah Jenkins, PE</h3>
+                    <p>Head of Mechanical Inspection</p>
+                    <span class="team-bio">Directs our certified mechanical inspectors network. Oversees standards for machinery grade certifications.</span>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    [!-- 6. COLLAPSIBLE RAG CHATBOT SIDEBAR --]
+    <button class="chatbot-toggle" id="chatbot-toggle" aria-label="Open InfraBot Support Chat">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </button>
+
+    <div class="chatbot-panel glass-panel" id="chatbot-panel">
+        <div class="chat-header">
+            <div class="chat-header-info">
+                <div class="chat-status"></div>
+                <div>
+                    <h4 style="font-size:14px; margin-bottom: 2px;">InfraBot</h4>
+                    <span style="font-size:10px; color:var(--text-secondary);">RAG-Powered B2B Expert</span>
+                </div>
+            </div>
+            <button class="close-btn" onclick="document.getElementById('chatbot-panel').style.display='none';" id="chat-close-btn">&times;</button>
+        </div>
+        <div class="chat-body" id="chat-body">
+            [!-- Bubbles added dynamically --]
+        </div>
+        
+        [!-- Interactive Helper Chips for quick commands --]
+        <div class="chat-suggestions" id="chat-suggestions-area">
+            <div class="suggestion-chip" onclick="askSuggestion('How are inspection grades certified?')" id="chip-inspection">Inspection Grades?</div>
+            <div class="suggestion-chip" onclick="askSuggestion('Show price trends')" id="chip-trends">Price Trends Chart</div>
+            <div class="suggestion-chip" onclick="askSuggestion('How does escrow billing protect transactions?')" id="chip-escrow">How Escrow Works</div>
+            <div class="suggestion-chip" onclick="askSuggestion('What is the current workflow status?')" id="chip-workflow">Active Workflow Status</div>
+        </div>
+
+        <div class="chat-footer">
+            <input type="text" placeholder="Ask about machinery, shipping, or charts..." id="chat-input" aria-label="Enter chat message">
+            <button class="chat-send-btn" id="chat-send-btn" aria-label="Send message">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+        </div>
+    </div>
+
+    [!-- 7. MODALS --]
+    
+    [!-- Modal A: Equipment Detail Modal --]
+    <div class="modal-backdrop" id="details-modal" onclick="if(event.target === this) closeModal('details-modal');">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3 class="modal-title" id="details-title">Machinery Specification Card</h3>
+                <button class="close-btn" onclick="closeModal('details-modal')" id="btn-close-details-modal">&times;</button>
+            </div>
+            <div class="modal-body" id="details-modal-body">
+                [!-- Javascript fills this --]
+            </div>
+        </div>
+    </div>
+
+    [!-- Modal B: Sell/Rent Machinery Listing Modal --]
+    <div class="modal-backdrop" id="sell-modal" onclick="if(event.target === this) closeModal('sell-modal');">
+        <div class="modal-content glass-panel" style="max-width: 650px;">
+            <div class="modal-header">
+                <h3 class="modal-title">List Equipment in Marketplace</h3>
+                <button class="close-btn" onclick="closeModal('sell-modal')" id="btn-close-sell-modal">&times;</button>
+            </div>
+            <form id="add-listing-form">
+                <div class="modal-body">
+                    <div class="form-grid">
+                        <div class="form-field full-width">
+                            <label for="new-title">Equipment Name / Model</label>
+                            <input type="text" id="new-title" class="form-input" placeholder="e.g. Caterpillar 320 Hydraulic Excavator" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="new-category">Category</label>
+                            <select id="new-category" class="form-input" required>
+                                <option value="Excavators">Excavators</option>
+                                <option value="Cranes">Cranes</option>
+                                <option value="Loaders">Loaders</option>
+                                <option value="Bulldozers">Bulldozers</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label for="new-type">Available For</label>
+                            <select id="new-type" class="form-input" required>
+                                <option value="both">Both (Purchase & Lease)</option>
+                                <option value="sale">Outright Sale Only</option>
+                                <option value="rent">Rental Lease Only</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label for="new-price">Outright Sale Valuation (₹ INR)</label>
+                            <input type="number" id="new-price" class="form-input" placeholder="e.g. 8200000" min="100000" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="new-rental-rate">Rental Yield (₹ per day)</label>
+                            <input type="number" id="new-rental-rate" class="form-input" placeholder="e.g. 25000 (Optional, defaults to 0.4% valuation)">
+                        </div>
+                        <div class="form-field">
+                            <label for="new-year">Manufacture Year</label>
+                            <input type="number" id="new-year" class="form-input" placeholder="e.g. 2021" min="2000" max="2027" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="new-hours">Operational Machine Hours</label>
+                            <input type="number" id="new-hours" class="form-input" placeholder="e.g. 1200" min="0" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="new-location">Current Depot Location</label>
+                            <input type="text" id="new-location" class="form-input" placeholder="e.g. Mumbai, MH" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="new-condition">Reported Condition</label>
+                            <select id="new-condition" class="form-input" required>
+                                <option value="Excellent">Excellent (Like New)</option>
+                                <option value="Good">Good (Operable with minor wear)</option>
+                                <option value="Fair">Fair (Operational, high hours)</option>
+                            </select>
+                        </div>
+                        <div class="form-field full-width">
+                            <label for="new-seller">Selling Company Name</label>
+                            <input type="text" id="new-seller" class="form-input" placeholder="e.g. Apex Heavy Machinery Co." required>
+                        </div>
+                    </div>
+                </div>
+                <div style="padding: 20px 25px; border-top: 1px solid var(--border-color); display:flex; justify-content:flex-end; gap:12px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('sell-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Publish to Marketplace</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    [!-- FOOTER --]
+    <footer>
+        <div class="logo">
+            <div class="logo-icon">IQ</div>
+            Infra<span>Quip</span>
+        </div>
+        <p>&copy; 2026 InfraQuip Marketplace Inc. All B2B transactions escrow-cleared. Inspection certificates verified.</p>
+        <p style="font-size:11px; margin-top:10px; color:var(--text-muted);">Built by Aradhya Tiwari for Github Pages. All rights reserved.</p>
+    </footer>
+
+    <script src="app.js"></script>
+    -->
 </body>
 </html>
