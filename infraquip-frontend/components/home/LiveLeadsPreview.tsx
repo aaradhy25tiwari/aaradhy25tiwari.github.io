@@ -64,8 +64,8 @@ export function LiveLeadsPreview() {
             ))}
 
             {/* Blurred Rows for Guests */}
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/50 to-transparent z-10 flex items-center justify-center backdrop-blur-[2px]">
+            <div className="relative min-h-[220px] flex flex-col justify-start">
+              <div className="absolute inset-0 bg-gradient-to-t from-background/95 via-background/60 to-transparent z-10 flex items-center justify-center backdrop-blur-[2px]">
                 <div className="bg-card border border-border px-6 py-5 rounded-xl shadow-2xl text-center max-w-sm mx-auto relative z-20">
                   <div className="absolute -top-5 left-1/2 -translate-x-1/2 bg-background border border-border rounded-full p-2 shadow-sm">
                     <LockKeyhole className="w-5 h-5 text-amber-500" />
