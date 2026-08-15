@@ -12,6 +12,12 @@ export const metadata: Metadata = {
   },
 };
 
+import { Suspense } from "react";
+
 export default function MachinesPage() {
-  return <MachinesClientPage />;
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-muted-foreground">Loading equipment...</div>}>
+      <MachinesClientPage />
+    </Suspense>
+  );
 }
