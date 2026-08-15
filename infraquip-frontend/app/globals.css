@@ -1,0 +1,570 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap");
+@import "tailwindcss";
+
+
+/* ════════════════════════════════════════════════════════════
+   InfraQuip Design System — CSS Custom Properties
+   Construction-themed: Amber · Steel · Safety Orange
+   ════════════════════════════════════════════════════════════ */
+
+@layer base {
+  :root {
+    /* ── Core Palette (Light Mode) ─────────────────────────── */
+    --background: 220 25% 97%;
+    --foreground: 220 25% 8%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 8%;
+
+    /* Construction Amber primary */
+    --primary: 35 95% 52%;
+    --primary-foreground: 220 25% 8%;
+
+    /* Dark Steel secondary */
+    --secondary: 220 25% 90%;
+    --secondary-foreground: 220 25% 15%;
+
+    --muted: 220 15% 93%;
+    --muted-foreground: 220 15% 45%;
+
+    /* Safety Orange accent */
+    --accent: 15 85% 48%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 85% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
+    --ring: 35 95% 52%;
+
+    --radius: 0.75rem;
+
+    /* ── Brand-specific tokens ─────────────────────────────── */
+    --brand-amber: 35 95% 52%;       /* #f59e0b equivalent */
+    --brand-amber-dark: 30 90% 42%;
+    --brand-amber-light: 40 100% 70%;
+    --brand-steel: 220 25% 15%;
+    --brand-steel-light: 220 20% 25%;
+    --brand-orange: 15 85% 48%;      /* Safety Orange */
+    --brand-success: 142 72% 38%;    /* Safety Green */
+    --brand-warning: 45 100% 51%;
+
+    /* ── Surface Layers ────────────────────────────────────── */
+    --surface-1: 0 0% 100%;
+    --surface-2: 220 25% 97%;
+    --surface-3: 220 15% 93%;
+
+    /* ── Shadows (light) ───────────────────────────────────── */
+    --shadow-sm: 0 1px 3px 0 hsl(220 25% 8% / 0.08), 0 1px 2px -1px hsl(220 25% 8% / 0.08);
+    --shadow-md: 0 4px 16px -2px hsl(220 25% 8% / 0.10), 0 2px 8px -2px hsl(220 25% 8% / 0.08);
+    --shadow-lg: 0 10px 32px -4px hsl(220 25% 8% / 0.12), 0 4px 12px -4px hsl(220 25% 8% / 0.08);
+    --shadow-amber: 0 4px 20px -4px hsl(35 95% 52% / 0.35);
+
+    /* ── Gradients ─────────────────────────────────────────── */
+    --gradient-hero: linear-gradient(135deg, hsl(220 25% 8%) 0%, hsl(220 20% 14%) 50%, hsl(220 25% 10%) 100%);
+    --gradient-amber: linear-gradient(135deg, hsl(35 95% 52%) 0%, hsl(15 85% 48%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(220 25% 97%) 100%);
+  }
+
+  .dark {
+    /* ── Dark Mode (Default for InfraQuip — construction feel) */
+    --background: 220 25% 7%;
+    --foreground: 220 15% 95%;
+
+    --card: 220 20% 11%;
+    --card-foreground: 220 15% 95%;
+
+    --popover: 220 20% 11%;
+    --popover-foreground: 220 15% 95%;
+
+    --primary: 35 95% 52%;
+    --primary-foreground: 220 25% 8%;
+
+    --secondary: 220 20% 18%;
+    --secondary-foreground: 220 15% 85%;
+
+    --muted: 220 20% 15%;
+    --muted-foreground: 220 15% 55%;
+
+    --accent: 15 85% 48%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 18%;
+    --input: 220 20% 18%;
+    --ring: 35 95% 52%;
+
+    --surface-1: 220 20% 11%;
+    --surface-2: 220 25% 9%;
+    --surface-3: 220 20% 14%;
+
+    --shadow-sm: 0 1px 3px 0 hsl(0 0% 0% / 0.3);
+    --shadow-md: 0 4px 16px -2px hsl(0 0% 0% / 0.4);
+    --shadow-lg: 0 10px 32px -4px hsl(0 0% 0% / 0.5);
+  }
+
+  /* ── Base Styles ──────────────────────────────────────────── */
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  /* ── Heading Scale (fluid) ────────────────────────────────── */
+  h1 {
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    line-height: 1.1;
+  }
+  h2 {
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    font-size: clamp(1.5rem, 4vw, 2.5rem);
+    line-height: 1.2;
+  }
+  h3 {
+    font-weight: 600;
+    font-size: clamp(1.25rem, 3vw, 1.875rem);
+    line-height: 1.3;
+  }
+  h4 {
+    font-weight: 600;
+    font-size: clamp(1.1rem, 2vw, 1.5rem);
+    line-height: 1.4;
+  }
+  h5 {
+    font-weight: 500;
+    font-size: 1.125rem;
+    line-height: 1.5;
+  }
+  h6 {
+    font-weight: 500;
+    font-size: 1rem;
+  }
+
+  /* ── Focus Styles (Accessibility) ────────────────────────── */
+  :focus-visible {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* ── Skip Link ────────────────────────────────────────────── */
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50;
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+  }
+
+  /* ── Scrollbar Styling ────────────────────────────────────── */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   Mobile / Touch Utilities
+   ════════════════════════════════════════════════════════════ */
+@layer base {
+  /* Smooth scrolling everywhere */
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* iOS safe area support for bottom tab bar */
+  body {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  /* Prevent text size adjustment on orientation change (iOS) */
+  body {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   Component Utilities
+   ════════════════════════════════════════════════════════════ */
+@layer components {
+
+  /* ── Card Variants ─────────────────────────────────────────── */
+  .card-glass {
+    border-radius: 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background-color: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .card-surface {
+    border-radius: 1.25rem;
+    background-color: hsl(var(--card));
+    box-shadow: 0 1px 3px 0 hsla(220, 25%, 8%, 0.10), 0 2px 8px -2px hsla(220, 25%, 8%, 0.08);
+    border: 1px solid hsl(var(--border));
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .card-surface:hover {
+    box-shadow: 0 4px 16px -2px hsla(220, 25%, 8%, 0.40);
+    transform: translateY(-2px);
+  }
+
+  /* ── Machine Card ───────────────────────────────────────────── */
+  .machine-card {
+    border-radius: 1.25rem;
+    background-color: hsl(var(--card));
+    overflow: hidden;
+    cursor: pointer;
+    border: 1px solid hsl(var(--border));
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+
+  .machine-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: rgba(var(--primary) / 0.4);
+  }
+
+  /* ── Gradient Text ──────────────────────────────────────────── */
+  .text-gradient-amber {
+    background: linear-gradient(135deg, hsl(35 95% 55%), hsl(15 85% 52%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ── Section Container ──────────────────────────────────────── */
+  .section-container {
+    max-width: 80rem;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .section-container {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .section-container {
+      padding-left: 2rem;
+      padding-right: 2rem;
+    }
+  }
+
+  /* ── Hero Overlay ────────────────────────────────────────────── */
+  .hero-overlay {
+    background: linear-gradient(
+      to bottom,
+      hsl(220 25% 7% / 0.6) 0%,
+      hsl(220 25% 7% / 0.85) 60%,
+      hsl(220 25% 7% / 0.98) 100%
+    );
+  }
+
+  /* ── Badge Variants ─────────────────────────────────────────── */
+  .badge-condition-new {
+    background-color: rgba(16, 185, 129, 0.15);
+    color: rgb(52, 211, 153);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+  .badge-condition-excellent {
+    background-color: rgba(59, 130, 246, 0.15);
+    color: rgb(96, 165, 250);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+  }
+  .badge-condition-good {
+    background-color: rgba(251, 191, 36, 0.15);
+    color: rgb(245, 158, 11);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+  }
+  .badge-condition-fair {
+    background-color: rgba(249, 115, 22, 0.15);
+    color: rgb(249, 115, 22);
+    border: 1px solid rgba(249, 115, 22, 0.3);
+  }
+
+  .badge-status-approved {
+    background-color: rgba(16, 185, 129, 0.15);
+    color: rgb(52, 211, 153);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+  .badge-status-pending {
+    background-color: rgba(251, 191, 36, 0.15);
+    color: rgb(245, 158, 11);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+  }
+  .badge-status-rejected {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: rgb(248, 113, 113);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+  .badge-status-paused {
+    background-color: rgba(148, 163, 184, 0.15);
+    color: rgb(148, 163, 184);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+  }
+
+  /* ── Amber Button Glow ───────────────────────────────────────── */
+  .btn-amber-glow {
+    box-shadow: var(--shadow-amber);
+    transition: box-shadow 0.3s ease, transform 0.2s ease;
+  }
+  .btn-amber-glow:hover {
+    box-shadow: 0 6px 28px -4px hsl(35 95% 52% / 0.5);
+    transform: translateY(-1px);
+  }
+
+  /* ── Filter Pill ─────────────────────────────────────────────── */
+  .filter-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    background-color: hsl(var(--muted));
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: hsl(var(--foreground));
+    transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+    border: 1px solid hsl(var(--border));
+  }
+
+  .filter-pill:hover {
+    border-color: rgba(var(--primary) / 0.5);
+    background-color: hsl(var(--primary) / 0.1);
+  }
+
+  /* ── Input Focus Amber ───────────────────────────────────────── */
+  .input-amber:focus {
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.15);
+  }
+
+  /* ── Dashboard Stat Card ─────────────────────────────────────── */
+  .stat-card {
+    border-radius: 1.25rem;
+    border: 1px solid hsl(var(--border));
+    background-color: hsl(var(--card));
+    padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)));
+  }
+
+  /* ── Nav Active Link ──────────────────────────────────────────── */
+  .nav-link-active {
+    color: hsl(var(--primary));
+    font-weight: 600;
+    position: relative;
+  }
+
+  .nav-link-active::after {
+    content: "";
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: hsl(var(--primary));
+    border-radius: 1px;
+  }
+
+  /* ── Skeleton Loader ──────────────────────────────────────────── */
+  .skeleton {
+    border-radius: 0.5rem;
+    background-color: hsl(var(--muted));
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  /* ── Price Display ────────────────────────────────────────────── */
+  .price-primary {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: hsl(var(--primary));
+  }
+
+  .price-label {
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
+    font-weight: 400;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   Animations
+   ════════════════════════════════════════════════════════════ */
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.4s ease-out both;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* slideUp: starts visible (opacity 1), just moves from below */
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0.6; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  /* fadeSlideUp: full fade + slide for scroll-triggered elements */
+  @keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  /* ── Animation delay utilities (for staggered hero content) ── */
+  .delay-100 { animation-delay: 100ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-400 { animation-delay: 400ms; }
+  .delay-500 { animation-delay: 500ms; }
+  .delay-600 { animation-delay: 600ms; }
+
+  /* ── Reduced Motion ─────────────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* ── Responsive Grid Utilities ──────────────────────────────── */
+  .grid-listings {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .grid-listings {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .grid-listings {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .grid-listings {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  .grid-listings-compact {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  @media (min-width: 640px) {
+    .grid-listings-compact {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .grid-listings-compact {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  /* ── Text Size Preferences ──────────────────────────────────── */
+  [data-text-size="large"] { font-size: 18px; }
+  [data-text-size="xlarge"] { font-size: 20px; }
+
+  /* ── Sticky Mobile CTA Bar ──────────────────────────────────── */
+  .mobile-cta-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    border-top: 1px solid hsl(var(--border));
+    background-color: hsla(var(--card), 0.95);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    padding: 1rem;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  /* ── Glassmorphism Utilities ────────────────────────────────── */
+  .glass-dark {
+    background: hsl(220 25% 10% / 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid hsl(220 20% 25% / 0.5);
+  }
+
+  .glass-amber {
+    background: hsl(35 95% 52% / 0.1);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid hsl(35 95% 52% / 0.25);
+  }
+}

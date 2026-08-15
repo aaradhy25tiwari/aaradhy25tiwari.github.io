@@ -1,0 +1,359 @@
+
+<h2 class="sr-only">InfraQuip complete page map — all pages for Guest, Vendor, Customer, Broker, and Admin user types with URLs and key sections</h2>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.tabs{display:flex;gap:0;border-bottom:0.5px solid var(--border);margin-bottom:14px}
+.tab{padding:7px 14px;font-size:12px;font-weight:500;color:var(--text-secondary);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.tab.on{border-bottom-color:currentColor}
+.tab-guest.on{color:#444441}
+.tab-vendor.on{color:#085041}
+.tab-customer.on{color:#0C447C}
+.tab-broker.on{color:#3C3489}
+.tab-admin.on{color:#712B13}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.panel{display:none}.panel.on{display:block}
+.sec-label{font-size:10px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);margin:12px 0 8px;display:flex;align-items:center;gap:6px}
+.sec-label::after{content:'';flex:1;height:0.5px;background:var(--border)}
+.shared-note{background:var(--surface-1);border:0.5px solid var(--border);border-radius:var(--radius);padding:7px 11px;font-size:11px;color:var(--text-secondary);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.card{background:var(--surface-2);border:0.5px solid var(--border);border-radius:var(--radius);padding:9px 11px;cursor:default}
+.card:hover{border-color:var(--border-strong)}
+.card-top{display:flex;align-items:flex-start;gap:8px;margin-bottom:5px}
+.card-icon{width:26px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px}
+.card-head{flex:1;min-width:0}
+.card-name{font-size:12px;font-weight:500;color:var(--text-primary);line-height:1.3;margin-bottom:2px}
+.card-url{font-size:10px;color:var(--text-muted);font-family:var(--font-mono)}
+.card-desc{font-size:11px;color:var(--text-secondary);line-height:1.5;margin-bottom:5px}
+.card-sections{display:flex;flex-wrap:wrap;gap:3px}
+.sec-chip{font-size:10px;padding:1px 5px;border-radius:3px;background:var(--surface-1);color:var(--text-muted);border:0.5px solid var(--border)}
+.badge{font-size:9px;padding:1px 5px;border-radius:3px;font-weight:500}
+.b-pub{background:#F1EFE8;color:#444441}
+.b-prv{background:#E6F1FB;color:#0C447C}
+.b-adm{background:#FAECE7;color:#712B13}
+.b-p2{background:#FAEEDA;color:#633806}
+.full{grid-column:1/-1}
+</style>
+
+<div class="tabs">
+  <div class="tab tab-guest on" onclick="sw('guest')"><div class="dot" style="background:#888780"></div>Guest</div>
+  <div class="tab tab-vendor" onclick="sw('vendor')"><div class="dot" style="background:#1D9E75"></div>Vendor</div>
+  <div class="tab tab-customer" onclick="sw('customer')"><div class="dot" style="background:#378ADD"></div>Customer</div>
+  <div class="tab tab-broker" onclick="sw('broker')"><div class="dot" style="background:#7F77DD"></div>Broker</div>
+  <div class="tab tab-admin" onclick="sw('admin')"><div class="dot" style="background:#D85A30"></div>Admin</div>
+</div>
+
+<div id="p-guest" class="panel on">
+  <div class="sec-label">Discovery</div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#F1EFE8"><i class="ti ti-home" style="color:#444441" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Homepage <span class="badge b-pub">Public</span></div><div class="card-url">/</div></div></div>
+      <div class="card-desc">Hero search, Live Leads panel, category grid, featured listings, vendor acquisition CTA</div>
+      <div class="card-sections"><span class="sec-chip">Hero + search</span><span class="sec-chip">All/Rent/Used toggle</span><span class="sec-chip">Live leads</span><span class="sec-chip">Category grid</span><span class="sec-chip">Featured listings</span><span class="sec-chip">AI chatbot strip</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#F1EFE8"><i class="ti ti-search" style="color:#444441" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Search results <span class="badge b-pub">Public</span></div><div class="card-url">/machines</div></div></div>
+      <div class="card-desc">Full listing browse with filter sidebar, card grid, and map toggle</div>
+      <div class="card-sections"><span class="sec-chip">Filter sidebar</span><span class="sec-chip">Card grid</span><span class="sec-chip">Map view toggle</span><span class="sec-chip">Sort options</span><span class="sec-chip">Pagination</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#F1EFE8"><i class="ti ti-category" style="color:#444441" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Category page <span class="badge b-pub">Public</span></div><div class="card-url">/machines/[category]</div></div></div>
+      <div class="card-desc">SEO-optimised category landing page. e.g. /machines/excavators</div>
+      <div class="card-sections"><span class="sec-chip">Category header + description</span><span class="sec-chip">Listing grid</span><span class="sec-chip">City filter</span><span class="sec-chip">Schema.org markup</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#F1EFE8"><i class="ti ti-map-pin" style="color:#444441" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">City + category page <span class="badge b-pub">Public</span></div><div class="card-url">/machines/[category]/[city]</div></div></div>
+      <div class="card-desc">Primary SEO target page. e.g. /machines/excavators/pune</div>
+      <div class="card-sections"><span class="sec-chip">Geo-filtered listings</span><span class="sec-chip">City + category breadcrumb</span><span class="sec-chip">Nearby cities links</span><span class="sec-chip">Hreflang (Phase 3)</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#F1EFE8"><i class="ti ti-bulldozer" style="color:#444441" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Listing detail <span class="badge b-pub">Public</span></div><div class="card-url">/machines/[cat]/[city]/[slug]</div></div></div>
+      <div class="card-desc">Full machine listing — gallery, specs, pricing, vendor card, enquiry CTA</div>
+      <div class="card-sections"><span class="sec-chip">Photo gallery</span><span class="sec-chip">Specs table (HMR, condition, ownership)</span><span class="sec-chip">Pricing block</span><span class="sec-chip">Vendor card</span><span class="sec-chip">Enquire CTA (gated)</span><span class="sec-chip">Wishlist (gated)</span><span class="sec-chip">Reviews</span><span class="sec-chip">Related listings</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#F1EFE8"><i class="ti ti-user-circle" style="color:#444441" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Vendor profile <span class="badge b-pub">Public</span></div><div class="card-url">/vendors/[slug]</div></div></div>
+      <div class="card-desc">Public page for each vendor — all their active listings, ratings, about</div>
+      <div class="card-sections"><span class="sec-chip">Vendor bio + stats</span><span class="sec-chip">Verified badge</span><span class="sec-chip">Active listings grid</span><span class="sec-chip">Average rating</span><span class="sec-chip">Member since</span></div>
+    </div>
+  </div>
+
+  <div class="sec-label">Discovery — directories</div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#F1EFE8"><i class="ti ti-list" style="color:#444441" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Category directory <span class="badge b-pub">Public</span></div><div class="card-url">/categories</div></div></div>
+      <div class="card-desc">Grid of all equipment categories with listing count and icon</div>
+      <div class="card-sections"><span class="sec-chip">Category icon grid</span><span class="sec-chip">Listing counts</span><span class="sec-chip">Links to /machines/[cat]</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#F1EFE8"><i class="ti ti-building-community" style="color:#444441" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">City directory <span class="badge b-pub">Public</span></div><div class="card-url">/cities</div></div></div>
+      <div class="card-desc">All cities with active listings; grouped by state</div>
+      <div class="card-sections"><span class="sec-chip">State groupings</span><span class="sec-chip">City + listing count</span><span class="sec-chip">Links to /machines/[cat]/[city]</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#FAECE7"><i class="ti ti-antenna" style="color:#712B13" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Live leads <span class="badge b-pub">Public</span></div><div class="card-url">/live-leads</div></div></div>
+      <div class="card-desc">Real-time enquiry feed. First 3 rows visible to all; rest blurred to drive vendor signup</div>
+      <div class="card-sections"><span class="sec-chip">Paginated lead table</span><span class="sec-chip">Filter: category, state</span><span class="sec-chip">Blur/lock rows for guests</span><span class="sec-chip">Vendor CTA</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#F1EFE8"><i class="ti ti-currency-rupee" style="color:#444441" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Pricing <span class="badge b-pub">Public</span></div><div class="card-url">/pricing</div></div></div>
+      <div class="card-desc">Subscription tier comparison table for both vendor and customer plans</div>
+      <div class="card-sections"><span class="sec-chip">Vendor tier table</span><span class="sec-chip">Customer tier table</span><span class="sec-chip">FAQ accordion</span><span class="sec-chip">CTA: Request access</span></div>
+    </div>
+  </div>
+
+  <div class="sec-label">Auth</div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#F1EFE8"><i class="ti ti-login" style="color:#444441" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Login <span class="badge b-pub">Public</span></div><div class="card-url">/login</div></div></div>
+      <div class="card-desc">Phone OTP primary (6-digit, 10-min expiry). Email + password as fallback.</div>
+      <div class="card-sections"><span class="sec-chip">Phone input → OTP screen</span><span class="sec-chip">OTP countdown + resend</span><span class="sec-chip">"Use email instead" toggle</span><span class="sec-chip">Forgot password link</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#F1EFE8"><i class="ti ti-user-plus" style="color:#444441" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Request access <span class="badge b-pub">Public</span></div><div class="card-url">/request-access</div></div></div>
+      <div class="card-desc">Multi-step registration form. Step 1: basics. Step 2: role-specific fields.</div>
+      <div class="card-sections"><span class="sec-chip">Role picker (Vendor/Customer/Broker)</span><span class="sec-chip">Step 1: name, phone OTP, email, password</span><span class="sec-chip">Step 2: role-specific fields</span><span class="sec-chip">T&C checkbox</span><span class="sec-chip">Submit → "We'll respond in 24h"</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#F1EFE8"><i class="ti ti-lock-open" style="color:#444441" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Forgot password <span class="badge b-pub">Public</span></div><div class="card-url">/forgot-password</div></div></div>
+      <div class="card-desc">Email-based password reset (fallback for email+password users)</div>
+      <div class="card-sections"><span class="sec-chip">Email input</span><span class="sec-chip">Reset link email via Resend</span><span class="sec-chip">/reset-password/[token] page</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#F1EFE8"><i class="ti ti-info-circle" style="color:#444441" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Static pages <span class="badge b-pub">Public</span></div><div class="card-url">/about /contact /blog /privacy /terms</div></div></div>
+      <div class="card-desc">About InfraQuip, support contact form, blog (Phase 3), and legal pages</div>
+      <div class="card-sections"><span class="sec-chip">/about: mission + team</span><span class="sec-chip">/contact: support form</span><span class="sec-chip">/privacy: DPDP compliant</span><span class="sec-chip">/terms: T&C</span><span class="sec-chip">/blog/[slug]: Phase 3</span></div>
+    </div>
+  </div>
+
+  <div class="sec-label">System</div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#F1EFE8"><i class="ti ti-error-404" style="color:#444441" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">404 not found <span class="badge b-pub">Public</span></div><div class="card-url">/* (unmatched routes)</div></div></div>
+      <div class="card-desc">Friendly error page with search bar and links to browse categories</div>
+      <div class="card-sections"><span class="sec-chip">Search bar</span><span class="sec-chip">Category shortcuts</span><span class="sec-chip">Back to homepage CTA</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#FAECE7"><i class="ti ti-tools" style="color:#712B13" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Maintenance <span class="badge b-pub">Public</span></div><div class="card-url">/maintenance (all routes)</div></div></div>
+      <div class="card-desc">Shown when admin enables maintenance mode. Admin can still access /admin.</div>
+      <div class="card-sections"><span class="sec-chip">Maintenance message</span><span class="sec-chip">Expected return time</span><span class="sec-chip">Contact email</span></div>
+    </div>
+  </div>
+</div>
+
+<div id="p-vendor" class="panel">
+  <div class="shared-note"><i class="ti ti-arrows-transfer-up" style="font-size:13px;color:var(--text-muted)" aria-hidden="true"></i><span>Inherits all 15 public pages above. Enquire Now, Wishlist, and vendor phone number are now unlocked.</span></div>
+  <div class="sec-label">Vendor dashboard</div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E1F5EE"><i class="ti ti-layout-dashboard" style="color:#085041" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Dashboard home <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard</div></div></div>
+      <div class="card-desc">Overview cards, action items, quick-add listing CTA, recent enquiries</div>
+      <div class="card-sections"><span class="sec-chip">Metric cards (active listings, total enquiries, views, tier)</span><span class="sec-chip">Recent enquiries feed</span><span class="sec-chip">Profile completion banner</span><span class="sec-chip">Quick actions bar</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E1F5EE"><i class="ti ti-list-details" style="color:#085041" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">My listings <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/listings</div></div></div>
+      <div class="card-desc">Full table of all listings across all statuses</div>
+      <div class="card-sections"><span class="sec-chip">Status filter tabs (Active/Pending/Paused/Rejected)</span><span class="sec-chip">Listing table: photo, name, category, views, enquiries, status</span><span class="sec-chip">Edit / Pause / Delete actions</span><span class="sec-chip">Subscription limit indicator</span><span class="sec-chip">Add new listing CTA</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E1F5EE"><i class="ti ti-circle-plus" style="color:#085041" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">New listing <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/listings/new</div></div></div>
+      <div class="card-desc">Multi-step machine listing form. 3 steps: basic info → specs + pricing → photos.</div>
+      <div class="card-sections"><span class="sec-chip">Step 1: category, make, model, year, condition, ownership type, running condition</span><span class="sec-chip">Step 2: location, listing type, pricing (day/week/month), HMR, availability, min duration</span><span class="sec-chip">Step 3: photo upload (min 1, max 10), description</span><span class="sec-chip">Submit for review</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E1F5EE"><i class="ti ti-edit" style="color:#085041" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Edit listing <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/listings/[id]/edit</div></div></div>
+      <div class="card-desc">Same form as new listing but pre-filled. Does not reset approval status.</div>
+      <div class="card-sections"><span class="sec-chip">Pre-filled 3-step form</span><span class="sec-chip">Current status badge</span><span class="sec-chip">Photo manager (add/remove/reorder)</span><span class="sec-chip">Save changes CTA</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E1F5EE"><i class="ti ti-chart-bar" style="color:#085041" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Listing analytics <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/listings/[id]/analytics</div></div></div>
+      <div class="card-desc">Per-listing performance data: views, enquiries, saves, time-series chart</div>
+      <div class="card-sections"><span class="sec-chip">Views over time chart</span><span class="sec-chip">Enquiries over time</span><span class="sec-chip">Wishlist saves count</span><span class="sec-chip">Top traffic sources (Phase 2)</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E1F5EE"><i class="ti ti-inbox" style="color:#085041" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Enquiry inbox <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/enquiries</div></div></div>
+      <div class="card-desc">All received enquiries across all listings, sorted newest-first</div>
+      <div class="card-sections"><span class="sec-chip">Enquiry list: customer, listing, date, status, unread badge</span><span class="sec-chip">Filter: All/Unread/Replied/Closed</span><span class="sec-chip">Search by customer or listing</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E1F5EE"><i class="ti ti-message-circle" style="color:#085041" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Enquiry thread <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/enquiries/[id]</div></div></div>
+      <div class="card-desc">Full message thread for one enquiry. Phase 2: Realtime chat replaces this.</div>
+      <div class="card-sections"><span class="sec-chip">Enquiry details sidebar (machine, customer, date, requirement)</span><span class="sec-chip">Message thread</span><span class="sec-chip">Reply textarea + send</span><span class="sec-chip">Mark as closed</span><span class="sec-chip">Phase 2: Realtime chat + file attachment</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E1F5EE"><i class="ti ti-credit-card" style="color:#085041" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Subscription <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/subscription</div></div></div>
+      <div class="card-desc">Current tier status, listing limit usage bar, upgrade tiers, billing history</div>
+      <div class="card-sections"><span class="sec-chip">Current plan card</span><span class="sec-chip">Active listings: X of Y used</span><span class="sec-chip">Tier comparison table</span><span class="sec-chip">Razorpay upgrade modal</span><span class="sec-chip">Payment history table</span><span class="sec-chip">Cancel subscription</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E1F5EE"><i class="ti ti-user" style="color:#085041" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Profile settings <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/profile</div></div></div>
+      <div class="card-desc">Business profile editor — all fields that appear on the public vendor profile page</div>
+      <div class="card-sections"><span class="sec-chip">Business name, type, GST</span><span class="sec-chip">Profile photo / logo upload</span><span class="sec-chip">Description, years in business</span><span class="sec-chip">Cities served (multi-select)</span><span class="sec-chip">Profile completion %</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E1F5EE"><i class="ti ti-settings" style="color:#085041" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Account settings <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/settings</div></div></div>
+      <div class="card-desc">Email, phone, password, notification preferences, account deletion</div>
+      <div class="card-sections"><span class="sec-chip">Change email / phone</span><span class="sec-chip">Change password</span><span class="sec-chip">Notification toggles (SMS, email, push per event type)</span><span class="sec-chip">Language preference</span><span class="sec-chip">Delete account (DPDP)</span></div>
+    </div>
+  </div>
+</div>
+
+<div id="p-customer" class="panel">
+  <div class="shared-note"><i class="ti ti-arrows-transfer-up" style="font-size:13px;color:var(--text-muted)" aria-hidden="true"></i><span>Inherits all 15 public pages. Enquire Now, Wishlist save, and vendor phone number are now unlocked.</span></div>
+  <div class="sec-label">Customer dashboard</div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E6F1FB"><i class="ti ti-layout-dashboard" style="color:#0C447C" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Dashboard home <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard</div></div></div>
+      <div class="card-desc">Summary of recent enquiries, saved listings, and AI-powered equipment recommendations</div>
+      <div class="card-sections"><span class="sec-chip">Recent enquiries (last 3)</span><span class="sec-chip">Saved listings (last 4)</span><span class="sec-chip">Recommended listings based on search history</span><span class="sec-chip">Profile completion banner</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E6F1FB"><i class="ti ti-heart" style="color:#0C447C" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">My wishlist <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/wishlist</div></div></div>
+      <div class="card-desc">All saved listings. Synced across devices. Business tier: unlimited saves.</div>
+      <div class="card-sections"><span class="sec-chip">Listing card grid</span><span class="sec-chip">Remove from wishlist</span><span class="sec-chip">Enquire Now (inline)</span><span class="sec-chip">Availability badge per card</span><span class="sec-chip">Free tier limit indicator (20 max)</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E6F1FB"><i class="ti ti-send" style="color:#0C447C" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">My enquiries <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/enquiries</div></div></div>
+      <div class="card-desc">All enquiries sent, with status (Awaiting reply / Replied / Closed)</div>
+      <div class="card-sections"><span class="sec-chip">Enquiry list: machine, vendor, date, status</span><span class="sec-chip">Filter by status</span><span class="sec-chip">Monthly enquiry count vs limit (free: 5/month)</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E6F1FB"><i class="ti ti-message-circle" style="color:#0C447C" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Enquiry thread <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/enquiries/[id]</div></div></div>
+      <div class="card-desc">Thread for a specific enquiry. Customer sees vendor reply and can respond.</div>
+      <div class="card-sections"><span class="sec-chip">Enquiry summary (machine, dates, requirements)</span><span class="sec-chip">Message thread</span><span class="sec-chip">Reply textarea</span><span class="sec-chip">Mark as closed</span><span class="sec-chip">Rate vendor (after close)</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E6F1FB"><i class="ti ti-credit-card" style="color:#0C447C" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Subscription <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/subscription</div></div></div>
+      <div class="card-desc">Free vs Business tier comparison. Monthly enquiry usage. Upgrade via Razorpay.</div>
+      <div class="card-sections"><span class="sec-chip">Current plan card</span><span class="sec-chip">Enquiries used this month: X of 5</span><span class="sec-chip">Tier comparison</span><span class="sec-chip">Razorpay upgrade modal</span><span class="sec-chip">Payment history</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E6F1FB"><i class="ti ti-user" style="color:#0C447C" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Profile settings <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/profile</div></div></div>
+      <div class="card-desc">Personal info, company details, preferred equipment types, regions of operation</div>
+      <div class="card-sections"><span class="sec-chip">Full name, designation, photo</span><span class="sec-chip">Company name, size, type, GST/CIN</span><span class="sec-chip">Equipment types needed</span><span class="sec-chip">Regions of operation</span><span class="sec-chip">Billing address</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#E6F1FB"><i class="ti ti-settings" style="color:#0C447C" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Account settings <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/settings</div></div></div>
+      <div class="card-desc">Email, phone, password, notification preferences, account deletion</div>
+      <div class="card-sections"><span class="sec-chip">Change email / phone</span><span class="sec-chip">Change password</span><span class="sec-chip">Notification toggles</span><span class="sec-chip">Language preference</span><span class="sec-chip">Delete account</span></div>
+    </div>
+    <div class="card full">
+      <div class="card-top"><div class="card-icon" style="background:#FAEEDA"><i class="ti ti-bulb" style="color:#633806" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Bulk RFQ <span class="badge b-p2">Phase 2</span></div><div class="card-url">/dashboard/rfq</div></div></div>
+      <div class="card-desc">Business tier only: send one Request for Quotation to multiple vendors simultaneously. Vendors receive it as a special lead type.</div>
+      <div class="card-sections"><span class="sec-chip">Equipment requirement form</span><span class="sec-chip">Vendor multi-select (filter by category + city)</span><span class="sec-chip">Send to up to 10 vendors</span><span class="sec-chip">Track responses in one thread</span></div>
+    </div>
+  </div>
+</div>
+
+<div id="p-broker" class="panel">
+  <div class="shared-note"><i class="ti ti-arrows-transfer-up" style="font-size:13px;color:var(--text-muted)" aria-hidden="true"></i><span>Inherits all 15 public pages. Can save listings and send enquiries on behalf of clients.</span></div>
+  <div class="sec-label">Broker dashboard</div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#EEEDFE"><i class="ti ti-layout-dashboard" style="color:#3C3489" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Dashboard home <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard</div></div></div>
+      <div class="card-desc">Activity summary: open enquiries, saved listings, recently viewed, profile completion</div>
+      <div class="card-sections"><span class="sec-chip">Open enquiries count</span><span class="sec-chip">Saved listings count</span><span class="sec-chip">Recent activity feed</span><span class="sec-chip">Profile completion banner</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#EEEDFE"><i class="ti ti-bookmarks" style="color:#3C3489" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Saved listings <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/saved</div></div></div>
+      <div class="card-desc">Listings saved for specific clients. Can be tagged by client name for organisation.</div>
+      <div class="card-sections"><span class="sec-chip">Listing card grid</span><span class="sec-chip">Client tag filter</span><span class="sec-chip">Add client tag to listing</span><span class="sec-chip">Enquire on behalf</span><span class="sec-chip">Share link copy</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#EEEDFE"><i class="ti ti-send" style="color:#3C3489" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">My enquiries <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/enquiries</div></div></div>
+      <div class="card-desc">All enquiries sent to vendors. Broker sends on behalf of their clients.</div>
+      <div class="card-sections"><span class="sec-chip">Enquiry list with status</span><span class="sec-chip">Client name column</span><span class="sec-chip">Filter by status / client</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#EEEDFE"><i class="ti ti-message-circle" style="color:#3C3489" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Enquiry thread <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/enquiries/[id]</div></div></div>
+      <div class="card-desc">Same thread view as Customer. Broker negotiates with vendor on client's behalf.</div>
+      <div class="card-sections"><span class="sec-chip">Enquiry summary</span><span class="sec-chip">Message thread</span><span class="sec-chip">Reply textarea</span><span class="sec-chip">Close / rate vendor</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#EEEDFE"><i class="ti ti-user" style="color:#3C3489" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Broker profile <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/profile</div></div></div>
+      <div class="card-desc">Brokerage info editor — fields that appear on the public broker profile page</div>
+      <div class="card-sections"><span class="sec-chip">Agency name, experience, photo, bio</span><span class="sec-chip">Regions of operation</span><span class="sec-chip">Equipment specialisations</span><span class="sec-chip">MSME registration</span><span class="sec-chip">Commission preference</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#EEEDFE"><i class="ti ti-credit-card" style="color:#3C3489" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Subscription <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/subscription</div></div></div>
+      <div class="card-desc">Broker tier plan (TBD in PRD v2). Enquiry usage and upgrade options.</div>
+      <div class="card-sections"><span class="sec-chip">Current plan</span><span class="sec-chip">Monthly enquiry usage</span><span class="sec-chip">Upgrade options</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#EEEDFE"><i class="ti ti-settings" style="color:#3C3489" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Account settings <span class="badge b-prv">Private</span></div><div class="card-url">/dashboard/settings</div></div></div>
+      <div class="card-desc">Email, phone, password, notifications, account deletion</div>
+      <div class="card-sections"><span class="sec-chip">Change email / phone</span><span class="sec-chip">Change password</span><span class="sec-chip">Notification toggles</span><span class="sec-chip">Delete account</span></div>
+    </div>
+    <div class="card full">
+      <div class="card-top"><div class="card-icon" style="background:#FAEEDA"><i class="ti ti-users" style="color:#633806" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Client pipeline <span class="badge b-p2">Phase 2</span></div><div class="card-url">/dashboard/clients</div></div></div>
+      <div class="card-desc">Manage multiple clients and their equipment requirements. Track deal stage per client.</div>
+      <div class="card-sections"><span class="sec-chip">Client list (name, company, active requirements)</span><span class="sec-chip">Add new client</span><span class="sec-chip">Per-client requirement cards</span><span class="sec-chip">Link saved listings to a client requirement</span><span class="sec-chip">Deal stage tracker (Sourcing / Shortlisted / Enquired / Closed)</span></div>
+    </div>
+  </div>
+</div>
+
+<div id="p-admin" class="panel">
+  <div class="sec-label">Admin panel — /admin prefix, desktop-first, not linked publicly</div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#FAECE7"><i class="ti ti-layout-dashboard" style="color:#712B13" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Admin dashboard <span class="badge b-adm">Admin only</span></div><div class="card-url">/admin</div></div></div>
+      <div class="card-desc">Real-time action queue counts + platform health metrics. Landing page after login.</div>
+      <div class="card-sections"><span class="sec-chip">Action cards (pending requests, pending listings, flagged content)</span><span class="sec-chip">Health cards (DAU, MAU, active listings, enquiries today, MRR)</span><span class="sec-chip">Realtime updates via Supabase</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#FAECE7"><i class="ti ti-user-check" style="color:#712B13" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Account requests <span class="badge b-adm">Admin only</span></div><div class="card-url">/admin/requests</div></div></div>
+      <div class="card-desc">All incoming registrations. Approve, reject (with reason), or mark as spam.</div>
+      <div class="card-sections"><span class="sec-chip">Pending queue (oldest-first)</span><span class="sec-chip">Full detail panel (expand)</span><span class="sec-chip">Approve → OTP sent in 30s</span><span class="sec-chip">Reject → mandatory reason → SMS + email sent</span><span class="sec-chip">Mark as spam → blocks phone + email</span><span class="sec-chip">History: approved / rejected</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#FAECE7"><i class="ti ti-users" style="color:#712B13" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">User database <span class="badge b-adm">Admin only</span></div><div class="card-url">/admin/users</div></div></div>
+      <div class="card-desc">All users across all roles — searchable, filterable, actionable</div>
+      <div class="card-sections"><span class="sec-chip">Search by name / phone / email</span><span class="sec-chip">Filter: role, status, state, tier</span><span class="sec-chip">Ban / unban (+ reason, SMS + email sent)</span><span class="sec-chip">Override subscription tier + duration</span><span class="sec-chip">Soft-delete (DPDP)</span><span class="sec-chip">Export CSV</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#FAECE7"><i class="ti ti-clipboard-check" style="color:#712B13" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Listing moderation <span class="badge b-adm">Admin only</span></div><div class="card-url">/admin/listings</div></div></div>
+      <div class="card-desc">All listings across all statuses. Inline preview before approve/reject.</div>
+      <div class="card-sections"><span class="sec-chip">Filter: status, category, state</span><span class="sec-chip">Side-panel preview (photos + all fields)</span><span class="sec-chip">Approve / Reject (reason required) / Flag for revision / Feature / Pause / Delete</span><span class="sec-chip">Auto-approval toggle per §11.11.9</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#FAECE7"><i class="ti ti-category" style="color:#712B13" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Category management <span class="badge b-adm">Admin only</span></div><div class="card-url">/admin/categories</div></div></div>
+      <div class="card-desc">Full CRUD on equipment categories and subcategories. Reorder. Show/hide.</div>
+      <div class="card-sections"><span class="sec-chip">Category list with listing count</span><span class="sec-chip">Add: name, slug (auto), icon picker, description</span><span class="sec-chip">Edit: any field (slug locked after creation)</span><span class="sec-chip">Reorder: drag-and-drop or arrows</span><span class="sec-chip">Visibility toggle</span><span class="sec-chip">Delete: blocked if listing count &gt; 0</span><span class="sec-chip">Subcategory CRUD within each category</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#FAECE7"><i class="ti ti-chart-line" style="color:#712B13" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Platform analytics <span class="badge b-adm">Admin only</span></div><div class="card-url">/admin/analytics</div></div></div>
+      <div class="card-desc">Full platform health dashboard with charts, leaderboards, funnel, and CSV export</div>
+      <div class="card-sections"><span class="sec-chip">Date range picker (7/30/90d / all time)</span><span class="sec-chip">Key metric cards (DAU, MAU, listings, enquiries, MRR)</span><span class="sec-chip">Charts: user growth, DAU bar, listing activity, enquiry trend, revenue, subscription donut</span><span class="sec-chip">Top 5 leaderboards: categories + cities</span><span class="sec-chip">Registration → enquiry funnel with drop-off %</span><span class="sec-chip">Export CSV</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#FAECE7"><i class="ti ti-receipt" style="color:#712B13" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Subscription management <span class="badge b-adm">Admin only</span></div><div class="card-url">/admin/subscriptions</div></div></div>
+      <div class="card-desc">View and manage all active subscriptions. Override tiers, extend billing, cancel.</div>
+      <div class="card-sections"><span class="sec-chip">Summary cards (paid count, MRR, expiring in 7d)</span><span class="sec-chip">Subscription table with Razorpay ID</span><span class="sec-chip">Override tier + duration (reason required)</span><span class="sec-chip">Extend billing date</span><span class="sec-chip">Cancel + Razorpay API call</span><span class="sec-chip">Refund flag (manual in Razorpay UI)</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#FAECE7"><i class="ti ti-shield-check" style="color:#712B13" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Content moderation <span class="badge b-adm">Admin only</span></div><div class="card-url">/admin/content</div></div></div>
+      <div class="card-desc">Review queue, flagged enquiry senders, and Live Leads spam management</div>
+      <div class="card-sections"><span class="sec-chip">Reviews queue: publish / soft-hide / delete</span><span class="sec-chip">Auto-flagged enquiry senders (&gt;10/24h)</span><span class="sec-chip">Live Leads spam: hide / restore</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#FAECE7"><i class="ti ti-settings-2" style="color:#712B13" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Platform settings <span class="badge b-adm">Admin only</span></div><div class="card-url">/admin/settings</div></div></div>
+      <div class="card-desc">Global operational controls — no deployment required to change these</div>
+      <div class="card-sections"><span class="sec-chip">Announcement banner (text, type, show/hide)</span><span class="sec-chip">Registration pause toggle</span><span class="sec-chip">Listing auto-approval toggle</span><span class="sec-chip">Maintenance mode + message</span><span class="sec-chip">Support email + WhatsApp number</span><span class="sec-chip">Footer links editor</span></div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="card-icon" style="background:#FAECE7"><i class="ti ti-history" style="color:#712B13" aria-hidden="true"></i></div><div class="card-head"><div class="card-name">Audit log <span class="badge b-adm">Admin only</span></div><div class="card-url">/admin/audit-log</div></div></div>
+      <div class="card-desc">Immutable, append-only record of every admin write action. Cannot be deleted.</div>
+      <div class="card-sections"><span class="sec-chip">Table: timestamp, action type, target entity + ID, before/after JSON, IP address</span><span class="sec-chip">Filter: action type, entity, date range</span><span class="sec-chip">Search by target ID</span><span class="sec-chip">Export CSV</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function sw(role){
+  ['guest','vendor','customer','broker','admin'].forEach(r=>{
+    document.getElementById('p-'+r).classList.remove('on');
+    document.querySelector('.tab-'+r).classList.remove('on');
+  });
+  document.getElementById('p-'+role).classList.add('on');
+  document.querySelector('.tab-'+role).classList.add('on');
+}
+</script>
