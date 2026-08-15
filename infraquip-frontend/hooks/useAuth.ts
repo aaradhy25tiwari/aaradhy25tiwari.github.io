@@ -43,7 +43,7 @@ export function useAuth() {
               role: meta.role ?? "customer",
               avatar_url: meta.avatar_url ?? null,
               is_active: true,
-            } as User,
+            } as unknown as User,
             loading: false,
             error: null,
           });
