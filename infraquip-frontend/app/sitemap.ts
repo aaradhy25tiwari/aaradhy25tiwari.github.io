@@ -16,6 +16,7 @@ async function fetchMachineSlugs(): Promise<SitemapMachine[]> {
   try {
     const res = await fetch(`${API_URL}/sitemap/machines`, {
       next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return [];
     return res.json();
@@ -28,6 +29,7 @@ async function fetchCategories(): Promise<SitemapCategory[]> {
   try {
     const res = await fetch(`${API_URL}/categories`, {
       next: { revalidate: 86400 },
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return [];
     return res.json();
