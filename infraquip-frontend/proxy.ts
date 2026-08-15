@@ -6,7 +6,7 @@ const PROTECTED_ROUTES = ["/dashboard", "/admin"];
 // Routes only for guests (redirect if already logged in)
 const GUEST_ONLY_ROUTES = ["/login", "/register"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(

@@ -45,8 +45,8 @@ export function LiveLeadsPreview() {
           </div>
 
           {/* Unlocked Rows */}
-          <div className="divide-y divide-border">
-            {MOCK_LEADS.map((lead) => (
+          <div className="divide-y divide-border relative">
+            {MOCK_LEADS.slice(0, 2).map((lead) => (
               <div key={lead.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-4 p-4 items-center hover:bg-muted/30 transition-colors">
                 <div className="col-span-1 sm:col-span-4 font-medium text-primary">
                   {lead.equipment}
@@ -65,28 +65,38 @@ export function LiveLeadsPreview() {
 
             {/* Blurred Rows for Guests */}
             <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-transparent z-10 flex items-center justify-center backdrop-blur-[2px]">
-                <div className="bg-background/95 border border-border px-6 py-4 rounded-xl shadow-lg text-center max-w-sm mx-auto">
-                  <LockKeyhole className="w-8 h-8 text-amber-500 mx-auto mb-3" />
-                  <h3 className="font-semibold text-foreground mb-1">Unlock 50+ Daily Leads</h3>
-                  <p className="text-xs text-muted-foreground mb-4">
+              <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/50 to-transparent z-10 flex items-center justify-center backdrop-blur-[2px]">
+                <div className="bg-card border border-border px-6 py-5 rounded-xl shadow-2xl text-center max-w-sm mx-auto relative z-20">
+                  <div className="absolute -top-5 left-1/2 -translate-x-1/2 bg-background border border-border rounded-full p-2 shadow-sm">
+                    <LockKeyhole className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <h3 className="font-semibold text-foreground mb-1 mt-2">Unlock 50+ Daily Leads</h3>
+                  <p className="text-xs text-muted-foreground mb-5">
                     Register as a vendor to see all requirements and contact customers instantly.
                   </p>
-                  <Button className="w-full btn-amber-glow" asChild>
+                  <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white" asChild>
                     <Link href="/register?role=vendor">Join as Vendor</Link>
                   </Button>
                 </div>
               </div>
 
               {/* Fake blurred rows */}
-              {[1, 2, 3].map((i) => (
-                <div key={`blur-${i}`} className="grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-4 p-4 items-center opacity-40 blur-[3px] select-none pointer-events-none">
-                  <div className="col-span-1 sm:col-span-4 h-5 bg-muted rounded w-3/4"></div>
-                  <div className="col-span-1 sm:col-span-3 h-5 bg-muted rounded w-1/2"></div>
-                  <div className="col-span-1 sm:col-span-3 h-5 bg-muted rounded w-2/3"></div>
-                  <div className="col-span-1 sm:col-span-2 h-5 bg-muted rounded w-1/3 ml-auto"></div>
+              {MOCK_LEADS.slice(2, 3).map((lead) => (
+                <div key={lead.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-4 p-4 items-center opacity-30 blur-[4px] select-none pointer-events-none">
+                  <div className="col-span-1 sm:col-span-4 font-medium">{lead.equipment}</div>
+                  <div className="col-span-1 sm:col-span-3 text-sm">{lead.city}</div>
+                  <div className="col-span-1 sm:col-span-3 text-sm">{lead.requirement}</div>
+                  <div className="col-span-1 sm:col-span-2 text-xs sm:text-right">{lead.time}</div>
                 </div>
               ))}
+              
+              {/* Additional generic blurred row */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-4 p-4 items-center opacity-20 blur-[5px] select-none pointer-events-none">
+                <div className="col-span-1 sm:col-span-4 h-5 bg-muted-foreground/30 rounded w-3/4"></div>
+                <div className="col-span-1 sm:col-span-3 h-5 bg-muted-foreground/30 rounded w-1/2"></div>
+                <div className="col-span-1 sm:col-span-3 h-5 bg-muted-foreground/30 rounded w-2/3"></div>
+                <div className="col-span-1 sm:col-span-2 h-5 bg-muted-foreground/30 rounded w-1/3 ml-auto"></div>
+              </div>
             </div>
           </div>
         </div>

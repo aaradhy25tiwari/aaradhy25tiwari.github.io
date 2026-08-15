@@ -72,18 +72,20 @@ export function HowItWorks() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-20px" }}
                 transition={{ delay: i * 0.1, duration: 0.4 }}
-                className={`relative flex flex-col items-center text-center rounded-2xl border ${step.border} p-4 sm:p-6 bg-card`}
+                className={`relative flex flex-col items-center text-center rounded-2xl border ${step.border} p-4 sm:p-6 bg-card overflow-hidden group hover:border-${step.color.split('-')[1]}-400/50 transition-colors`}
               >
-                {/* Icon */}
-                <div className={`relative flex h-14 w-14 sm:h-20 sm:w-20 items-center justify-center rounded-2xl ${step.bg} border border-border mb-4 sm:mb-6`}>
-                  <Icon className={`h-6 w-6 sm:h-8 sm:w-8 ${step.color}`} />
-                  <span className="absolute -top-2 -right-2 flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] sm:text-xs font-bold">
-                    {i + 1}
-                  </span>
+                {/* Background Number */}
+                <div className="absolute -top-4 -right-2 text-7xl font-black text-muted/30 select-none group-hover:text-muted/50 transition-colors">
+                  {step.step}
                 </div>
 
-                <h3 className="text-sm sm:text-lg font-semibold mb-1 sm:mb-2">{step.title}</h3>
-                <p className="text-muted-foreground text-xs sm:text-sm leading-relaxed">
+                {/* Icon */}
+                <div className={`relative flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-2xl ${step.bg} border border-border mb-4 sm:mb-6 z-10`}>
+                  <Icon className={`h-6 w-6 sm:h-8 sm:w-8 ${step.color}`} />
+                </div>
+
+                <h3 className="text-sm sm:text-lg font-semibold mb-1 sm:mb-2 z-10 relative">{step.title}</h3>
+                <p className="text-muted-foreground text-xs sm:text-sm leading-relaxed z-10 relative">
                   {step.description}
                 </p>
               </motion.div>
