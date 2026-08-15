@@ -35,10 +35,11 @@ export function LoginForm() {
     // Check if it's an email (has @) or a phone number
     const isEmail = data.emailOrPhone.includes("@");
     
-    const { error } = await supabase.auth.signInWithPassword({
-      [isEmail ? "email" : "phone"]: data.emailOrPhone,
-      password: data.password,
-    });
+    const credentials = isEmail
+      ? { email: data.emailOrPhone, password: data.password }
+      : { phone: data.emailOrPhone, password: data.password };
+
+    const { error } = await supabase.auth.signInWithPassword(credentials);
 
     if (error) {
       if (error.message.includes("Invalid login")) {
