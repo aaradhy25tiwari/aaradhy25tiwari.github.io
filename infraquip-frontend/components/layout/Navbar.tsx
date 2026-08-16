@@ -180,11 +180,11 @@ export function Navbar() {
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild>
                           <Link
-                            href={`${dashboardHref}/settings`}
+                            href={`${dashboardHref}/profile`}
                             className="gap-2"
                           >
-                            <Settings className="h-4 w-4" />
-                            Settings
+                            <User className="h-4 w-4" />
+                            Profile
                           </Link>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />

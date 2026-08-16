@@ -557,38 +557,42 @@ async def get_vendor_enquiries(
 @router.get("/stats")
 async def get_vendor_stats(current_user: VendorUser, db: DBSession):
     """Aggregated stats for vendor dashboard."""
-    listings_by_status = await db.execute(
-        select(Machine.status, func.count(Machine.id))
-        .where(Machine.vendor_id == current_user.id)
-        .group_by(Machine.status)
-    )
-
-    total_views = await db.execute(
-        select(func.sum(Machine.views_count)).where(Machine.vendor_id == current_user.id)
-    )
-
-    total_enquiries = await db.execute(
-        select(func.count(Enquiry.id)).where(Enquiry.vendor_id == current_user.id)
-    )
-
-    unread_enquiries = await db.execute(
-        select(func.count(Enquiry.id)).where(
-            Enquiry.vendor_id == current_user.id,
-            Enquiry.is_read_by_vendor == False,
+    try:
+        listings_by_status = await db.execute(
+            select(Machine.status, func.count(Machine.id))
+            .where(Machine.vendor_id == current_user.id)
+            .group_by(Machine.status)
         )
-    )
 
-    status_map = {row[0]: row[1] for row in listings_by_status.all()}
+        total_views = await db.execute(
+            select(func.sum(Machine.views_count)).where(Machine.vendor_id == current_user.id)
+        )
 
-    return {
-        "total_listings": sum(status_map.values()),
-        "approved_listings": status_map.get(MachineStatus.approved, 0),
-        "pending_listings": status_map.get(MachineStatus.pending, 0),
-        "paused_listings": status_map.get(MachineStatus.paused, 0),
-        "total_views": total_views.scalar() or 0,
-        "total_enquiries": total_enquiries.scalar() or 0,
-        "unread_enquiries": unread_enquiries.scalar() or 0,
-    }
+        total_enquiries = await db.execute(
+            select(func.count(Enquiry.id)).where(Enquiry.vendor_id == current_user.id)
+        )
+
+        unread_enquiries = await db.execute(
+            select(func.count(Enquiry.id)).where(
+                Enquiry.vendor_id == current_user.id,
+                Enquiry.is_read_by_vendor == False,
+            )
+        )
+
+        status_map = {row[0]: row[1] for row in listings_by_status.all()}
+
+        return {
+            "total_listings": sum(status_map.values()),
+            "approved_listings": status_map.get(MachineStatus.approved, 0),
+            "pending_listings": status_map.get(MachineStatus.pending, 0),
+            "paused_listings": status_map.get(MachineStatus.paused, 0),
+            "total_views": total_views.scalar() or 0,
+            "total_enquiries": total_enquiries.scalar() or 0,
+            "unread_enquiries": unread_enquiries.scalar() or 0,
+        }
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=400, detail=str(e) + " " + traceback.format_exc())
 
 
 # ── GET /vendor/enquiries/{id} ─────────────────────────────────

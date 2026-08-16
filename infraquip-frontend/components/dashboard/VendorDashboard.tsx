@@ -65,6 +65,7 @@ export function VendorDashboard() {
     return (
       <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-6 text-center text-destructive">
         <p>Unable to load dashboard data. Please refresh the page.</p>
+        <p className="mt-2 text-sm">{statsQuery.error instanceof Error ? statsQuery.error.message : String(statsQuery.error)}</p>
       </div>
     );
   }

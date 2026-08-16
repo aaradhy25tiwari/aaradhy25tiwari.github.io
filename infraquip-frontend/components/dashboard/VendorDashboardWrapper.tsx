@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LayoutDashboard, List, MessageSquare, Settings, Plus, CreditCard } from "lucide-react";
+import { LayoutDashboard, List, MessageSquare, User, Plus, CreditCard } from "lucide-react";
 import { DashboardShell } from "./DashboardShell";
 
 const navItems = [
@@ -9,7 +9,7 @@ const navItems = [
   { href: "/dashboard/vendor/listings",  label: "My Listings", icon: List },
   { href: "/dashboard/vendor/enquiries", label: "Enquiries",  icon: MessageSquare },
   { href: "/dashboard/vendor/subscription", label: "Subscription", icon: CreditCard },
-  { href: "/dashboard/settings",         label: "Settings",   icon: Settings },
+  { href: "/dashboard/vendor/profile",          label: "Profile",    icon: User },
 ];
 
 export function VendorDashboardWrapper({ children }: { children: React.ReactNode }) {
