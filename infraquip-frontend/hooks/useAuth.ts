@@ -26,13 +26,13 @@ export function useAuth() {
     try {
       const { data } = await apiClient.get<User>("/auth/me");
       setState({ user: data, loading: false, error: null });
-    } catch {
-      // Backend profile fetch failed, but Supabase session may still be active.
-      // Build a minimal user from session metadata so the UI stays consistent
-      // with the middleware (which reads the Supabase cookie directly).
+    } catch (err: any) {
+      // Backend profile fetch failed (likely network timeout).
+      // Fallback: read from local session so we don't log them out!
       try {
-        const { data: { user: sbUser } } = await supabase.auth.getUser();
-        if (sbUser) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const sbUser = session.user;
           const meta = sbUser.user_metadata ?? {};
           setState({
             user: {
@@ -49,10 +49,12 @@ export function useAuth() {
           });
           return;
         }
-      } catch {
-        // Supabase session check also failed — treat as guest
+      } catch (fallbackErr) {
+        console.error("Local session fallback also failed", fallbackErr);
       }
-      setState({ user: null, loading: false, error: null });
+      
+      // If we completely failed to get any session, then we clear
+      setState((prev) => ({ ...prev, loading: false, error: "Network error" }));
     }
   }, [supabase.auth]);
 
