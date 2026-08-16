@@ -6,8 +6,9 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
 
+from uuid import UUID
 class NotificationResponse(BaseModel):
-    id: str
+    id: UUID
     type: str
     title: str
     body: Optional[str] = None

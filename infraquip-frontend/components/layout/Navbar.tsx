@@ -60,7 +60,8 @@ export function Navbar() {
     pathname === href || pathname.startsWith(href + "/");
 
   const dashboardHref =
-    user?.role === "vendor" ? "/dashboard/vendor"
+    user?.role === "admin" ? "/admin"
+    : user?.role === "vendor" ? "/dashboard/vendor"
     : user?.role === "broker" ? "/dashboard/broker"
     : "/dashboard/customer";
 

@@ -4,6 +4,7 @@ Pydantic schemas for User, Auth, and Profiles
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, field_validator
+from uuid import UUID
 from app.models.user import UserRole
 
 
@@ -43,7 +44,7 @@ class ResetPasswordRequest(BaseModel):
 # ── Response Schemas ──────────────────────────────────────────
 
 class VendorProfileResponse(BaseModel):
-    id: str
+    id: UUID
     company_name: str
     gstin: Optional[str] = None
     business_type: Optional[str] = None
@@ -60,7 +61,7 @@ class VendorProfileResponse(BaseModel):
 
 
 class CustomerProfileResponse(BaseModel):
-    id: str
+    id: UUID
     company_name: Optional[str] = None
     designation: Optional[str] = None
     city: Optional[str] = None
@@ -70,7 +71,7 @@ class CustomerProfileResponse(BaseModel):
 
 
 class BrokerProfileResponse(BaseModel):
-    id: str
+    id: UUID
     company_name: Optional[str] = None
     gstin: Optional[str] = None
     pan: Optional[str] = None
@@ -92,7 +93,7 @@ class SubscriptionSummaryResponse(BaseModel):
 
 
 class UserResponse(BaseModel):
-    id: str
+    id: UUID
     email: str
     phone: Optional[str] = None
     full_name: str

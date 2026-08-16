@@ -6,9 +6,10 @@ from typing import Optional, List
 from pydantic import BaseModel, Field
 
 
+from uuid import UUID
 class EnquiryCreateRequest(BaseModel):
-    machine_id: Optional[str] = None
-    vendor_id: str
+    machine_id: Optional[UUID] = None
+    vendor_id: UUID
     requirement_type: str = "rent"
     customer_company: Optional[str] = Field(None, max_length=300)
     required_from: Optional[str] = None
@@ -18,8 +19,8 @@ class EnquiryCreateRequest(BaseModel):
 
 
 class EnquiryMessageResponse(BaseModel):
-    id: str
-    sender_id: str
+    id: UUID
+    sender_id: UUID
     message_text: str
     attachment_url: Optional[str] = None
     is_read: bool
@@ -29,10 +30,10 @@ class EnquiryMessageResponse(BaseModel):
 
 
 class EnquiryResponse(BaseModel):
-    id: str
-    machine_id: Optional[str] = None
-    vendor_id: str
-    customer_id: str
+    id: UUID
+    machine_id: Optional[UUID] = None
+    vendor_id: UUID
+    customer_id: UUID
     requirement_type: str
     customer_company: Optional[str] = None
     required_from: Optional[date] = None
@@ -52,7 +53,7 @@ class EnquiryResponse(BaseModel):
 
 
 class EnquiryListItemResponse(BaseModel):
-    id: str
+    id: UUID
     machine_title: str
     machine_slug: Optional[str] = None
     requirement_type: str

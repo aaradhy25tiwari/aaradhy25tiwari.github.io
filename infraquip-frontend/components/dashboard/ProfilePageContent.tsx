@@ -54,6 +54,7 @@ export default function ProfilePageContent() {
       const { data } = await apiClient.get("/auth/me");
       return data;
     },
+    retry: false,
   });
 
   const user = profileQuery.data;

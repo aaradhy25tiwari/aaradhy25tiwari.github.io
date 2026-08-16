@@ -12,8 +12,9 @@ from app.models.machine import (
 
 # ── Image / Document Schemas ──────────────────────────────────
 
+from uuid import UUID
 class MachineImageResponse(BaseModel):
-    id: str
+    id: UUID
     storage_path: str
     display_url: str
     alt_text: Optional[str] = None
@@ -25,7 +26,7 @@ class MachineImageResponse(BaseModel):
 # ── Vendor Summary (on listing) ───────────────────────────────
 
 class VendorSummary(BaseModel):
-    id: str
+    id: UUID
     full_name: str
     company_name: Optional[str] = None
     city: Optional[str] = None
@@ -40,8 +41,8 @@ class VendorSummary(BaseModel):
 # ── Create / Update Schemas ───────────────────────────────────
 
 class MachineCreateRequest(BaseModel):
-    category_id: str
-    sub_category_id: Optional[str] = None
+    category_id: UUID
+    sub_category_id: Optional[UUID] = None
     title: str = Field(min_length=5, max_length=300)
     make: str = Field(min_length=2, max_length=100)
     model: str = Field(min_length=1, max_length=200)
@@ -120,7 +121,7 @@ class MachineUpdateRequest(BaseModel):
 # ── Response Schemas ──────────────────────────────────────────
 
 class CategoryResponse(BaseModel):
-    id: str
+    id: UUID
     name: str
     slug: str
     icon_url: Optional[str] = None
@@ -131,7 +132,7 @@ class CategoryResponse(BaseModel):
 
 class MachineListItemResponse(BaseModel):
     """Lightweight response for search results / cards."""
-    id: str
+    id: UUID
     slug: str
     title: str
     make: str
@@ -163,7 +164,7 @@ class MachineListItemResponse(BaseModel):
 
 class MachineDetailResponse(BaseModel):
     """Full detail response for listing page."""
-    id: str
+    id: UUID
     slug: str
     title: str
     make: str

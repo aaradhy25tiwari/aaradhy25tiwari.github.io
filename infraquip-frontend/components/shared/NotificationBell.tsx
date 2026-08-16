@@ -52,6 +52,7 @@ export function NotificationBell() {
     },
     refetchInterval: 30_000, // Poll every 30 s
     staleTime: 20_000,
+    retry: false,
   });
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;

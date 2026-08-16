@@ -7,8 +7,9 @@ from pydantic import BaseModel
 from decimal import Decimal
 
 
+from uuid import UUID
 class SubscriptionPlanResponse(BaseModel):
-    id: str
+    id: UUID
     plan_code: str
     name: str
     role: str
@@ -26,19 +27,19 @@ class SubscriptionPlanResponse(BaseModel):
     has_priority_badge: bool
     has_spec_download: bool
     verified_badge_eligible: bool
-    razorpay_plan_id: Optional[str] = None
+    razorpay_plan_id: Optional[UUID] = None
 
     model_config = {"from_attributes": True}
 
 
 class SubscriptionResponse(BaseModel):
-    id: str
-    user_id: str
-    plan_id: str
+    id: UUID
+    user_id: UUID
+    plan_id: UUID
     status: str
-    razorpay_subscription_id: Optional[str] = None
-    razorpay_order_id: Optional[str] = None
-    razorpay_payment_id: Optional[str] = None
+    razorpay_subscription_id: Optional[UUID] = None
+    razorpay_order_id: Optional[UUID] = None
+    razorpay_payment_id: Optional[UUID] = None
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None
     plan: Optional[SubscriptionPlanResponse] = None
@@ -48,18 +49,18 @@ class SubscriptionResponse(BaseModel):
 
 
 class CreateOrderRequest(BaseModel):
-    plan_id: str
+    plan_id: UUID
 
 
 class SubscribeRequest(BaseModel):
-    plan_id: str
-    razorpay_order_id: str
-    razorpay_payment_id: str
+    plan_id: UUID
+    razorpay_order_id: UUID
+    razorpay_payment_id: UUID
     razorpay_signature: str
 
 
 class CreateOrderResponse(BaseModel):
-    razorpay_order_id: str
+    razorpay_order_id: UUID
     amount: int
     currency: str
     key: str

@@ -6,9 +6,10 @@ from typing import Optional, List
 from pydantic import BaseModel
 
 
+from uuid import UUID
 class WishlistItemResponse(BaseModel):
-    id: str
-    machine_id: str
+    id: UUID
+    machine_id: UUID
     machine_title: Optional[str] = None
     machine_slug: Optional[str] = None
     city: Optional[str] = None

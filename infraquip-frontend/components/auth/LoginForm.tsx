@@ -39,32 +39,38 @@ export function LoginForm() {
       ? { email: data.emailOrPhone, password: data.password }
       : { phone: data.emailOrPhone, password: data.password };
 
-    const { error } = await supabase.auth.signInWithPassword(credentials);
-
-    if (error) {
-      if (error.message.includes("Invalid login")) {
-        setServerError("Incorrect credentials. Please try again.");
-      } else if (error.message.includes("Email not confirmed")) {
-        setServerError("Please verify your account before logging in. Check your inbox.");
-      } else {
-        setServerError(error.message);
-      }
-      return;
-    }
-
-    // Check if user must change their temp password first
     try {
-      const apiClient = (await import("@/lib/api/client")).default;
-      const { data: me } = await apiClient.get<{ must_change_password: boolean }>("/auth/me");
-      if (me.must_change_password) {
-        router.push("/change-password");
+      const { error } = await supabase.auth.signInWithPassword(credentials);
+
+      if (error) {
+        if (error.message.includes("Invalid login") || error.message.includes("Invalid credentials")) {
+          setServerError("Incorrect credentials. Please try again.");
+        } else if (error.message.includes("Email not confirmed")) {
+          setServerError("Please verify your account before logging in. Check your inbox.");
+        } else {
+          setServerError(error.message);
+        }
         return;
       }
-    } catch {
-      // If check fails, proceed to dashboard normally
-    }
 
-    router.push("/dashboard");
+      // Check if user must change their temp password first
+      try {
+        const apiClient = (await import("@/lib/api/client")).default;
+        const { data: me } = await apiClient.get<{ must_change_password: boolean }>("/auth/me");
+        if (me.must_change_password) {
+          router.push("/change-password");
+          return;
+        }
+      } catch (apiError) {
+        // If check fails, proceed to dashboard normally
+        console.error("Failed to fetch user preferences on login", apiError);
+      }
+
+      router.push("/dashboard");
+    } catch (err: any) {
+      console.error("Login fetch error:", err);
+      setServerError("Network error: Unable to connect to the server. Please check your internet connection and try again.");
+    }
   };
 
   return (

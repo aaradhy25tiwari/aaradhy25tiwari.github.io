@@ -6,8 +6,9 @@ from typing import Optional, List
 from pydantic import BaseModel, Field
 
 
+from uuid import UUID
 class ReviewCreateRequest(BaseModel):
-    enquiry_id: str
+    enquiry_id: UUID
     rating_overall: int = Field(ge=1, le=5)
     rating_condition: int = Field(ge=1, le=5)
     rating_communication: int = Field(ge=1, le=5)
@@ -15,11 +16,11 @@ class ReviewCreateRequest(BaseModel):
 
 
 class ReviewResponse(BaseModel):
-    id: str
-    machine_id: str
-    vendor_id: str
-    customer_id: str
-    enquiry_id: str
+    id: UUID
+    machine_id: UUID
+    vendor_id: UUID
+    customer_id: UUID
+    enquiry_id: UUID
     rating_overall: int
     rating_condition: int
     rating_communication: int

@@ -6,13 +6,14 @@ from typing import Optional, List, Any
 from pydantic import BaseModel, Field
 
 
+from uuid import UUID
 class ReviewDecisionRequest(BaseModel):
     action: str = Field(pattern="^(approve|reject)$")
     rejection_reason: Optional[str] = None
 
 
 class ReviewQueueItem(BaseModel):
-    id: str
+    id: UUID
     slug: str
     title: str
     make: str
@@ -46,7 +47,7 @@ class AdminStatsResponse(BaseModel):
 
 
 class AdminUserResponse(BaseModel):
-    id: str
+    id: UUID
     email: str
     full_name: str
     role: str
