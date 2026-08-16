@@ -37,7 +37,7 @@ function MachineCard({ machine }: { machine: MachineListItem }) {
       : "Enquire";
 
   return (
-    <Link href={listingUrl} className="machine-card block group" aria-label={machine.title}>
+    <Link href={listingUrl} className="machine-card block group h-full bg-white border border-slate-200 rounded-xl hover:border-amber-500 hover:shadow-xl transition-all duration-300 overflow-hidden" aria-label={machine.title}>
       {/* Image */}
       <div className="relative h-40 sm:h-48 overflow-hidden bg-muted">
         {machine.primary_image ? (
@@ -118,22 +118,19 @@ export function FeaturedListings() {
   const showSkeletons = isLoading;
 
   return (
-    <section className="py-16 sm:py-24 bg-muted/20" aria-labelledby="featured-heading">
+    <section className="py-16 sm:py-24 bg-white" aria-labelledby="featured-heading">
       <div className="section-container">
-        <div className="flex items-end justify-between mb-6 sm:mb-10 flex-wrap gap-3">
+        <div className="flex items-end justify-between mb-10 border-b border-slate-200 pb-4 flex-wrap gap-3">
           <div>
-            <h2 id="featured-heading" className="mb-1 sm:mb-2">
-              Latest <span className="text-gradient-amber">Equipment Listings</span>
+            <h2 id="featured-heading" className="text-3xl font-extrabold text-slate-900 tracking-tight uppercase">
+              POPULAR <span className="text-amber-500">EQUIPMENT</span>
             </h2>
-            <p className="text-muted-foreground text-sm sm:text-base">
-              Freshly added by verified vendors across India
-            </p>
           </div>
           <Link
             href="/machines"
-            className="flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+            className="flex items-center gap-2 text-sm font-bold text-amber-600 hover:text-amber-700 transition-colors uppercase"
           >
-            View all
+            VIEW ALL
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>

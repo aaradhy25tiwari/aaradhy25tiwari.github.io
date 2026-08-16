@@ -155,6 +155,8 @@ class MachineListItemResponse(BaseModel):
     vendor_city: Optional[str] = None
     vendor_is_verified: bool = False
     distance_km: Optional[float] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     is_wishlisted: Optional[bool] = None
     model_config = {"from_attributes": True}
 

@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, SlidersHorizontal, X, MapPin,
-  ChevronDown, LayoutGrid, List, Loader2, Share2, Check
+  ChevronDown, LayoutGrid, List, Map, Loader2, Share2, Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatINR, getConditionColor, getListingTypeLabel } from "@/lib/utils";
@@ -15,6 +15,7 @@ import type { MachineListItem, SearchFilters } from "@/types/machine";
 import Link from "next/link";
 import Image from "next/image";
 import { MachineCard } from "./MachineCard";
+import { MachineMapView } from "./MachineMapView";
 
 // ── Types ─────────────────────────────────────────────────────
 interface SearchResponse {
@@ -200,7 +201,7 @@ export function MachinesClientPage() {
   }));
   const [searchInput, setSearchInput] = useState(searchParams.get("q") ?? "");
   const [showFilters, setShowFilters] = useState(false);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [viewMode, setViewMode] = useState<"grid" | "list" | "map">("grid");
   const [copied, setCopied] = useState(false);
 
   const copyShareLink = useCallback(() => {
@@ -340,6 +341,13 @@ export function MachinesClientPage() {
               >
                 <List className="h-4 w-4" />
               </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("map")}
+                className={cn("p-2.5", viewMode === "map" ? "bg-muted" : "hover:bg-muted/50")}
+              >
+                <Map className="h-4 w-4" />
+              </button>
             </div>
           </form>
         </div>
@@ -404,7 +412,7 @@ export function MachinesClientPage() {
               </div>
             )}
 
-            {/* Grid */}
+            {/* Grid / Map */}
             {isLoading ? (
               <div className={viewMode === "grid" ? "grid-listings" : "space-y-4"}>
                 {Array.from({ length: 12 }).map((_, i) => (
@@ -418,18 +426,22 @@ export function MachinesClientPage() {
                 ))}
               </div>
             ) : data?.results?.length ? (
-              <div className={viewMode === "grid" ? "grid-listings" : "space-y-4"}>
-                {data.results.map((machine, i) => (
-                  <motion.div
-                    key={machine.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: Math.min(i * 0.03, 0.3) }}
-                  >
-                    <MachineCard machine={machine} />
-                  </motion.div>
-                ))}
-              </div>
+              viewMode === "map" ? (
+                <MachineMapView machines={data.results} className="h-[600px] shadow-sm" />
+              ) : (
+                <div className={viewMode === "grid" ? "grid-listings" : "space-y-4"}>
+                  {data.results.map((machine, i) => (
+                    <motion.div
+                      key={machine.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i * 0.03, 0.3) }}
+                    >
+                      <MachineCard machine={machine} />
+                    </motion.div>
+                  ))}
+                </div>
+              )
             ) : (
               <div className="text-center py-24">
                 <p className="text-muted-foreground text-lg mb-2">No listings match your search.</p>

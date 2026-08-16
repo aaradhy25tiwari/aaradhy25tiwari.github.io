@@ -76,7 +76,7 @@ export function ChatbotWidget() {
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          "fixed bottom-4 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all",
+          "fixed bottom-24 lg:bottom-4 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all",
           open ? "bg-muted-foreground scale-90" : "bg-primary hover:bg-primary/90",
         )}
         aria-label="Toggle AI assistant"
@@ -86,7 +86,7 @@ export function ChatbotWidget() {
 
       {/* Chat panel */}
       {open && (
-        <div className="fixed bottom-20 right-4 z-40 flex w-80 flex-col rounded-2xl border border-border bg-card shadow-2xl" style={{ height: "520px" }}>
+        <div className="fixed bottom-36 lg:bottom-20 right-4 z-40 flex w-80 flex-col rounded-2xl border border-border bg-card shadow-2xl" style={{ height: "520px" }}>
           {/* Header */}
           <div className="flex items-center gap-3 rounded-t-2xl bg-primary px-4 py-3 text-primary-foreground">
             <Sparkles className="h-5 w-5" />

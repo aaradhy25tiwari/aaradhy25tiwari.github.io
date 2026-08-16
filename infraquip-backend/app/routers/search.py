@@ -248,6 +248,8 @@ async def search_machines(
                 vendor_city=vp.city if vp else None,
                 vendor_is_verified=vp.is_verified if vp else False,
                 distance_km=distance_km,
+                latitude=m.latitude,
+                longitude=m.longitude,
                 is_wishlisted=str(m.id) in wishlist_set if current_user else None,
             )
         )

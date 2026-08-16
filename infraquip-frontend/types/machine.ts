@@ -121,6 +121,8 @@ export interface MachineListItem {
   enquiries_count?: number;
   avg_rating?: number;
   distance_km?: number; // PostGIS computed
+  latitude?: number;
+  longitude?: number;
   is_wishlisted?: boolean;
 }
 

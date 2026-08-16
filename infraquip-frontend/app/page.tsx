@@ -7,7 +7,7 @@ import { StatsSection } from "@/components/home/StatsSection";
 import { TestimonialsSection } from "@/components/home/TestimonialsSection";
 import { CtaBanner } from "@/components/home/CtaBanner";
 
-import { LiveLeadsPreview } from "@/components/home/LiveLeadsPreview";
+import { TrustBadges } from "@/components/home/TrustBadges";
 
 // ── SEO Metadata ──────────────────────────────────────────────
 export const metadata: Metadata = {
@@ -71,7 +71,7 @@ export default function HomePage() {
       />
 
       <HeroSection />
-      <LiveLeadsPreview />
+      <TrustBadges />
       <CategoryGrid />
       <StatsSection />
       <HowItWorks />

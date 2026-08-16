@@ -14,99 +14,80 @@ import {
 
 const CATEGORIES = [
   {
-    name: "Excavators",
+    name: "EXCAVATORS",
     slug: "excavators",
     icon: Shovel,
-    description: "Mini to large hydraulic",
-    color: "from-amber-500/20 to-amber-600/5",
-    border: "hover:border-amber-500/40",
-    iconColor: "text-amber-500",
-    iconBg: "bg-amber-500/10 group-hover:bg-amber-500/20",
+    description: "Powerful and efficient for all earthmoving needs.",
   },
   {
-    name: "Cranes",
+    name: "CRANES",
     slug: "cranes",
     icon: Construction,
-    description: "Tower, mobile & hydraulic",
-    color: "from-orange-500/20 to-orange-600/5",
-    border: "hover:border-orange-500/40",
-    iconColor: "text-orange-500",
-    iconBg: "bg-orange-500/10 group-hover:bg-orange-500/20",
+    description: "Lifting solutions for heavy and high rise projects.",
   },
   {
-    name: "Forklifts",
+    name: "FORKLIFTS",
     slug: "forklifts",
     icon: Forklift,
-    description: "Electric & diesel forklifts",
-    color: "from-yellow-500/20 to-yellow-600/5",
-    border: "hover:border-yellow-500/40",
-    iconColor: "text-yellow-500",
-    iconBg: "bg-yellow-500/10 group-hover:bg-yellow-500/20",
+    description: "Reliable material handling and warehouse solutions.",
   },
   {
-    name: "Bulldozers",
+    name: "BULLDOZERS",
     slug: "bulldozers",
     icon: Truck,
-    description: "Track & wheel bulldozers",
-    color: "from-red-500/20 to-red-600/5",
-    border: "hover:border-red-500/40",
-    iconColor: "text-red-500",
-    iconBg: "bg-red-500/10 group-hover:bg-red-500/20",
+    description: "Heavy-duty pushing and site preparation.",
   },
   {
-    name: "Loaders",
+    name: "LOADERS",
     slug: "loaders",
     icon: Hammer,
-    description: "Wheel & backhoe loaders",
-    color: "from-blue-500/20 to-blue-600/5",
-    border: "hover:border-blue-500/40",
-    iconColor: "text-blue-500",
-    iconBg: "bg-blue-500/10 group-hover:bg-blue-500/20",
+    description: "Versatile machines for digging, loading and more.",
   },
   {
-    name: "Compactors",
+    name: "COMPACTORS",
     slug: "compactors",
     icon: Wind,
-    description: "Soil, asphalt & plate",
-    color: "from-purple-500/20 to-purple-600/5",
-    border: "hover:border-purple-500/40",
-    iconColor: "text-purple-500",
-    iconBg: "bg-purple-500/10 group-hover:bg-purple-500/20",
+    description: "Built for compaction and infrastructure stability.",
   },
 ];
 
 const containerVariants = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.07 } },
+  show: { transition: { staggerChildren: 0.05 } },
 };
 
 const itemVariants = {
-  hidden: { opacity: 1, y: 16 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.35 } },
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 };
 
 export function CategoryGrid() {
   return (
-    <section className="py-12 sm:py-20 bg-background" aria-labelledby="categories-heading">
+    <section className="py-16 sm:py-24 bg-slate-50" aria-labelledby="categories-heading">
       <div className="section-container">
         {/* Section Header */}
-        <div className="text-center mb-8 sm:mb-12">
-          <h2 id="categories-heading" className="mb-2 sm:mb-3">
-            Browse by{" "}
-            <span className="text-gradient-amber">Equipment Type</span>
-          </h2>
-          <p className="text-muted-foreground text-sm sm:text-lg max-w-xl mx-auto">
-            From excavators to compactors — find any heavy machinery you need.
-          </p>
+        <div className="flex flex-col sm:flex-row justify-between items-end mb-10 border-b border-slate-200 pb-4">
+          <div>
+            <h2 id="categories-heading" className="text-3xl font-extrabold text-slate-900 tracking-tight uppercase">
+              SHOP BY <span className="text-amber-500">CATEGORY</span>
+            </h2>
+          </div>
+          <Link
+            href="/machines"
+            className="hidden sm:inline-flex items-center gap-2 text-sm font-bold text-amber-600 hover:text-amber-700 transition-colors uppercase"
+          >
+            VIEW ALL CATEGORIES
+            <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
 
-        {/* 3-col on mobile, 6-col on lg */}
+        {/* 2-col on mobile, 6-col on lg */}
         <motion.div
           variants={containerVariants}
           initial="hidden"
           whileInView="show"
           viewport={{ once: true, margin: "-40px" }}
-          className="grid grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4"
+          className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 sm:gap-6"
         >
           {CATEGORIES.map((cat) => {
             const Icon = cat.icon;
@@ -114,18 +95,18 @@ export function CategoryGrid() {
               <motion.div key={cat.slug} variants={itemVariants}>
                 <Link
                   href={`/machines/${cat.slug}`}
-                  className={`machine-card group block p-3 sm:p-5 text-center border border-border bg-gradient-to-b ${cat.color} ${cat.border} transition-all`}
+                  className="group block h-full p-6 bg-white border border-slate-200 rounded-xl hover:border-amber-500 hover:shadow-xl transition-all duration-300"
                   aria-label={`Browse ${cat.name}`}
                 >
-                  <div className="flex justify-center mb-2 sm:mb-3">
-                    <div className={`flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl ${cat.iconBg} transition-colors`}>
-                      <Icon className={`h-5 w-5 sm:h-6 sm:w-6 ${cat.iconColor}`} />
+                  <div className="flex justify-center mb-6">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-slate-50 text-slate-400 group-hover:bg-amber-500 group-hover:text-white transition-colors duration-300">
+                      <Icon className="h-8 w-8" strokeWidth={1.5} />
                     </div>
                   </div>
-                  <h3 className="font-semibold text-xs sm:text-sm text-foreground mb-0 sm:mb-1">
+                  <h3 className="font-bold text-sm text-slate-900 text-center mb-2 uppercase tracking-wide group-hover:text-amber-600 transition-colors">
                     {cat.name}
                   </h3>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight hidden sm:block">
+                  <p className="text-xs text-slate-500 text-center leading-relaxed">
                     {cat.description}
                   </p>
                 </Link>
@@ -134,13 +115,13 @@ export function CategoryGrid() {
           })}
         </motion.div>
 
-        {/* View All Link */}
-        <div className="text-center mt-6 sm:mt-8">
+        {/* View All Link (Mobile) */}
+        <div className="text-center mt-8 sm:hidden">
           <Link
             href="/machines"
-            className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+            className="inline-flex items-center gap-2 text-sm font-bold text-amber-600 hover:text-amber-700 transition-colors uppercase"
           >
-            View all equipment categories
+            VIEW ALL CATEGORIES
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>

@@ -11,6 +11,9 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import logging
+import asyncio
+import httpx
+import os
 
 from app.config import settings
 from app.routers import (
@@ -26,12 +29,37 @@ logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
 
+async def self_ping():
+    """Background task to ping the app and keep the Render instance alive."""
+    url = os.getenv("RENDER_EXTERNAL_URL")
+    if not url:
+        logger.info("RENDER_EXTERNAL_URL not set; skipping self-ping.")
+        return
+        
+    ping_url = f"{url.rstrip('/')}/health"
+    # Render spins down free instances after 15 mins of inactivity. Ping every 14 minutes.
+    interval = 14 * 60 
+
+    logger.info(f"Starting self-ping task for {ping_url} every {interval}s")
+    async with httpx.AsyncClient() as client:
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                response = await client.get(ping_url, timeout=10.0)
+                logger.info(f"Self-ping successful: {response.status_code}")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Self-ping failed: {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup / shutdown events."""
     logger.info(f"Starting {settings.APP_NAME} [{settings.APP_ENV}]")
+    ping_task = asyncio.create_task(self_ping())
     yield
     logger.info("Shutting down...")
+    ping_task.cancel()
 
 
 # ── App Factory ───────────────────────────────────────────────
