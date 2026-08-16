@@ -37,7 +37,7 @@ function MachineCard({ machine }: { machine: MachineListItem }) {
       : "Enquire";
 
   return (
-    <Link href={listingUrl} className="machine-card block group h-full bg-white border border-slate-200 rounded-xl hover:border-amber-500 hover:shadow-xl transition-all duration-300 overflow-hidden" aria-label={machine.title}>
+    <Link href={listingUrl} className="machine-card block group h-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:border-amber-500 dark:hover:border-amber-500 hover:shadow-xl transition-all duration-300 overflow-hidden" aria-label={machine.title}>
       {/* Image */}
       <div className="relative h-40 sm:h-48 overflow-hidden bg-muted">
         {machine.primary_image ? (
@@ -118,17 +118,17 @@ export function FeaturedListings() {
   const showSkeletons = isLoading;
 
   return (
-    <section className="py-16 sm:py-24 bg-white" aria-labelledby="featured-heading">
+    <section className="py-16 sm:py-24 bg-white dark:bg-slate-950" aria-labelledby="featured-heading">
       <div className="section-container">
-        <div className="flex items-end justify-between mb-10 border-b border-slate-200 pb-4 flex-wrap gap-3">
+        <div className="flex items-end justify-between mb-10 border-b border-slate-200 dark:border-slate-800 pb-4 flex-wrap gap-3">
           <div>
-            <h2 id="featured-heading" className="text-3xl font-extrabold text-slate-900 tracking-tight uppercase">
+            <h2 id="featured-heading" className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight uppercase">
               POPULAR <span className="text-amber-500">EQUIPMENT</span>
             </h2>
           </div>
           <Link
             href="/machines"
-            className="flex items-center gap-2 text-sm font-bold text-amber-600 hover:text-amber-700 transition-colors uppercase"
+            className="flex items-center gap-2 text-sm font-bold text-amber-600 dark:text-amber-500 hover:text-amber-700 dark:hover:text-amber-400 transition-colors uppercase"
           >
             VIEW ALL
             <ArrowRight className="h-4 w-4" />
