@@ -135,7 +135,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning className={inter.variable}>
-      <body className="min-h-screen bg-background font-sans antialiased">
+      <body suppressHydrationWarning className="min-h-screen bg-background font-sans antialiased">
         {/* Structured Data — rendered in body so extension-injected <head> scripts cannot break hydration */}
         <script
           type="application/ld+json"

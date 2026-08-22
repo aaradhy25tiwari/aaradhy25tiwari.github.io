@@ -100,7 +100,12 @@ export function Navbar() {
 
           {/* ── Desktop Nav Links ─────────────────────────────── */}
           <div className="hidden lg:flex items-center gap-1">
-            {NAV_LINKS.map((link) => (
+            {NAV_LINKS.filter((link) => {
+              if (user?.role === "vendor" && link.href.startsWith("/machines")) {
+                return false;
+              }
+              return true;
+            }).map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
@@ -214,12 +219,19 @@ export function Navbar() {
           </div>
 
           {/* ── Mobile Controls ───────────────────────────────── */}
-          <div className="flex lg:hidden items-center gap-2">
-            <Button variant="ghost" size="icon" asChild aria-label="Search">
-              <Link href="/machines">
-                <Search className="h-5 w-5" />
-              </Link>
-            </Button>
+          <div className="flex lg:hidden items-center gap-1 sm:gap-2">
+            {!loading && !user && (
+              <Button variant="ghost" size="sm" asChild className="px-2 font-medium">
+                <Link href="/login">Log in</Link>
+              </Button>
+            )}
+            {user?.role !== "vendor" && (
+              <Button variant="ghost" size="icon" asChild aria-label="Search">
+                <Link href="/machines">
+                  <Search className="h-5 w-5" />
+                </Link>
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -248,7 +260,12 @@ export function Navbar() {
             className="fixed inset-x-0 top-16 z-40 lg:hidden border-b border-border bg-background/98 backdrop-blur-xl"
           >
             <div className="section-container py-4 space-y-1">
-              {NAV_LINKS.map((link) => (
+              {NAV_LINKS.filter((link) => {
+                if (user?.role === "vendor" && link.href.startsWith("/machines")) {
+                  return false;
+                }
+                return true;
+              }).map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}

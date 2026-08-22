@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
 
 const VENDOR_BENEFITS = [
   "List up to 5 machines free, forever",
@@ -13,6 +14,10 @@ const VENDOR_BENEFITS = [
 ];
 
 export function CtaBanner() {
+  const { user } = useAuth();
+  
+  if (user) return null;
+
   return (
     <section
       className="py-12 sm:py-24 bg-background"

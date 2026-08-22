@@ -1,4 +1,5 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap");
+@import "leaflet/dist/leaflet.css";
 @import "tailwindcss";
 @config "../tailwind.config.ts";
 @custom-variant dark (&:is(.dark *));
@@ -567,5 +568,17 @@
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid hsl(35 95% 52% / 0.25);
+  }
+
+  /* ── Leaflet Next.js Overrides ──────────────────────────────── */
+  .leaflet-container {
+    z-index: 10;
+  }
+  .leaflet-pane {
+    z-index: 10;
+  }
+  .leaflet-top,
+  .leaflet-bottom {
+    z-index: 20;
   }
 }
