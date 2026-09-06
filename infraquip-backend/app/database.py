@@ -14,7 +14,12 @@ engine = create_async_engine(
     pool_size=10,
     max_overflow=20,
     pool_recycle=3600,
-    connect_args={"prepared_statement_cache_size": 0},  # pgbouncer/pooler doesn't support prepared statements
+    # Supabase pgBouncer in transaction mode does not support prepared statements.
+    # 'statement_cache_size=0' disables asyncpg's internal prepared-statement cache.
+    connect_args={
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+    },
 )
 
 # ── Session Factory ───────────────────────────────────────────
