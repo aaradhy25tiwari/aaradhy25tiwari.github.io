@@ -85,11 +85,12 @@ const nextConfig: NextConfig = {
 
   // ── API Proxy (dev → localhost, prod → Render) ─────────────────
   async rewrites() {
-    const backendUrl =
-      process.env.NEXT_PUBLIC_API_URL ??
-      "http://127.0.0.1:8000/api/v1";
-    // Strip trailing /api/v1 if the env var includes it
-    const backendBase = backendUrl.replace(/\/api\/v1\/?$/, "");
+    const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+    const isAbsolute = rawApiUrl.startsWith("http://") || rawApiUrl.startsWith("https://");
+    const backendBase = isAbsolute
+      ? rawApiUrl.replace(/\/api\/v1\/?$/, "")
+      : (process.env.BACKEND_URL || (process.env.NODE_ENV === "production" ? "https://aaradhy25tiwari-github-io.onrender.com" : "http://127.0.0.1:8000"));
+
     return [
       {
         source: "/api/v1/:path*",
