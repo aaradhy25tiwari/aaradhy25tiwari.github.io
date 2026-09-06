@@ -63,7 +63,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in https://maps.gstatic.com https://maps.googleapis.com https://lh3.googleusercontent.com",
-              "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://api.infraquip.com",
+              "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://api.infraquip.com https://*.onrender.com",
               "frame-src https://api.razorpay.com",
             ].join("; "),
           },
