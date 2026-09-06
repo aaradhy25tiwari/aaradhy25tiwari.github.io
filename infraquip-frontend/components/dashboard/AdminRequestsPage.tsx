@@ -143,8 +143,8 @@ function RequestCard({
   return (
     <div className="card-surface p-5 space-y-4">
       {/* Header row */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
           <div className={cn(
             "h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0",
             req.role === "vendor" ? "bg-amber-500/10"
@@ -158,12 +158,12 @@ function RequestCard({
                 : <Building2 className="h-5 w-5 text-blue-500" />
             }
           </div>
-          <div>
-            <p className="font-semibold text-sm">{req.full_name}</p>
-            <p className="text-xs text-muted-foreground">{req.email}</p>
+          <div className="min-w-0">
+            <p className="font-semibold text-sm truncate">{req.full_name}</p>
+            <p className="text-xs text-muted-foreground truncate">{req.email}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
           <span className={cn(
             "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
             req.role === "vendor"
