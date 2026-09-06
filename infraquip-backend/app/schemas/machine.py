@@ -60,6 +60,7 @@ class MachineCreateRequest(BaseModel):
     ownership_type: MachineOwnershipType = MachineOwnershipType.owner
 
     # Pricing
+    rental_price_hourly: Optional[float] = Field(None, gt=0)
     rental_price_daily: Optional[float] = Field(None, gt=0)
     rental_price_weekly: Optional[float] = Field(None, gt=0)
     rental_price_monthly: Optional[float] = Field(None, gt=0)
@@ -73,7 +74,7 @@ class MachineCreateRequest(BaseModel):
     latitude: Optional[float] = Field(None, ge=-90, le=90)
     longitude: Optional[float] = Field(None, ge=-180, le=180)
 
-    @field_validator("rental_price_daily", "rental_price_weekly", "rental_price_monthly", "purchase_price")
+    @field_validator("rental_price_hourly", "rental_price_daily", "rental_price_weekly", "rental_price_monthly", "purchase_price")
     @classmethod
     def validate_positive(cls, v):
         if v is not None and v <= 0:
@@ -105,6 +106,7 @@ class MachineUpdateRequest(BaseModel):
     running_condition: Optional[MachineRunningCondition] = None
     hmr: Optional[int] = Field(None, ge=0, le=999999)
     ownership_type: Optional[MachineOwnershipType] = None
+    rental_price_hourly: Optional[float] = Field(None, gt=0)
     rental_price_daily: Optional[float] = Field(None, gt=0)
     rental_price_weekly: Optional[float] = Field(None, gt=0)
     rental_price_monthly: Optional[float] = Field(None, gt=0)
@@ -146,7 +148,10 @@ class MachineListItemResponse(BaseModel):
     availability: bool
     city: str
     state: str
+    rental_price_hourly: Optional[float] = None
     rental_price_daily: Optional[float] = None
+    rental_price_weekly: Optional[float] = None
+    rental_price_monthly: Optional[float] = None
     purchase_price: Optional[float] = None
     contact_for_price: bool
     views_count: int
@@ -181,6 +186,7 @@ class MachineDetailResponse(BaseModel):
     min_rental_duration: Optional[MinRentalDuration] = None
     availability: bool
     status: MachineStatus
+    rental_price_hourly: Optional[float] = None
     rental_price_daily: Optional[float] = None
     rental_price_weekly: Optional[float] = None
     rental_price_monthly: Optional[float] = None

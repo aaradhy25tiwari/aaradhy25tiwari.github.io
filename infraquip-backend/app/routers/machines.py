@@ -84,6 +84,7 @@ async def get_machine_detail(
         min_rental_duration=machine.min_rental_duration,
         availability=machine.availability,
         status=machine.status,
+        rental_price_hourly=machine.rental_price_hourly,
         rental_price_daily=machine.rental_price_daily,
         rental_price_weekly=machine.rental_price_weekly,
         rental_price_monthly=machine.rental_price_monthly,

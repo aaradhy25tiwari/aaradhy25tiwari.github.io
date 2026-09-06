@@ -133,9 +133,19 @@ export function VendorListingsPage() {
                 <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
                   <span>{machine.views_count} views</span>
                   <span>{machine.enquiries_count} enquiries</span>
-                  {machine.rental_price_daily && (
+                  {machine.rental_price_daily ? (
                     <span className="font-semibold text-foreground">{formatINR(machine.rental_price_daily)}/day</span>
-                  )}
+                  ) : machine.rental_price_hourly ? (
+                    <span className="font-semibold text-foreground">{formatINR(machine.rental_price_hourly)}/hr</span>
+                  ) : machine.rental_price_monthly ? (
+                    <span className="font-semibold text-foreground">{formatINR(machine.rental_price_monthly)}/mo</span>
+                  ) : machine.rental_price_weekly ? (
+                    <span className="font-semibold text-foreground">{formatINR(machine.rental_price_weekly)}/wk</span>
+                  ) : machine.purchase_price ? (
+                    <span className="font-semibold text-foreground">{formatINR(machine.purchase_price)}</span>
+                  ) : machine.contact_for_price ? (
+                    <span className="font-medium text-muted-foreground">Price on Request</span>
+                  ) : null}
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">

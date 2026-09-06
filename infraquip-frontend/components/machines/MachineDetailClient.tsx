@@ -81,6 +81,12 @@ export function MachineDetailClient({ slug }: MachineDetailClientProps) {
     ? "Contact for price"
     : data.rental_price_daily
     ? `${formatINR(data.rental_price_daily)}/day`
+    : data.rental_price_hourly
+    ? `${formatINR(data.rental_price_hourly)}/hr`
+    : data.rental_price_monthly
+    ? `${formatINR(data.rental_price_monthly)}/month`
+    : data.rental_price_weekly
+    ? `${formatINR(data.rental_price_weekly)}/week`
     : data.purchase_price
     ? formatINR(data.purchase_price)
     : "Price on request";
@@ -105,7 +111,7 @@ export function MachineDetailClient({ slug }: MachineDetailClientProps) {
         ? "https://schema.org/InStock"
         : "https://schema.org/OutOfStock",
       priceCurrency: "INR",
-      price: data.rental_price_daily ?? data.purchase_price ?? 0,
+      price: data.rental_price_daily ?? data.rental_price_hourly ?? data.rental_price_monthly ?? data.purchase_price ?? 0,
       seller: {
         "@type": "Organization",
         name: data.vendor?.company_name ?? data.vendor?.full_name ?? "InfraQuip Vendor",
@@ -228,12 +234,36 @@ export function MachineDetailClient({ slug }: MachineDetailClientProps) {
               {/* Pricing card */}
               <div className="rounded-3xl border border-border bg-card p-6">
                 <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Price</p>
-                <p className="text-3xl font-bold text-primary mb-1">{priceLabel}</p>
-                {data.rental_price_weekly && (
-                  <p className="text-sm text-muted-foreground">{formatINR(data.rental_price_weekly)}/week</p>
-                )}
-                {data.rental_price_monthly && (
-                  <p className="text-sm text-muted-foreground">{formatINR(data.rental_price_monthly)}/month</p>
+                <p className="text-3xl font-bold text-primary mb-2">{priceLabel}</p>
+                
+                {/* Rate duration breakdown if multiple rates provided */}
+                {!data.contact_for_price && (data.rental_price_hourly || data.rental_price_daily || data.rental_price_weekly || data.rental_price_monthly) && (
+                  <div className="space-y-1 pt-1 pb-2 text-sm text-muted-foreground">
+                    {data.rental_price_hourly && (
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-xs">Hourly Rate</span>
+                        <span className="font-semibold text-foreground">{formatINR(data.rental_price_hourly)}/hr</span>
+                      </div>
+                    )}
+                    {data.rental_price_daily && (
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-xs">Daily Rate</span>
+                        <span className="font-semibold text-foreground">{formatINR(data.rental_price_daily)}/day</span>
+                      </div>
+                    )}
+                    {data.rental_price_weekly && (
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-xs">Weekly Rate</span>
+                        <span className="font-semibold text-foreground">{formatINR(data.rental_price_weekly)}/week</span>
+                      </div>
+                    )}
+                    {data.rental_price_monthly && (
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-xs">Monthly Rate</span>
+                        <span className="font-semibold text-foreground">{formatINR(data.rental_price_monthly)}/month</span>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 <div className="my-4 pt-4 border-t border-border space-y-2.5 text-sm">

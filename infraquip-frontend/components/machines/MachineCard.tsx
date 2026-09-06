@@ -27,8 +27,11 @@ export function MachineCard({ machine, className, onToggleWishlist }: MachineCar
 
   const getPriceDisplay = () => {
     if (machine.contact_for_price) return "Price on Request";
-    if (isRent && machine.rental_price_daily) {
-      return `₹${machine.rental_price_daily.toLocaleString("en-IN")}/day`;
+    if (isRent) {
+      if (machine.rental_price_daily) return `₹${machine.rental_price_daily.toLocaleString("en-IN")}/day`;
+      if (machine.rental_price_hourly) return `₹${machine.rental_price_hourly.toLocaleString("en-IN")}/hr`;
+      if (machine.rental_price_monthly) return `₹${machine.rental_price_monthly.toLocaleString("en-IN")}/mo`;
+      if (machine.rental_price_weekly) return `₹${machine.rental_price_weekly.toLocaleString("en-IN")}/wk`;
     }
     if (isSale && machine.purchase_price) {
       return `₹${machine.purchase_price.toLocaleString("en-IN")}`;

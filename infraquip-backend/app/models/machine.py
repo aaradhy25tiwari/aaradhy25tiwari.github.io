@@ -46,6 +46,7 @@ class MachineStatus(str, enum.Enum):
 
 
 class MinRentalDuration(str, enum.Enum):
+    one_hour = "1_hour"
     one_day = "1_day"
     one_week = "1_week"
     one_month = "1_month"
@@ -116,6 +117,7 @@ class Machine(Base):
     ownership_type = Column(Enum(MachineOwnershipType), default=MachineOwnershipType.owner, nullable=False)
 
     # ── Pricing ───────────────────────────────────────────────
+    rental_price_hourly = Column(Numeric(12, 2), nullable=True)
     rental_price_daily = Column(Numeric(12, 2), nullable=True)
     rental_price_weekly = Column(Numeric(12, 2), nullable=True)
     rental_price_monthly = Column(Numeric(12, 2), nullable=True)

@@ -5,7 +5,7 @@ export type MachineRunningCondition = "running" | "not_running";
 export type MachineOwnershipType = "owner" | "dealer";
 export type ListingType = "rent" | "sale" | "both";
 export type MachineStatus = "pending" | "approved" | "rejected" | "paused" | "deleted";
-export type MinRentalDuration = "1_day" | "1_week" | "1_month";
+export type MinRentalDuration = "1_hour" | "1_day" | "1_week" | "1_month";
 
 export interface Category {
   id: string;
@@ -60,6 +60,7 @@ export interface Machine {
   rejection_reason?: string;
 
   // Pricing
+  rental_price_hourly?: number;
   rental_price_daily?: number;
   rental_price_weekly?: number;
   rental_price_monthly?: number;
@@ -110,7 +111,10 @@ export interface MachineListItem {
   availability: boolean;
   city: string;
   state: string;
+  rental_price_hourly?: number;
   rental_price_daily?: number;
+  rental_price_weekly?: number;
+  rental_price_monthly?: number;
   purchase_price?: number;
   contact_for_price: boolean;
   primary_image?: MachineImage;
