@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
-import { Loader2, CheckCircle, ChevronRight, ChevronLeft, Save, CloudOff } from "lucide-react";
+import { Loader2, CheckCircle, ChevronRight, ChevronLeft, Save, CloudOff, MapPin, LocateFixed, Search } from "lucide-react";
 import apiClient from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -30,7 +30,6 @@ const schema = z.object({
   availability: z.boolean(),
   city: z.string().min(2, "City is required"),
   state: z.string().min(2, "State is required"),
-  address_line: z.string().optional(),
   rental_price_daily: z.number().positive().optional(),
   rental_price_weekly: z.number().positive().optional(),
   rental_price_monthly: z.number().positive().optional(),
@@ -116,6 +115,7 @@ export function ListingForm({ machine }: ListingFormProps) {
     handleSubmit,
     watch,
     trigger,
+    setValue,
     formState: { errors, isSubmitting },
     reset,
   } = useForm<FormData>({
@@ -138,7 +138,6 @@ export function ListingForm({ machine }: ListingFormProps) {
           availability: machine.availability,
           city: machine.city,
           state: machine.state,
-          address_line: machine.address_line,
           rental_price_daily: machine.rental_price_daily,
           rental_price_weekly: machine.rental_price_weekly,
           rental_price_monthly: machine.rental_price_monthly,
@@ -155,6 +154,61 @@ export function ListingForm({ machine }: ListingFormProps) {
           availability: true,
         },
   });
+
+  // ── Location helpers ─────────────────────────────────────────
+  const [pincode, setPincode] = useState("");
+  const [pincodeStatus, setPincodeStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
+  const [gpsStatus, setGpsStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
+
+  const lookupPincode = useCallback(async (pin: string) => {
+    if (pin.length !== 6 || !/^\d{6}$/.test(pin)) return;
+    setPincodeStatus("loading");
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
+      const data = await res.json();
+      if (data[0]?.Status === "Success" && data[0]?.PostOffice?.length > 0) {
+        const po = data[0].PostOffice[0];
+        const city = po.District || po.Block || po.Name || "";
+        const state = po.State || "";
+        setValue("city", city, { shouldValidate: true });
+        setValue("state", state, { shouldValidate: true });
+        setPincodeStatus("ok");
+      } else {
+        setPincodeStatus("error");
+      }
+    } catch {
+      setPincodeStatus("error");
+    }
+  }, [setValue]);
+
+  const fetchGpsLocation = useCallback(() => {
+    if (!navigator.geolocation) { setGpsStatus("error"); return; }
+    setGpsStatus("loading");
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`,
+            { headers: { "Accept-Language": "en" } }
+          );
+          const data = await res.json();
+          const addr = data.address || {};
+          const city = addr.city || addr.town || addr.village || addr.county || addr.district || "";
+          const state = addr.state || "";
+          if (city || state) {
+            setValue("city", city, { shouldValidate: true });
+            setValue("state", state, { shouldValidate: true });
+            setGpsStatus("ok");
+          } else {
+            setGpsStatus("error");
+          }
+        } catch { setGpsStatus("error"); }
+      },
+      () => setGpsStatus("error"),
+      { enableHighAccuracy: false, timeout: 10000 }
+    );
+  }, [setValue]);
 
   const listingType = watch("listing_type");
   const contactForPrice = watch("contact_for_price");
@@ -489,17 +543,106 @@ export function ListingForm({ machine }: ListingFormProps) {
           {/* ── Step 2: Location ─────────────────────────────── */}
           {step === 2 && (
             <div className="space-y-5">
-              <h2 className="text-lg font-semibold mb-6">Location</h2>
+              <h2 className="text-lg font-semibold mb-2">Location</h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                Enter your pincode for auto-fill, or use GPS — or type directly.
+              </p>
 
+              {/* ── Pincode lookup ── */}
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Pincode</label>
+                <div className="relative flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="e.g. 411014"
+                      value={pincode}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                        setPincode(val);
+                        setPincodeStatus("idle");
+                        if (val.length === 6) lookupPincode(val);
+                      }}
+                      className={cn(
+                        "w-full rounded-xl border bg-background px-4 py-2.5 pr-10 text-sm outline-none transition-all",
+                        "focus:ring-2 focus:ring-primary/20 focus:border-primary",
+                        pincodeStatus === "error" ? "border-destructive" : "border-border"
+                      )}
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {pincodeStatus === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                      {pincodeStatus === "ok" && <CheckCircle className="h-4 w-4 text-emerald-500" />}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => lookupPincode(pincode)}
+                    disabled={pincode.length !== 6 || pincodeStatus === "loading"}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background px-3 py-2.5 text-sm font-medium hover:bg-muted transition disabled:opacity-40"
+                  >
+                    <Search className="h-3.5 w-3.5" />
+                    Fill
+                  </button>
+                </div>
+                {pincodeStatus === "error" && (
+                  <p className="text-xs text-destructive">Invalid pincode — please check and try again.</p>
+                )}
+                {pincodeStatus === "ok" && (
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ City and state auto-filled from pincode.</p>
+                )}
+              </div>
+
+              {/* ── Divider ── */}
+              <div className="flex items-center gap-3 my-1">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs text-muted-foreground">or</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+
+              {/* ── GPS button ── */}
+              <button
+                type="button"
+                onClick={fetchGpsLocation}
+                disabled={gpsStatus === "loading"}
+                className={cn(
+                  "w-full flex items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-medium transition",
+                  gpsStatus === "ok"
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    : gpsStatus === "error"
+                    ? "border-destructive/40 bg-destructive/10 text-destructive"
+                    : "border-border hover:bg-muted"
+                )}
+              >
+                {gpsStatus === "loading" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <LocateFixed className="h-4 w-4" />
+                )}
+                {gpsStatus === "loading" ? "Detecting location…" :
+                 gpsStatus === "ok" ? "Location detected ✓" :
+                 gpsStatus === "error" ? "Could not detect location — type manually" :
+                 "Use Current Location"}
+              </button>
+
+              {/* ── Divider ── */}
+              <div className="flex items-center gap-3 my-1">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs text-muted-foreground">or enter manually</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+
+              {/* ── City + State manual fields ── */}
               <div className="grid gap-5 sm:grid-cols-2">
-                <Field label="City" error={errors.city?.message}>
+                <Field label="City *" error={errors.city?.message}>
                   <Input
                     placeholder="e.g. Pune"
                     error={!!errors.city}
                     {...register("city")}
                   />
                 </Field>
-                <Field label="State" error={errors.state?.message}>
+                <Field label="State *" error={errors.state?.message}>
                   <Input
                     placeholder="e.g. Maharashtra"
                     error={!!errors.state}
@@ -508,15 +651,8 @@ export function ListingForm({ machine }: ListingFormProps) {
                 </Field>
               </div>
 
-              <Field label="Address / Area" hint="Optional — general area only, not your exact address">
-                <Input
-                  placeholder="e.g. Hinjewadi Industrial Area"
-                  {...register("address_line")}
-                />
-              </Field>
-
               <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-600 dark:text-amber-400">
-                📍 Tip: Your exact address is never shown publicly. Only the city and state are displayed on the listing.
+                📍 Only city and state are shown publicly — your exact address is never shared.
               </div>
             </div>
           )}
