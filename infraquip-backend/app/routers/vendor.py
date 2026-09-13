@@ -383,7 +383,7 @@ async def delete_listing_image(
         raise HTTPException(status_code=404, detail="Image not found")
 
     # Delete from storage
-    await delete_storage_file(img.storage_path)
+    delete_storage_file(img.storage_path)
     await db.delete(img)
 
     # If deleted was primary, promote first remaining image
