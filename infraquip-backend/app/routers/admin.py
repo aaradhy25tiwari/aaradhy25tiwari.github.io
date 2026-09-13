@@ -207,6 +207,53 @@ async def list_users(
         total_pages=math.ceil(total / per_page) if total > 0 else 0,
     )
 
+# ── GET /admin/vendors ─────────────────────────────────────────
+@router.get("/vendors")
+async def list_vendors(
+    current_user: AdminUser,
+    db: DBSession,
+    search: Optional[str] = Query(None, max_length=100),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=50),
+):
+    """List all vendors with optional search."""
+    offset = (page - 1) * per_page
+    stmt = (
+        select(User)
+        .options(selectinload(User.vendor_profile))
+        .where(User.role == UserRole.vendor)
+        .order_by(User.created_at.desc())
+    )
+
+    if search:
+        stmt = stmt.where(
+            User.email.ilike(f"%{search}%") | User.full_name.ilike(f"%{search}%")
+        )
+
+    total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
+    result = await db.execute(stmt.offset(offset).limit(per_page))
+    vendors = result.scalars().all()
+
+    items = []
+    for u in vendors:
+        items.append({
+            "id": str(u.id),
+            "email": u.email,
+            "full_name": u.full_name,
+            "business_name": u.vendor_profile.company_name if u.vendor_profile else None,
+            "is_verified": u.is_verified,
+            "is_banned": u.is_banned,
+            "created_at": u.created_at,
+        })
+
+    return {
+        "results": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": math.ceil(total / per_page) if total > 0 else 0,
+    }
+
 
 # ── PATCH /admin/users/{user_id}/ban ──────────────────────────
 @router.patch("/users/{user_id}/ban")

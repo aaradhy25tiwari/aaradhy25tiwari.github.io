@@ -20,8 +20,8 @@ export default function AdminUsersPage() {
   const { data, isLoading } = useQuery<AdminUser[]>({
     queryKey: ["admin-users-list"],
     queryFn: async () => {
-      const { data } = await apiClient.get<AdminUser[]>("/admin/users");
-      return data;
+      const { data } = await apiClient.get<any>("/admin/users");
+      return data.results;
     },
   });
 
