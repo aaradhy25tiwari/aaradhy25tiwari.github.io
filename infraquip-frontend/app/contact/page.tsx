@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Mail, MessageSquare, Clock, MapPin } from "lucide-react";
+import { Mail, MessageSquare, Clock, MapPin, Phone } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Contact Us | InfraQuip",
@@ -38,6 +38,13 @@ const CONTACT_METHODS = [
     details: "Pan India",
     description:
       "Currently serving Tier 2 and Tier 3 cities, expanding to all major metros.",
+  },
+  {
+    icon: Phone,
+    title: "Phone Support",
+    details: "+91-9876543210",
+    description: "Available Mon-Fri, 9am to 6pm IST.",
+    href: "tel:+919876543210",
   },
 ];
 
@@ -118,8 +125,7 @@ export default function ContactPage() {
 
         {/* Support Note */}
         <p className="text-center text-xs text-muted-foreground">
-          For urgent issues, please use the in-app chat or email us directly.
-          We do not provide phone support at this time.
+          For urgent issues, please use the in-app chat or call us directly.
         </p>
       </div>
     </div>

@@ -23,12 +23,12 @@ const buttonVariants = cva(
           "bg-primary text-primary-foreground hover:bg-primary/90 btn-amber-glow",
       },
       size: {
-        default: "h-10 px-5 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-12 rounded-xl px-8 text-base",
-        xl: "h-14 rounded-xl px-10 text-base font-semibold",
-        icon: "h-10 w-10",
-        "icon-sm": "h-8 w-8 rounded-md",
+        default: "min-h-[44px] md:min-h-0 md:h-10 px-5 py-2",
+        sm: "min-h-[44px] md:min-h-0 md:h-8 rounded-md px-3 text-xs",
+        lg: "min-h-[48px] md:min-h-0 md:h-12 rounded-xl px-8 text-base",
+        xl: "min-h-[56px] md:min-h-0 md:h-14 rounded-xl px-10 text-base font-semibold",
+        icon: "min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 md:h-10 md:w-10",
+        "icon-sm": "min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 md:h-8 md:w-8 rounded-md",
       },
     },
     defaultVariants: {

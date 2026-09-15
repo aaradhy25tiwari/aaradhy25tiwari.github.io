@@ -69,6 +69,12 @@ export function Footer() {
                 </a>
               </div>
               <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-primary flex-shrink-0" />
+                <a href="tel:+919876543210" className="hover:text-foreground transition-colors">
+                  +91-9876543210
+                </a>
+              </div>
+              <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
                 <span>Serving Tier 2 &amp; 3 cities across India</span>
               </div>

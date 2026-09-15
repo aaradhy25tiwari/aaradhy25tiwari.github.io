@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { cn, formatINR, getConditionColor, getListingTypeLabel } from "@/lib/utils";
 import apiClient from "@/lib/api/client";
 import type { MachineListItem, SearchFilters } from "@/types/machine";
+import { EmptyState } from "@/components/shared/EmptyState";
 import Link from "next/link";
 import Image from "next/image";
 import { MachineCard } from "./MachineCard";
@@ -443,13 +444,13 @@ export function MachinesClientPage() {
                 </div>
               )
             ) : (
-              <div className="text-center py-24">
-                <p className="text-muted-foreground text-lg mb-2">No listings match your search.</p>
-                <p className="text-sm text-muted-foreground mb-6">
-                  Try removing some filters or searching a different location.
-                </p>
-                <Button variant="outline" onClick={resetFilters}>Clear all filters</Button>
-              </div>
+              <EmptyState
+                icon={Search}
+                title="No machines found"
+                description="Try removing some filters or searching a different location."
+                actionLabel="Clear all filters"
+                actionOnClick={resetFilters}
+              />
             )}
 
             {/* Pagination */}

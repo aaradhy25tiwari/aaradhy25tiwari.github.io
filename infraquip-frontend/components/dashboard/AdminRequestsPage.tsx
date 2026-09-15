@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import apiClient from "@/lib/api/client";
+import { EmptyState } from "@/components/shared/EmptyState";
 
 // ── Types ──────────────────────────────────────────────────────
 type RequestStatus = "pending" | "approved" | "rejected";
@@ -358,19 +359,15 @@ export function AdminRequestsPage() {
           ))}
         </div>
       ) : !data?.items.length ? (
-        <div className="card-surface p-12 text-center">
-          <div className="flex justify-center mb-4">
-            <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center">
-              <User className="h-8 w-8 text-muted-foreground" />
-            </div>
-          </div>
-          <p className="font-medium">No {statusFilter !== "all" ? statusFilter : ""} requests</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            {statusFilter === "pending"
+        <EmptyState
+          icon={User}
+          title={`No ${statusFilter !== "all" ? statusFilter : ""} requests`}
+          description={
+            statusFilter === "pending"
               ? "All caught up! New requests will appear here."
-              : "No requests match this filter."}
-          </p>
-        </div>
+              : "No requests match this filter."
+          }
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {data.items.map((req) => (

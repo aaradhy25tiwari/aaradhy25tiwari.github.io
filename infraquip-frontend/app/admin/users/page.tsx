@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Shield, Users } from "lucide-react";
 import apiClient from "@/lib/api/client";
 import { formatRelativeTime, cn } from "@/lib/utils";
+import { EmptyState } from "@/components/shared/EmptyState";
 
 interface AdminUser {
   id: string;
@@ -44,10 +45,11 @@ export default function AdminUsersPage() {
       {isLoading ? (
         <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin" /></div>
       ) : !data?.length ? (
-        <div className="rounded-2xl border border-dashed p-12 text-center">
-          <Users className="mx-auto h-8 w-8 text-muted-foreground" />
-          <p className="mt-4 font-medium">No users</p>
-        </div>
+        <EmptyState
+          icon={Users}
+          title="No users found"
+          description="There are currently no users registered on the platform."
+        />
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-border">
           <table className="w-full text-sm">
