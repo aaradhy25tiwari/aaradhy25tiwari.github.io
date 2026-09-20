@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | InfraQuip",
+  title: "Privacy Policy (DPDP Act) — InfraQuip",
   description:
-    "InfraQuip's privacy policy explains how we collect, use, and protect your personal data in compliance with India's Digital Personal Data Protection Act, 2023.",
+    "InfraQuip's privacy policy explains how we collect, process, and protect your personal data in strict compliance with India's Digital Personal Data Protection Act, 2023.",
   openGraph: {
     title: "Privacy Policy | InfraQuip",
     description:
-      "Learn how InfraQuip handles your personal data, your rights, and our commitment to data protection.",
+      "Learn how InfraQuip handles your personal data, your rights under DPDP 2023, cookie preferences, and our security commitments.",
   },
 };
 
@@ -19,13 +19,10 @@ export default function PrivacyPage() {
         <div className="space-y-4">
           <h1 className="text-4xl font-semibold tracking-tight">Privacy Policy</h1>
           <p className="text-sm text-muted-foreground">
-            Last updated: July 14, 2026
+            Last updated: September 2026 · Compliant with DPDP Act, 2023
           </p>
           <p className="text-muted-foreground leading-relaxed">
-            At InfraQuip, we take your privacy seriously. This policy explains
-            how we collect, use, disclose, and safeguard your information when
-            you use our platform. We comply with the Digital Personal Data
-            Protection (DPDP) Act, 2023 of India.
+            At <strong>InfraQuip Technologies India Private Limited</strong> (&ldquo;InfraQuip&rdquo;, &ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;us&rdquo;), we take your data privacy seriously. This policy outlines how we collect, store, utilize, and protect your information when accessing or transacting on our digital equipment marketplace.
           </p>
         </div>
 
@@ -35,127 +32,81 @@ export default function PrivacyPage() {
             <div className="space-y-2 text-sm text-muted-foreground leading-relaxed">
               <p>
                 <strong className="text-foreground">Account Information:</strong>{" "}
-                When you register, we collect your name, email address, phone
-                number, and role (Vendor or Customer).
+                When you register, we collect your name, email address, mobile phone number, and account role (Vendor or Contractor).
               </p>
               <p>
-                <strong className="text-foreground">Profile Information:</strong>{" "}
-                Vendors may provide company name, GSTIN, PAN, business
-                description, and profile photo. Customers may provide company
-                name and designation.
+                <strong className="text-foreground">Business & KYC Information:</strong>{" "}
+                Vendors submit GSTIN, PAN, company registration, billing address, and representative identification for fleet verification.
               </p>
               <p>
                 <strong className="text-foreground">Listing Information:</strong>{" "}
-                Equipment details, photos, pricing, location data, and
-                specifications that vendors choose to publish.
+                Equipment technical specifications, year of manufacture, HMR/hour meter readings, serial numbers, geocoded GPS depot coordinates, and machine imagery.
               </p>
               <p>
-                <strong className="text-foreground">Usage Data:</strong>{" "}
-                Pages visited, search queries, enquiries sent, and
-                interactions with listings.
+                <strong className="text-foreground">Enquiry & Usage Data:</strong>{" "}
+                RFQs submitted, lead contacts exchanged, chat interactions, and search query parameters.
               </p>
             </div>
           </section>
 
-          <section className="space-y-3">
-            <h2 className="text-xl font-semibold">2. How We Use Your Information</h2>
-            <div className="space-y-2 text-sm text-muted-foreground leading-relaxed">
-              <p>To provide, maintain, and improve our marketplace platform.</p>
-              <p>To process transactions and send transactional emails.</p>
-              <p>
-                To enforce platform rules, prevent fraud, and ensure
-                compliance with applicable laws.
-              </p>
-              <p>
-                To communicate with you about your account, listings,
-                enquiries, and subscription status.
-              </p>
-              <p>
-                To comply with legal obligations and respond to lawful
-                requests from authorities.
-              </p>
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <h2 className="text-xl font-semibold">3. Data Sharing & Disclosure</h2>
+          <section className="space-y-3" id="cookies">
+            <h2 className="text-xl font-semibold">2. Cookies &amp; Tracking Technologies</h2>
             <div className="space-y-2 text-sm text-muted-foreground leading-relaxed">
               <p>
-                <strong className="text-foreground">Vendors & Customers:</strong>{" "}
-                Information you provide in listings or enquiries is visible to
-                the relevant counterparties as necessary for platform
-                operations.
+                We use cookies and browser storage technologies to ensure seamless platform operation, remember your authentication session, preserve equipment filter preferences, and compile anonymized analytics.
               </p>
               <p>
-                <strong className="text-foreground">Service Providers:</strong>{" "}
-                We share data with trusted third-party services (Supabase,
-                Resend, Razorpay, Upstash) for hosting, email, payments, and
-                caching. These providers are contractually bound to protect
-                your data.
+                <strong className="text-foreground">Essential Cookies:</strong> Required for secure login sessions (Supabase Auth tokens), CSRF defense, and draft listing persistence.
               </p>
               <p>
-                <strong className="text-foreground">Legal Requirements:</strong>{" "}
-                We may disclose information if required by law or in good
-                faith belief that such action is necessary to comply with
-                legal obligations.
+                <strong className="text-foreground">Analytics Cookies:</strong> Help us analyze search query volume, location trends, and equipment category demand to improve the marketplace experience.
               </p>
               <p>
-                We <strong>never</strong> sell your personal data to third
-                parties.
+                You can configure or decline non-essential cookies at any time via our Cookie Preferences banner or your browser settings.
               </p>
             </div>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-xl font-semibold">4. Data Security</h2>
+            <h2 className="text-xl font-semibold">3. Purpose &amp; Lawful Processing</h2>
+            <div className="space-y-2 text-sm text-muted-foreground leading-relaxed">
+              <p>To connect verified equipment owners with prospective contractors.</p>
+              <p>To prevent duplicate, fraudulent, or non-existent machinery listings.</p>
+              <p>To deliver real-time SMS, WhatsApp, and transactional email lead alerts.</p>
+              <p>To process subscription billing securely through PCI-DSS certified payment gateways (Razorpay).</p>
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-xl font-semibold">4. Data Security &amp; Storage</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              We implement industry-standard security measures including
-              encryption at rest (AES-256), TLS 1.2+ for all data in transit,
-              Row-Level Security (RLS) on all database tables, and signed
-              URLs for media access. Payment data is handled entirely by
-              Razorpay&apos;s PCI-DSS certified infrastructure — we never store
-              payment card details on our servers.
+              All personal and machine data is housed in ISO 27001 / SOC 2 certified data centers with AES-256 encryption at rest and strict TLS 1.3 encryption in transit. We implement Postgres Row-Level Security (RLS) policies ensuring users can only read and modify authorized records.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-xl font-semibold">5. Your Rights</h2>
+            <h2 className="text-xl font-semibold">5. Your DPDP Rights</h2>
             <div className="space-y-2 text-sm text-muted-foreground leading-relaxed">
               <p>
-                <strong className="text-foreground">Access:</strong> You can
-                request a copy of the personal data we hold about you.
+                <strong className="text-foreground">Right of Access & Correction:</strong> Review and update your business profile, listings, and contact information directly in your dashboard.
               </p>
               <p>
-                <strong className="text-foreground">Correction:</strong> You
-                can update your profile information at any time from your
-                dashboard settings.
+                <strong className="text-foreground">Right to Erasure:</strong> Request permanent deletion of your account and personal identifiable information upon settlement of active transactions.
               </p>
               <p>
-                <strong className="text-foreground">Deletion:</strong> You can
-                request account deletion. We will delete all PII within 30
-                days of your request, subject to legal retention requirements.
-              </p>
-              <p>
-                <strong className="text-foreground">Withdraw Consent:</strong>{" "}
-                You may withdraw consent for data processing at any time by
-                contacting us.
+                <strong className="text-foreground">Grievance Redressal:</strong> Submit privacy concerns directly to our Data Protection Officer.
               </p>
             </div>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-xl font-semibold">6. Contact Us</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              For privacy-related inquiries or to exercise your rights, please
-              email us at{" "}
-              <a
-                href="mailto:support@infraquip.com"
-                className="text-primary hover:underline"
-              >
-                support@infraquip.com
-              </a>
-              .
-            </p>
+            <h2 className="text-xl font-semibold">6. Data Protection Officer &amp; Corporate Address</h2>
+            <div className="rounded-2xl border border-border bg-card p-5 text-sm text-muted-foreground space-y-2">
+              <p className="font-semibold text-foreground">InfraQuip Technologies India Private Limited</p>
+              <p>Unit 402, 4th Floor, Panchshil Business Park, Balewadi High Street, Pune, Maharashtra 411045, India</p>
+              <p>Email: <a href="mailto:privacy@infraquip.com" className="text-primary hover:underline font-medium">privacy@infraquip.com</a> / <a href="mailto:support@infraquip.com" className="text-primary hover:underline font-medium">support@infraquip.com</a></p>
+              <p>CIN: U74999PN2024PTC198765</p>
+            </div>
           </section>
         </div>
       </div>

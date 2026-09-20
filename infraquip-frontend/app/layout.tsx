@@ -6,6 +6,9 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Toaster } from "@/components/ui/toaster";
 import { ChatbotWrapper } from "@/components/chat/ChatbotWrapper";
+import { CookieBanner } from "@/components/layout/CookieBanner";
+import { StickyMobileCta } from "@/components/layout/StickyMobileCta";
+import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -16,25 +19,26 @@ const inter = Inter({
 // ── Default Metadata ──────────────────────────────────────────
 export const metadata: Metadata = {
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_APP_URL ?? "https://infraquip.com"
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://infraquip.in"
   ),
   title: {
-    default: "InfraQuip — Construction Equipment Rental & Sales Marketplace",
+    default: "InfraQuip — Construction Equipment Rental & Sales Marketplace India",
     template: "%s | InfraQuip",
   },
   description:
-    "Find excavators, cranes, bulldozers, and heavy machinery for rent or sale. India's trusted B2B construction equipment marketplace. Compare prices, specs, and vendors.",
+    "Rent and buy verified heavy construction machinery across India. Compare excavators, cranes, bulldozers, and forklifts with transparent pricing and verified vendors.",
   keywords: [
-    "construction equipment rental",
-    "heavy machinery rental India",
+    "construction equipment rental India",
+    "heavy machinery rental Pune Mumbai Bangalore",
     "excavator rental",
     "crane rental",
     "bulldozer rental",
     "JCB rental",
-    "equipment marketplace",
+    "forklift rental",
+    "equipment marketplace India",
     "InfraQuip",
   ],
-  authors: [{ name: "InfraQuip" }],
+  authors: [{ name: "InfraQuip Technologies India Pvt. Ltd." }],
   creator: "InfraQuip",
   publisher: "InfraQuip",
   robots: {
@@ -51,14 +55,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_IN",
-    url: "https://infraquip.com",
+    url: "https://infraquip.in",
     siteName: "InfraQuip",
-    title: "InfraQuip — Construction Equipment Rental & Sales Marketplace",
+    title: "InfraQuip — Construction Equipment Rental & Sales Marketplace India",
     description:
-      "Find verified excavators, cranes, bulldozers & more for rent or sale. India's B2B heavy equipment marketplace.",
+      "Find verified excavators, cranes, bulldozers & more for rent or sale. India's trusted B2B heavy equipment network.",
     images: [
       {
-        url: "/og-image.jpg",
+        url: "/opengraph-image",
         width: 1200,
         height: 630,
         alt: "InfraQuip — Construction Equipment Marketplace",
@@ -67,16 +71,20 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "InfraQuip — Construction Equipment Rental & Sales",
+    title: "InfraQuip — Construction Equipment Rental & Sales Marketplace",
     description:
       "India's trusted B2B construction equipment marketplace. Rent or buy verified machinery.",
-    images: ["/og-image.jpg"],
+    images: ["/opengraph-image"],
   },
   alternates: {
-    canonical: "https://infraquip.com",
+    canonical: "https://infraquip.in",
   },
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
     shortcut: "/favicon-16x16.png",
     apple: "/apple-touch-icon.png",
   },
@@ -86,7 +94,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f59e0b" },
-    { media: "(prefers-color-scheme: dark)", color: "#1a1f2e" },
+    { media: "(prefers-color-scheme: dark)", color: "#090d16" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -99,17 +107,30 @@ export const viewport: Viewport = {
 const organizationSchema = {
   "@context": "https://schema.org",
   "@type": "Organization",
-  name: "InfraQuip",
-  url: "https://infraquip.com",
-  logo: "https://infraquip.com/logo.png",
+  name: "InfraQuip Technologies India Pvt. Ltd.",
+  legalName: "InfraQuip Technologies India Private Limited",
+  url: "https://infraquip.in",
+  logo: "https://infraquip.in/logo.png",
   description:
     "India's trusted B2B construction equipment rental and sales marketplace.",
-  sameAs: [],
-  contactPoint: {
-    "@type": "ContactPoint",
-    contactType: "customer service",
-    email: "support@infraquip.com",
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: "Unit 402, 4th Floor, Panchshil Business Park, Balewadi High Street",
+    addressLocality: "Pune",
+    addressRegion: "Maharashtra",
+    postalCode: "411045",
+    addressCountry: "IN",
   },
+  contactPoint: [
+    {
+      "@type": "ContactPoint",
+      telephone: "+91-9876543210",
+      contactType: "customer service",
+      areaServed: "IN",
+      availableLanguage: ["English", "Hindi", "Marathi"],
+    },
+  ],
+  sameAs: [],
 };
 
 // ── WebSite Search Action Schema ──────────────────────────────
@@ -117,12 +138,12 @@ const websiteSchema = {
   "@context": "https://schema.org",
   "@type": "WebSite",
   name: "InfraQuip",
-  url: "https://infraquip.com",
+  url: "https://infraquip.in",
   potentialAction: {
     "@type": "SearchAction",
     target: {
       "@type": "EntryPoint",
-      urlTemplate: "https://infraquip.com/machines?q={search_term_string}",
+      urlTemplate: "https://infraquip.in/machines?q={search_term_string}",
     },
     "query-input": "required name=search_term_string",
   },
@@ -135,8 +156,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning className={inter.variable}>
+      <head>
+        <GoogleAnalytics />
+      </head>
       <body suppressHydrationWarning className="min-h-screen bg-background font-sans antialiased overflow-x-hidden">
-        {/* Structured Data — rendered in body so extension-injected <head> scripts cannot break hydration */}
+        {/* Structured Data */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -161,6 +185,8 @@ export default function RootLayout({
             </main>
             <Footer />
           </div>
+          <StickyMobileCta />
+          <CookieBanner />
           <Toaster />
           <ChatbotWrapper />
         </Providers>

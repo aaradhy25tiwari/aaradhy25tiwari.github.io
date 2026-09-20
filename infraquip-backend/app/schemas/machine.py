@@ -46,11 +46,11 @@ class MachineCreateRequest(BaseModel):
     title: str = Field(min_length=5, max_length=300)
     make: str = Field(min_length=2, max_length=100)
     model: str = Field(min_length=1, max_length=200)
-    year_of_manufacture: int = Field(ge=1990, le=2027)
+    year_of_manufacture: int = Field(ge=1980, le=datetime.now().year)
     condition: MachineCondition
     capacity_specs: str = Field(min_length=5, max_length=500)
     specifications: Optional[Dict[str, Any]] = None
-    description: str = Field(min_length=100, max_length=2000)
+    description: str = Field(min_length=10, max_length=2000)
     listing_type: ListingType
     min_rental_duration: Optional[MinRentalDuration] = MinRentalDuration.one_day
     
@@ -67,10 +67,10 @@ class MachineCreateRequest(BaseModel):
     purchase_price: Optional[float] = Field(None, gt=0)
     contact_for_price: bool = False
 
-    # Location
-    city: str = Field(min_length=2, max_length=100)
-    state: str = Field(min_length=2, max_length=100)
-    address_line: Optional[str] = None
+    # Location (reduced to 30-40 characters)
+    city: str = Field(min_length=2, max_length=40)
+    state: str = Field(min_length=2, max_length=40)
+    address_line: Optional[str] = Field(None, max_length=40)
     latitude: Optional[float] = Field(None, ge=-90, le=90)
     longitude: Optional[float] = Field(None, ge=-180, le=180)
 
@@ -95,11 +95,11 @@ class MachineUpdateRequest(BaseModel):
     title: Optional[str] = Field(None, min_length=5, max_length=300)
     make: Optional[str] = Field(None, min_length=2, max_length=100)
     model: Optional[str] = Field(None, min_length=1, max_length=200)
-    year_of_manufacture: Optional[int] = Field(None, ge=1990, le=2027)
+    year_of_manufacture: Optional[int] = Field(None, ge=1980, le=datetime.now().year)
     condition: Optional[MachineCondition] = None
     capacity_specs: Optional[str] = Field(None, min_length=5, max_length=500)
     specifications: Optional[Dict[str, Any]] = None
-    description: Optional[str] = Field(None, min_length=100, max_length=2000)
+    description: Optional[str] = Field(None, min_length=10, max_length=2000)
     listing_type: Optional[ListingType] = None
     min_rental_duration: Optional[MinRentalDuration] = None
     
@@ -112,9 +112,9 @@ class MachineUpdateRequest(BaseModel):
     rental_price_monthly: Optional[float] = Field(None, gt=0)
     purchase_price: Optional[float] = Field(None, gt=0)
     contact_for_price: Optional[bool] = None
-    city: Optional[str] = Field(None, min_length=2, max_length=100)
-    state: Optional[str] = Field(None, min_length=2, max_length=100)
-    address_line: Optional[str] = None
+    city: Optional[str] = Field(None, min_length=2, max_length=40)
+    state: Optional[str] = Field(None, min_length=2, max_length=40)
+    address_line: Optional[str] = Field(None, max_length=40)
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     availability: Optional[bool] = None
