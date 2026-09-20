@@ -23,6 +23,20 @@ def _send(to: str, subject: str, html: str) -> None:
         logging.getLogger(__name__).error(f"Email send failed to {to}: {e}")
 
 
+EMAIL_FOOTER = """
+<div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af; line-height: 1.5;">
+  <p style="margin: 0 0 4px; font-weight: 600; color: #6b7280;">InfraQuip Technologies India Private Limited</p>
+  <p style="margin: 0 0 8px;">Unit 402, 4th Floor, Panchshil Business Park, Balewadi High Street, Pune, Maharashtra 411045, India</p>
+  <p style="margin: 0;">
+    You received this email because of your account activity on InfraQuip. 
+    <a href="https://infraquip.in/privacy" style="color: #f59e0b; text-decoration: underline;">Privacy Policy</a> · 
+    <a href="https://infraquip.in/terms" style="color: #f59e0b; text-decoration: underline;">Terms</a> · 
+    <a href="mailto:support@infraquip.com?subject=Unsubscribe" style="color: #9ca3af; text-decoration: underline;">Manage Preferences / Unsubscribe</a>
+  </p>
+</div>
+"""
+
+
 def send_welcome_email(email: str, full_name: str, role: str) -> None:
     role_label = {"vendor": "Vendor", "broker": "Broker"}.get(role, "Customer")
     html = f"""
@@ -49,9 +63,7 @@ def send_welcome_email(email: str, full_name: str, role: str) -> None:
          style="display: inline-block; background: #f59e0b; color: #111827; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600;">
         {"Go to Dashboard" if role == "vendor" else "Browse Equipment"}
       </a>
-      <p style="color: #9ca3af; font-size: 12px; margin-top: 40px;">
-        InfraQuip · support@infraquip.com · Unsubscribe
-      </p>
+      {EMAIL_FOOTER}
     </div>
     """
     _send(email, f"Welcome to InfraQuip, {full_name}!", html)
@@ -70,6 +82,7 @@ def send_listing_approved_email(email: str, vendor_name: str, machine_title: str
          style="display: inline-block; background: #f59e0b; color: #111827; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600;">
         View Your Listing
       </a>
+      {EMAIL_FOOTER}
     </div>
     """
     _send(email, f"Listing Approved: {machine_title}", html)
@@ -90,6 +103,7 @@ def send_listing_rejected_email(
         <p style="margin: 0; color: #991b1b;"><strong>Reason:</strong> {reason}</p>
       </div>
       <p style="color: #374151;">Please update your listing and resubmit. Our team will review it again within 24 hours.</p>
+      {EMAIL_FOOTER}
     </div>
     """
     _send(email, f"Action Required: {machine_title}", html)
@@ -113,6 +127,7 @@ def send_enquiry_received_email(
          style="display: inline-block; background: #f59e0b; color: #111827; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600;">
         View & Reply to Enquiry
       </a>
+      {EMAIL_FOOTER}
     </div>
     """
     _send(vendor_email, f"New Enquiry: {machine_title}", html)
@@ -133,6 +148,7 @@ def send_payment_receipt_email(
           <tr><td style="padding: 8px 0; color: #6b7280;">Next billing</td><td style="text-align: right; font-weight: 600;">{period_end}</td></tr>
         </table>
       </div>
+      {EMAIL_FOOTER}
     </div>
     """
     _send(email, f"Receipt: InfraQuip {plan_name}", html)
@@ -159,9 +175,7 @@ def send_account_request_received_email(email: str, full_name: str) -> None:
           immediately.
         </p>
       </div>
-      <p style="color: #9ca3af; font-size: 12px; margin-top: 40px;">
-        InfraQuip · support@infraquip.in
-      </p>
+      {EMAIL_FOOTER}
     </div>
     """
     _send(email, "We received your InfraQuip access request", html)
@@ -201,9 +215,7 @@ def send_account_approved_email(
          style="display: inline-block; background: #f59e0b; color: #111827; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 16px;">
         Log In to InfraQuip →
       </a>
-      <p style="color: #9ca3af; font-size: 12px; margin-top: 40px;">
-        InfraQuip · support@infraquip.in
-      </p>
+      {EMAIL_FOOTER}
     </div>
     """
     _send(email, "Your InfraQuip account is ready — temporary credentials inside", html)
@@ -229,11 +241,9 @@ def send_account_rejected_email(
       </div>
       <p style="color: #374151; line-height: 1.6;">
         If you believe this is an error or wish to reapply with additional information,
-        please contact us at <a href="mailto:support@infraquip.in" style="color: #f59e0b;">support@infraquip.in</a>.
+        please contact us at <a href="mailto:support@infraquip.com" style="color: #f59e0b;">support@infraquip.com</a>.
       </p>
-      <p style="color: #9ca3af; font-size: 12px; margin-top: 40px;">
-        InfraQuip · support@infraquip.in
-      </p>
+      {EMAIL_FOOTER}
     </div>
     """
     _send(email, "Update on your InfraQuip account request", html)

@@ -16,6 +16,9 @@ export default function robots(): MetadataRoute.Robots {
           "/contact",
           "/privacy",
           "/terms",
+          "/refund",
+          "/cookies",
+          "/data-deletion",
           "/live-leads",
         ],
         disallow: [

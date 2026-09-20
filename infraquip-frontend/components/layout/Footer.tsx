@@ -21,16 +21,19 @@ const FOOTER_LINKS = {
       { label: "Subscription Pricing", href: "/pricing" },
       { label: "Live Equipment Leads", href: "/live-leads" },
       { label: "How It Works", href: "/#how-it-works" },
+      { label: "Request Access", href: "/register" },
     ],
   },
   company: {
-    title: "Company & Legal",
+    title: "Legal & Compliance",
     links: [
       { label: "About Us", href: "/about" },
       { label: "Contact & Support", href: "/contact" },
       { label: "Privacy Policy (DPDP)", href: "/privacy" },
       { label: "Terms of Service", href: "/terms" },
-      { label: "Request Access", href: "/register" },
+      { label: "Cancellation & Refund", href: "/refund" },
+      { label: "Cookie Policy", href: "/cookies" },
+      { label: "Data Deletion Request", href: "/data-deletion" },
     ],
   },
 };
@@ -140,13 +143,20 @@ export function Footer() {
             <ShieldCheck className="h-4 w-4 text-emerald-500" />
             <span>© {currentYear} InfraQuip Technologies India Pvt. Ltd. All rights reserved.</span>
           </div>
-          <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             <span>CIN: <strong className="text-foreground">U74999PN2024PTC198765</strong></span>
             <span>·</span>
             <span>GSTIN: <strong className="text-foreground">27AABCI1234F1Z5</strong></span>
             <span>·</span>
             <Link href="/privacy" className="hover:underline">Privacy</Link>
+            <span>·</span>
             <Link href="/terms" className="hover:underline">Terms</Link>
+            <span>·</span>
+            <Link href="/refund" className="hover:underline">Refunds</Link>
+            <span>·</span>
+            <Link href="/cookies" className="hover:underline">Cookies</Link>
+            <span>·</span>
+            <Link href="/data-deletion" className="hover:underline">Data Deletion</Link>
           </div>
         </div>
       </div>

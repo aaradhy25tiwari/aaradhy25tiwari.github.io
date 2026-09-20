@@ -60,16 +60,19 @@ export function CookieBanner() {
           </div>
 
           <p className="text-xs text-muted-foreground leading-relaxed">
-            We use necessary and analytical cookies to improve performance, remember your search preferences, and analyze equipment marketplace trends in accordance with India&apos;s DPDP Act 2023.
+            We use necessary and analytical cookies to improve performance, remember your preferences, and analyze equipment marketplace trends under India&apos;s DPDP Act 2023.
           </p>
 
           <div className="pt-2 flex items-center justify-between gap-2 flex-wrap">
-            <Link
-              href="/privacy"
-              className="text-[11px] text-primary hover:underline font-medium"
-            >
-              Privacy Policy
-            </Link>
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              <Link href="/cookies" className="text-primary hover:underline font-medium">
+                Cookie Policy
+              </Link>
+              <span>·</span>
+              <Link href="/privacy" className="text-primary hover:underline font-medium">
+                Privacy
+              </Link>
+            </div>
 
             <div className="flex items-center gap-2">
               <Button

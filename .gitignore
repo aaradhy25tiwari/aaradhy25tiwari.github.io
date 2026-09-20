@@ -42,3 +42,5 @@ pip-delete-this-directory.txt
 # Databases
 *.db
 *.sqlite3
+
+.agents

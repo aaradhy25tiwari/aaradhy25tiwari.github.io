@@ -50,11 +50,11 @@ export function TestimonialsSection() {
     >
       <div className="section-container">
         <div className="text-center mb-10 sm:mb-16">
-          <h2 id="testimonials-heading" className="mb-3">
+          <h2 id="testimonials-heading" className="mb-3 text-3xl font-extrabold text-foreground">
             Trusted by <span className="text-gradient-amber">Construction Professionals</span>
           </h2>
-          <p className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto">
-            Vendors and customers across India are building their businesses with InfraQuip.
+          <p className="text-muted-foreground text-sm sm:text-base max-w-xl mx-auto">
+            Feedback and operational reviews shared by verified equipment fleet owners and infrastructure contractors across India.
           </p>
         </div>
 

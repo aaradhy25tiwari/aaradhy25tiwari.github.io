@@ -5,10 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import { Users, Truck, MapPin, ShieldCheck } from "lucide-react";
 
 const STATS = [
-  { value: 5000, suffix: "+", label: "HAPPY CUSTOMERS", icon: Users },
-  { value: 1000, suffix: "+", label: "MACHINES", icon: Truck },
-  { value: 50, suffix: "+", label: "CITIES", icon: MapPin },
-  { value: 10, suffix: "+", label: "YEARS OF TRUST", icon: ShieldCheck },
+  { value: 500, suffix: "+", label: "VERIFIED CONTRACTORS", icon: Users },
+  { value: 1000, suffix: "+", label: "MACHINES LISTED", icon: Truck },
+  { value: 50, suffix: "+", label: "SERVICE HUBS", icon: MapPin },
+  { value: 100, suffix: "%", label: "VERIFIED VENDORS", icon: ShieldCheck },
 ];
 
 function AnimatedCounter({

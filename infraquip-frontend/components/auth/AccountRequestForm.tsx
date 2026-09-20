@@ -21,6 +21,9 @@ const schema = z.object({
   city: z.string().min(2, "City is required"),
   gstin_pan: z.string().optional(),
   message: z.string().min(10, "Please describe your requirement (min 10 chars)"),
+  agree_terms: z.boolean().refine((val) => val === true, {
+    message: "You must agree to the Terms of Service and Privacy Policy",
+  }),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -282,6 +285,35 @@ export function AccountRequestForm() {
             />
           </div>
         </Field>
+
+        {/* Consent Checkbox */}
+        <div className="space-y-1 pt-1">
+          <label className="flex items-start gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              {...register("agree_terms")}
+              className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary/20 accent-amber-500"
+            />
+            <span className="text-xs text-muted-foreground leading-relaxed">
+              I agree to InfraQuip&apos;s{" "}
+              <a href="/terms" target="_blank" className="text-primary hover:underline font-medium">
+                Terms of Service
+              </a>
+              ,{" "}
+              <a href="/privacy" target="_blank" className="text-primary hover:underline font-medium">
+                Privacy Policy
+              </a>
+              , and{" "}
+              <a href="/cookies" target="_blank" className="text-primary hover:underline font-medium">
+                Cookie Policy
+              </a>
+              .
+            </span>
+          </label>
+          {errors.agree_terms && (
+            <p className="text-xs text-destructive pl-6.5">{errors.agree_terms.message}</p>
+          )}
+        </div>
 
         {/* Server error */}
         {serverError && (
