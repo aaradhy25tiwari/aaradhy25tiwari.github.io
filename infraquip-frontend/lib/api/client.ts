@@ -58,9 +58,13 @@ apiClient.interceptors.response.use(
             };
             return apiClient(originalConfig);
           } else {
-            // Refresh failed or token invalid — sign out
-            await supabase.auth.signOut();
-            if (typeof window !== "undefined") {
+            // Refresh failed or token invalid — clean up local state
+            try {
+              await supabase.auth.signOut({ scope: "local" });
+            } catch {
+              /* ignore */
+            }
+            if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
               window.location.href = "/login";
             }
           }
@@ -68,9 +72,13 @@ apiClient.interceptors.response.use(
       } catch (e) {
         // Refresh failed catastrophically (e.g. network failure)
         console.debug("Session refresh failed", e);
-        const supabase = getSupabaseClient();
-        await supabase.auth.signOut();
-        if (typeof window !== "undefined") {
+        try {
+          const supabase = getSupabaseClient();
+          await supabase.auth.signOut({ scope: "local" });
+        } catch {
+          /* ignore */
+        }
+        if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
           window.location.href = "/login";
         }
       }

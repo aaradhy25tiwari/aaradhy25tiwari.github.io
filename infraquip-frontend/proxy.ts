@@ -31,7 +31,14 @@ export async function proxy(request: NextRequest) {
   );
 
   // Refresh session (important for cookie-based session handling)
-  const { data: { user } } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data?.user ?? null;
+  } catch (authError) {
+    // Network timeout or offline DNS — proceed gracefully without throwing unhandled rejection
+    console.debug("Supabase auth check in proxy encountered network drop:", authError);
+  }
 
   const path = request.nextUrl.pathname;
 

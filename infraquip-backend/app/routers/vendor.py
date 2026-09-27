@@ -154,8 +154,8 @@ async def create_listing(
         address_line=payload.address_line,
         latitude=payload.latitude,
         longitude=payload.longitude,
-        category_id=uuid.UUID(payload.category_id) if payload.category_id else None,
-        sub_category_id=uuid.UUID(payload.sub_category_id) if payload.sub_category_id else None,
+        category_id=payload.category_id,
+        sub_category_id=payload.sub_category_id,
     )
     db.add(machine)
     await db.commit()
@@ -164,7 +164,11 @@ async def create_listing(
     # Fetch with relationships
     result = await db.execute(
         select(Machine)
-        .options(selectinload(Machine.images), selectinload(Machine.category))
+        .options(
+            selectinload(Machine.images),
+            selectinload(Machine.category),
+            selectinload(Machine.vendor),
+        )
         .where(Machine.id == machine.id)
     )
     return result.scalar_one()

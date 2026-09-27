@@ -7,7 +7,7 @@ import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { 
   Loader2, CheckCircle, ChevronRight, ChevronLeft, Save, CloudOff, 
-  LocateFixed, Search, Clock, Calendar, CalendarDays, CalendarRange, Check, Sparkles 
+  LocateFixed, Search, Clock, Calendar, CalendarDays, CalendarRange, Check, Sparkles, ChevronDown 
 } from "lucide-react";
 import apiClient from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
@@ -75,7 +75,7 @@ function Input({ className, error, ...props }: React.InputHTMLAttributes<HTMLInp
   return (
     <input
       className={cn(
-        "w-full rounded-xl border bg-background px-4 py-2.5 text-sm outline-none transition-all",
+        "w-full rounded-xl border bg-background px-4 py-2.5 text-sm outline-none transition-all placeholder:text-muted-foreground/50",
         "focus:ring-2 focus:ring-primary/20 focus:border-primary",
         error ? "border-destructive" : "border-border",
         className
@@ -87,17 +87,132 @@ function Input({ className, error, ...props }: React.InputHTMLAttributes<HTMLInp
 
 function Select({ className, error, children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & { error?: boolean }) {
   return (
-    <select
-      className={cn(
-        "w-full rounded-xl border bg-background px-4 py-2.5 text-sm outline-none transition-all",
-        "focus:ring-2 focus:ring-primary/20 focus:border-primary appearance-none",
-        error ? "border-destructive" : "border-border",
-        className
+    <div className="relative w-full">
+      <select
+        className={cn(
+          "w-full rounded-xl border bg-background px-4 py-2.5 pr-10 text-sm outline-none transition-all appearance-none cursor-pointer",
+          "focus:ring-2 focus:ring-primary/20 focus:border-primary",
+          error ? "border-destructive" : "border-border",
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </select>
+      <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+        <ChevronDown className="h-4 w-4" />
+      </div>
+    </div>
+  );
+}
+
+// ── Custom Autosuggest Combobox (replaces native datalist) ──
+interface ComboboxItem {
+  label: string;
+  subLabel?: string;
+  value: string;
+}
+
+function ComboboxInput({
+  value,
+  onChange,
+  onSelect,
+  placeholder,
+  error,
+  items,
+  disabled,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  onSelect?: (item: ComboboxItem) => void;
+  placeholder?: string;
+  error?: boolean;
+  items: ComboboxItem[];
+  disabled?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const query = (value || "").toLowerCase().trim();
+  const filteredItems = items.filter((item) => {
+    if (!query) return true;
+    return (
+      item.label.toLowerCase().includes(query) ||
+      (item.subLabel && item.subLabel.toLowerCase().includes(query))
+    );
+  });
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <div className="relative">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={() => {
+            setIsOpen(true);
+          }}
+          placeholder={placeholder}
+          disabled={disabled}
+          autoComplete="off"
+          className={cn(
+            "w-full rounded-xl border bg-background px-4 py-2.5 pr-10 text-sm outline-none transition-all placeholder:text-muted-foreground/50",
+            "focus:ring-2 focus:ring-primary/20 focus:border-primary",
+            error ? "border-destructive" : "border-border",
+            disabled && "opacity-50 cursor-not-allowed"
+          )}
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => setIsOpen((prev) => !prev)}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+        >
+          <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", isOpen && "rotate-180")} />
+        </button>
+      </div>
+
+      {/* Suggestion Dropdown */}
+      {isOpen && filteredItems.length > 0 && (
+        <div className="absolute left-0 top-full mt-1.5 w-full rounded-2xl border border-border bg-card/95 backdrop-blur-md p-1.5 shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-border/20 animate-in fade-in zoom-in-95 duration-150">
+          {filteredItems.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange(item.value);
+                if (onSelect) onSelect(item);
+                setIsOpen(false);
+              }}
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-primary/10 hover:text-primary cursor-pointer group"
+            >
+              <span className="font-medium text-foreground group-hover:text-primary">
+                {item.label}
+              </span>
+              {item.subLabel && (
+                <span className="text-xs text-muted-foreground group-hover:text-primary/70 bg-muted/60 group-hover:bg-primary/10 px-2 py-0.5 rounded-md">
+                  {item.subLabel}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       )}
-      {...props}
-    >
-      {children}
-    </select>
+    </div>
   );
 }
 
@@ -143,6 +258,7 @@ export function ListingForm({ machine }: ListingFormProps) {
   const [done, setDone] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(machine?.id ?? null);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [availableDraft, setAvailableDraft] = useState<Partial<FormData> | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -183,6 +299,12 @@ export function ListingForm({ machine }: ListingFormProps) {
         }
       : EMPTY_FORM_VALUES,
   });
+
+  // Register make & model for schema validation
+  useEffect(() => {
+    register("make");
+    register("model");
+  }, [register]);
 
   // ── Master data auto-suggestions ────────────────────────────
   const selectedCategoryId = watch("category_id");
@@ -238,14 +360,28 @@ export function ListingForm({ machine }: ListingFormProps) {
       setPincodeStatus("ok");
     };
 
-    // 1. Try postalpincode.in
+    // 1. Try internal Next.js API route (/api/pincode/[pin])
     try {
-      const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`, { signal: AbortSignal.timeout(3000) });
+      const res = await fetch(`/api/pincode/${pin}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.city && data.state) {
+          applyLocation(data.city, data.state);
+          return;
+        }
+      }
+    } catch {
+      /* fallback to direct APIs */
+    }
+
+    // 2. Direct Fallback: api.postalpincode.in (with generous 8s timeout)
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`, { signal: AbortSignal.timeout(8000) });
       const data = await res.json();
-      if (data[0]?.Status === "Success" && data[0]?.PostOffice?.length > 0) {
-        const po = data[0].PostOffice[0];
-        const city = po.District || po.Block || po.Name || "";
-        const state = po.State || "";
+      if (Array.isArray(data) && data[0]?.Status === "Success" && data[0]?.PostOffice?.length > 0) {
+        const po = data[0].PostOffice.find((o: { BranchType?: string }) => o.BranchType?.includes("Sub") || o.BranchType?.includes("Head")) || data[0].PostOffice[0];
+        const city = (po.District || po.Block || po.Name || "").replace(/\./g, "").trim();
+        const state = (po.State || "").replace(/\./g, "").trim();
         if (city && state) {
           applyLocation(city, state);
           return;
@@ -255,39 +391,20 @@ export function ListingForm({ machine }: ListingFormProps) {
       /* fallback */
     }
 
-    // 2. Try Zippopotam
-    try {
-      const res = await fetch(`https://api.zippopotam.us/in/${pin}`, { signal: AbortSignal.timeout(3000) });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.places && data.places.length > 0) {
-          const place = data.places[0];
-          const city = place["place name"] || "";
-          const state = place["state"] || "";
-          if (city && state) {
-            applyLocation(city, state);
-            return;
-          }
-        }
-      }
-    } catch {
-      /* fallback */
-    }
-
-    // 3. Try OpenStreetMap Nominatim
+    // 3. Direct Fallback: Nominatim OpenStreetMap
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?postalcode=${pin}&country=India&format=json&addressdetails=1`,
-        { signal: AbortSignal.timeout(4000) }
+        { signal: AbortSignal.timeout(6000) }
       );
       if (res.ok) {
         const data = await res.json();
-        if (data && data.length > 0) {
+        if (Array.isArray(data) && data.length > 0) {
           const addr = data[0].address || {};
-          const city = addr.city || addr.town || addr.district || addr.county || addr.state_district || "";
-          const state = addr.state || "";
+          const city = (addr.city || addr.town || addr.city_district || addr.district || addr.county || addr.state_district || "").trim();
+          const state = (addr.state || "").trim();
           if (city || state) {
-            applyLocation(city || state, state);
+            applyLocation(city || state, state || city);
             return;
           }
         }
@@ -371,8 +488,7 @@ export function ListingForm({ machine }: ListingFormProps) {
   const contactForPrice = watch("contact_for_price");
   const allValues = watch();
 
-  // ── Draft autosave (create-only) ────────────────────────────
-  // Restore draft on mount only if meaningful content exists
+  // ── Draft detection (create-only, do not auto-fill so fields remain empty with background placeholders) ──
   useEffect(() => {
     if (isEditing) return;
     try {
@@ -389,22 +505,28 @@ export function ListingForm({ machine }: ListingFormProps) {
           draft.state?.trim()
         );
         if (hasData) {
-          const active: string[] = [];
-          if (draft.rental_price_hourly) active.push("hourly");
-          if (draft.rental_price_daily) active.push("daily");
-          if (draft.rental_price_weekly) active.push("weekly");
-          if (draft.rental_price_monthly) active.push("monthly");
-          if (active.length > 0) setSelectedDurations(active);
-          reset({ ...EMPTY_FORM_VALUES, ...draft });
+          setAvailableDraft(draft);
         } else {
           localStorage.removeItem(DRAFT_KEY);
         }
       }
     } catch { /* ignore */ }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isEditing]);
 
-  // Autosave to localStorage 2s after last change (only if data exists)
+  const restoreDraft = (draft: Partial<FormData>) => {
+    const active: string[] = [];
+    if (draft.rental_price_hourly) active.push("hourly");
+    if (draft.rental_price_daily) active.push("daily");
+    if (draft.rental_price_weekly) active.push("weekly");
+    if (draft.rental_price_monthly) active.push("monthly");
+    if (active.length > 0) setSelectedDurations(active);
+    reset({ ...EMPTY_FORM_VALUES, ...draft });
+    setAvailableDraft(null);
+    setFeedbackMessage("Draft restored");
+    setTimeout(() => setFeedbackMessage(null), 3000);
+  };
+
+  // Autosave to localStorage 2s after last user change (only if user entered data)
   useEffect(() => {
     if (isEditing || step === 3) return;
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
@@ -535,6 +657,7 @@ export function ListingForm({ machine }: ListingFormProps) {
     setGpsStatus("idle");
     setPricingError(null);
     setServerError(null);
+    setAvailableDraft(null);
     reset(EMPTY_FORM_VALUES);
     setStep(0);
     setFeedbackMessage("Draft discarded");
@@ -561,6 +684,46 @@ export function ListingForm({ machine }: ListingFormProps) {
 
   return (
     <div className="space-y-6">
+      {/* Unsaved draft prompt banner (if previous session draft exists) */}
+      {!isEditing && availableDraft && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/5 p-4 text-sm animate-in fade-in duration-300">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-xs sm:text-sm font-medium text-foreground">
+                Found an unsaved draft from a previous session
+              </p>
+              <p className="text-[11px] sm:text-xs text-muted-foreground">
+                {availableDraft.title ? `"${availableDraft.title}"` : "Untitled machine draft"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={() => restoreDraft(availableDraft)}
+              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition shadow-sm cursor-pointer"
+            >
+              Restore Draft
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.removeItem(DRAFT_KEY);
+                setAvailableDraft(null);
+                setFeedbackMessage("Draft deleted");
+                setTimeout(() => setFeedbackMessage(null), 3000);
+              }}
+              className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-destructive hover:bg-muted transition cursor-pointer"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Step indicator */}
       <div className="flex items-center gap-2">
         {STEPS.map((s, i) => (
@@ -639,54 +802,52 @@ export function ListingForm({ machine }: ListingFormProps) {
                   </Select>
                 </Field>
 
-                {/* Make with Master Data Autocomplete */}
+                {/* Make with Custom Autocomplete Combobox */}
                 <Field 
                   label="Make / Brand *" 
                   error={errors.make?.message} 
                   hint={suggestedMakes.length > 0 ? "Select from suggestions or type brand name" : "e.g. JCB, CATERPILLAR, VOLVO..."}
                 >
-                  <Input
+                  <ComboboxInput
+                    value={watch("make") || ""}
+                    onChange={(val) => setValue("make", val, { shouldValidate: true })}
+                    onSelect={(item) => setValue("make", item.value, { shouldValidate: true })}
                     placeholder="e.g. JCB, CATERPILLAR, VOLVO..."
-                    list="makes-datalist"
-                    autoComplete="off"
                     error={!!errors.make}
-                    {...register("make")}
+                    items={suggestedMakes.map((m) => ({ label: m, value: m }))}
                   />
-                  <datalist id="makes-datalist">
-                    {suggestedMakes.map((m) => (
-                      <option key={m} value={m} />
-                    ))}
-                  </datalist>
                 </Field>
 
-                {/* Model with Master Data Autocomplete & Specs Auto-fill */}
+                {/* Model with Custom Autocomplete Combobox & Auto-filled Capacity */}
                 <Field 
                   label="Model *" 
                   error={errors.model?.message} 
                   hint={suggestedModels.length > 0 ? "Select model or type custom model" : "e.g. 3CX, 320D..."}
                 >
-                  <Input
+                  <ComboboxInput
+                    value={watch("model") || ""}
+                    onChange={(val) => {
+                      setValue("model", val, { shouldValidate: true });
+                      const cap = getCapacityForModel(currentMake, val);
+                      if (cap && !watch("capacity_specs")) {
+                        setValue("capacity_specs", cap, { shouldValidate: true });
+                      }
+                    }}
+                    onSelect={(item) => {
+                      setValue("model", item.value, { shouldValidate: true });
+                      const cap = getCapacityForModel(currentMake, item.value) || item.subLabel;
+                      if (cap && !watch("capacity_specs")) {
+                        setValue("capacity_specs", cap, { shouldValidate: true });
+                      }
+                    }}
                     placeholder="e.g. 3CX, 3DX, 320D..."
-                    list="models-datalist"
-                    autoComplete="off"
                     error={!!errors.model}
-                    {...register("model", {
-                      onChange: (e) => {
-                        const val = e.target.value;
-                        const cap = getCapacityForModel(currentMake, val);
-                        if (cap && !watch("capacity_specs")) {
-                          setValue("capacity_specs", cap, { shouldValidate: true });
-                        }
-                      },
-                    })}
+                    items={suggestedModels.map((item) => ({
+                      label: item.model,
+                      subLabel: item.capacity ? item.capacity : undefined,
+                      value: item.model,
+                    }))}
                   />
-                  <datalist id="models-datalist">
-                    {suggestedModels.map((item) => (
-                      <option key={item.model} value={item.model}>
-                        {item.capacity ? `Capacity: ${item.capacity}` : ""}
-                      </option>
-                    ))}
-                  </datalist>
                 </Field>
 
                 {/* Year of Manufacture — Cannot be in future */}
@@ -743,26 +904,28 @@ export function ListingForm({ machine }: ListingFormProps) {
                     <option value="dealer">Dealer / Broker</option>
                   </Select>
                 </Field>
+
+                {/* Capacity & Specs in Row 5 Column 2 */}
+                <Field 
+                  label="Capacity & Specs *" 
+                  error={errors.capacity_specs?.message} 
+                  hint='e.g. "20 ton, 1.2m³ bucket, 136 HP"'
+                >
+                  <Input
+                    placeholder="e.g. 20 ton, 1.2m³ bucket, 136 HP"
+                    error={!!errors.capacity_specs}
+                    {...register("capacity_specs")}
+                  />
+                </Field>
               </div>
 
-              <Field 
-                label="Capacity & Specs *" 
-                error={errors.capacity_specs?.message} 
-                hint='e.g. "20 ton, 1.2m³ bucket, 136 HP"'
-              >
-                <Input
-                  placeholder="e.g. 20 ton, 1.2m³ bucket, 136 HP"
-                  error={!!errors.capacity_specs}
-                  {...register("capacity_specs")}
-                />
-              </Field>
-
+              {/* Description spanning full width below 2-column grid */}
               <Field label="Description *" error={errors.description?.message} hint="Describe machine condition, working hours, attachments included.">
                 <textarea
                   rows={5}
-                  placeholder="Describe the machine in detail (working condition, attachments, service history)..."
+                  placeholder="e.g. Well-maintained machine. Used primarily for light site preparation. Full dealer service history available with valid fitness certificate and attachments..."
                   className={cn(
-                    "w-full rounded-xl border bg-background px-4 py-3 text-sm outline-none transition-all resize-none",
+                    "w-full rounded-xl border bg-background px-4 py-3 text-sm outline-none transition-all resize-none placeholder:text-muted-foreground/50",
                     "focus:ring-2 focus:ring-primary/20 focus:border-primary",
                     errors.description ? "border-destructive" : "border-border"
                   )}
@@ -1041,10 +1204,12 @@ export function ListingForm({ machine }: ListingFormProps) {
                   </button>
                 </div>
                 {pincodeStatus === "error" && (
-                  <p className="text-xs text-destructive">Invalid pincode — please check and try again.</p>
+                  <p className="text-xs text-destructive">Could not auto-verify PIN code. You can enter City and State manually below.</p>
                 )}
                 {pincodeStatus === "ok" && (
-                  <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ City and state auto-filled from pincode.</p>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                    ✓ Location auto-filled: {watch("city") ? `${watch("city")}, ` : ""}{watch("state")}
+                  </p>
                 )}
               </div>
 
