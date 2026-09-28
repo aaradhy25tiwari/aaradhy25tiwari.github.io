@@ -60,9 +60,10 @@ async def create_enquiry(
     # Check monthly enquiry limit from subscription
     from app.models.subscription import Subscription
     from sqlalchemy import func
-    from datetime import datetime
+    from sqlalchemy.orm import selectinload
     sub_result = await db.execute(
         select(Subscription)
+        .options(selectinload(Subscription.plan))
         .where(Subscription.user_id == current_user.id, Subscription.status == "active")
         .order_by(Subscription.created_at.desc())
     )

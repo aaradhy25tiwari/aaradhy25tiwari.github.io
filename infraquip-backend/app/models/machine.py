@@ -106,7 +106,7 @@ class Machine(Base):
 
     # ── Listing Config ────────────────────────────────────────
     listing_type = Column(Enum(ListingType), nullable=False)
-    min_rental_duration = Column(Enum(MinRentalDuration), default=MinRentalDuration.one_day)
+    min_rental_duration = Column(String(50), nullable=True, default="1 day")
     availability = Column(Boolean, default=True)
     status = Column(Enum(MachineStatus), default=MachineStatus.pending, nullable=False)
     rejection_reason = Column(Text, nullable=True)

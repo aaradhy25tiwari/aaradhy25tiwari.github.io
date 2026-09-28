@@ -14,12 +14,16 @@ engine = create_async_engine(
     pool_size=10,
     max_overflow=20,
     pool_recycle=300,
-    pool_timeout=20,
+    pool_timeout=60,
     # Supabase pgBouncer in transaction mode does not support prepared statements.
     # 'statement_cache_size=0' disables asyncpg's internal prepared-statement cache.
     connect_args={
         "statement_cache_size": 0,
         "prepared_statement_cache_size": 0,
+        "command_timeout": 60,
+        "server_settings": {
+            "jit": "off",
+        },
     },
 )
 

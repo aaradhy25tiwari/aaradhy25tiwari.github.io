@@ -21,7 +21,7 @@ const schema = z.object({
   capacity_specs: z.string().min(5, "Provide capacity details"),
   description: z.string().min(100, "Description must be at least 100 characters"),
   listing_type: z.enum(["rent", "sale", "both"]),
-  min_rental_duration: z.enum(["1_day", "1_week", "1_month"]),
+  min_rental_duration: z.string().optional(),
   city: z.string().min(2, "City is required"),
   state: z.string().min(2, "State is required"),
   rental_price_daily: z.number().optional(),

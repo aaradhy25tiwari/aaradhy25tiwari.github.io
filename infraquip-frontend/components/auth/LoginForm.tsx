@@ -87,6 +87,7 @@ export function LoginForm() {
             type="text"
             autoComplete="username"
             placeholder="you@company.com or +91..."
+            suppressHydrationWarning
             {...register("emailOrPhone")}
             className={`w-full rounded-xl border bg-background px-4 py-3 text-sm outline-none transition-all
               focus:ring-2 focus:ring-primary/20 focus:border-primary
@@ -113,6 +114,7 @@ export function LoginForm() {
               type={showPassword ? "text" : "password"}
               autoComplete="current-password"
               placeholder="••••••••"
+              suppressHydrationWarning
               {...register("password")}
               className={`w-full rounded-xl border bg-background px-4 py-3 pr-12 text-sm outline-none transition-all
                 focus:ring-2 focus:ring-primary/20 focus:border-primary

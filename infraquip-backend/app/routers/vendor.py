@@ -97,6 +97,7 @@ async def create_listing(
     # Check subscription limit
     sub_result = await db.execute(
         select(Subscription)
+        .options(selectinload(Subscription.plan))
         .where(Subscription.user_id == current_user.id, Subscription.status == "active")
         .order_by(Subscription.created_at.desc())
     )

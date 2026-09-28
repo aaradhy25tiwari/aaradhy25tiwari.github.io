@@ -52,7 +52,7 @@ class MachineCreateRequest(BaseModel):
     specifications: Optional[Dict[str, Any]] = None
     description: str = Field(min_length=10, max_length=2000)
     listing_type: ListingType
-    min_rental_duration: Optional[MinRentalDuration] = MinRentalDuration.one_day
+    min_rental_duration: Optional[str] = "1 day"
     
     # New v1.2 fields
     running_condition: MachineRunningCondition = MachineRunningCondition.running
@@ -101,7 +101,7 @@ class MachineUpdateRequest(BaseModel):
     specifications: Optional[Dict[str, Any]] = None
     description: Optional[str] = Field(None, min_length=10, max_length=2000)
     listing_type: Optional[ListingType] = None
-    min_rental_duration: Optional[MinRentalDuration] = None
+    min_rental_duration: Optional[str] = None
     
     running_condition: Optional[MachineRunningCondition] = None
     hmr: Optional[int] = Field(None, ge=0, le=999999)
@@ -183,7 +183,7 @@ class MachineDetailResponse(BaseModel):
     specifications: Optional[Dict[str, Any]] = None
     description: str
     listing_type: ListingType
-    min_rental_duration: Optional[MinRentalDuration] = None
+    min_rental_duration: Optional[str] = None
     availability: bool
     status: MachineStatus
     rental_price_hourly: Optional[float] = None

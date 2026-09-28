@@ -35,7 +35,7 @@ const schema = z.object({
   capacity_specs: z.string().min(3, "Capacity details are required"),
   description: z.string().min(10, "Description must be at least 10 characters"),
   listing_type: z.enum(["rent", "sale", "both"]),
-  min_rental_duration: z.enum(["1_hour", "1_day", "1_week", "1_month"]).optional(),
+  min_rental_duration: z.string().optional(),
   availability: z.boolean(),
   city: z.string().min(2, "City is required").max(40, "City cannot exceed 40 characters"),
   state: z.string().min(2, "State is required").max(40, "State cannot exceed 40 characters"),
@@ -216,6 +216,32 @@ function ComboboxInput({
   );
 }
 
+// ── Duration parser helper ────────────────────────────────────
+function parseDuration(raw?: string | null): { value: number | ""; unit: "hours" | "days" | "weeks" | "months" } {
+  if (!raw) return { value: 1, unit: "days" };
+  const str = raw.toLowerCase().trim();
+  if (str.includes("_")) {
+    const [n, u] = str.split("_");
+    const num = parseInt(n, 10) || 1;
+    let unitStr = u || "day";
+    if (!unitStr.endsWith("s")) unitStr = `${unitStr}s`;
+    if (["hours", "days", "weeks", "months"].includes(unitStr)) {
+      return { value: num, unit: unitStr as "hours" | "days" | "weeks" | "months" };
+    }
+    return { value: num, unit: "days" };
+  }
+  const match = str.match(/^(\d+)\s*([a-z]+)$/);
+  if (match) {
+    const num = parseInt(match[1], 10);
+    let unitStr = match[2];
+    if (!unitStr.endsWith("s")) unitStr = `${unitStr}s`;
+    if (["hours", "days", "weeks", "months"].includes(unitStr)) {
+      return { value: num, unit: unitStr as "hours" | "days" | "weeks" | "months" };
+    }
+  }
+  return { value: 1, unit: "days" };
+}
+
 // ── Props ─────────────────────────────────────────────────────
 interface ListingFormProps {
   /** Existing machine for edit mode — undefined for create */
@@ -234,7 +260,7 @@ const EMPTY_FORM_VALUES: Partial<FormData> = {
   category_id: "",
   capacity_specs: "",
   description: "",
-  listing_type: undefined,
+  listing_type: "rent",
   min_rental_duration: undefined,
   availability: true,
   city: "",
@@ -262,6 +288,10 @@ export function ListingForm({ machine }: ListingFormProps) {
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const initialDuration = parseDuration(machine?.min_rental_duration);
+  const [durationValue, setDurationValue] = useState<number | "">(initialDuration.value);
+  const [durationUnit, setDurationUnit] = useState<"hours" | "days" | "weeks" | "months">(initialDuration.unit);
+
   const {
     register,
     handleSubmit,
@@ -285,7 +315,7 @@ export function ListingForm({ machine }: ListingFormProps) {
           category_id: machine.category_id,
           capacity_specs: machine.capacity_specs,
           description: machine.description,
-          listing_type: machine.listing_type,
+          listing_type: machine.listing_type || "rent",
           min_rental_duration: machine.min_rental_duration ?? undefined,
           availability: machine.availability,
           city: machine.city,
@@ -300,10 +330,23 @@ export function ListingForm({ machine }: ListingFormProps) {
       : EMPTY_FORM_VALUES,
   });
 
+  const handleDurationChange = (val: number | "", unit: "hours" | "days" | "weeks" | "months") => {
+    setDurationValue(val);
+    setDurationUnit(unit);
+    if (val === "" || val <= 0) {
+      setValue("min_rental_duration", undefined, { shouldValidate: true, shouldDirty: true });
+    } else {
+      const singularUnit = unit.replace(/s$/, "");
+      const formatted = `${val} ${val === 1 ? singularUnit : unit}`;
+      setValue("min_rental_duration", formatted, { shouldValidate: true, shouldDirty: true });
+    }
+  };
+
   // Register make & model for schema validation
   useEffect(() => {
     register("make");
     register("model");
+    register("min_rental_duration");
   }, [register]);
 
   // ── Master data auto-suggestions ────────────────────────────
@@ -313,34 +356,25 @@ export function ListingForm({ machine }: ListingFormProps) {
   const suggestedMakes = getMakesForCategory(selectedCategory?.name);
   const suggestedModels = getModelsForMake(currentMake, selectedCategory?.name);
 
-  // ── Rate duration options (Hourly, Daily, Weekly, Monthly) ──
-  const [selectedDurations, setSelectedDurations] = useState<string[]>(() => {
+  // ── Single Rate duration option (Hourly, Daily, Weekly, Monthly) ──
+  const [selectedDuration, setSelectedDuration] = useState<"hourly" | "daily" | "weekly" | "monthly">(() => {
     if (machine) {
-      const active: string[] = [];
-      if (machine.rental_price_hourly) active.push("hourly");
-      if (machine.rental_price_daily) active.push("daily");
-      if (machine.rental_price_weekly) active.push("weekly");
-      if (machine.rental_price_monthly) active.push("monthly");
-      return active.length > 0 ? active : ["daily"];
+      if (machine.rental_price_hourly) return "hourly";
+      if (machine.rental_price_daily) return "daily";
+      if (machine.rental_price_weekly) return "weekly";
+      if (machine.rental_price_monthly) return "monthly";
     }
-    return ["daily"];
+    return "daily";
   });
 
   const [pricingError, setPricingError] = useState<string | null>(null);
 
-  const toggleDuration = (id: string) => {
-    setSelectedDurations((prev) => {
-      if (prev.includes(id)) {
-        if (id === "hourly") setValue("rental_price_hourly", undefined);
-        if (id === "daily") setValue("rental_price_daily", undefined);
-        if (id === "weekly") setValue("rental_price_weekly", undefined);
-        if (id === "monthly") setValue("rental_price_monthly", undefined);
-        const next = prev.filter((d) => d !== id);
-        return next.length > 0 ? next : prev;
-      } else {
-        return [...prev, id];
-      }
-    });
+  const selectDuration = (id: "hourly" | "daily" | "weekly" | "monthly") => {
+    setSelectedDuration(id);
+    if (id !== "hourly") setValue("rental_price_hourly", undefined);
+    if (id !== "daily") setValue("rental_price_daily", undefined);
+    if (id !== "weekly") setValue("rental_price_weekly", undefined);
+    if (id !== "monthly") setValue("rental_price_monthly", undefined);
   };
 
   // ── Location helpers with multi-provider fallbacks ───────────
@@ -514,17 +548,32 @@ export function ListingForm({ machine }: ListingFormProps) {
   }, [isEditing]);
 
   const restoreDraft = (draft: Partial<FormData>) => {
-    const active: string[] = [];
-    if (draft.rental_price_hourly) active.push("hourly");
-    if (draft.rental_price_daily) active.push("daily");
-    if (draft.rental_price_weekly) active.push("weekly");
-    if (draft.rental_price_monthly) active.push("monthly");
-    if (active.length > 0) setSelectedDurations(active);
-    reset({ ...EMPTY_FORM_VALUES, ...draft });
+    if (draft.rental_price_hourly) setSelectedDuration("hourly");
+    else if (draft.rental_price_daily) setSelectedDuration("daily");
+    else if (draft.rental_price_weekly) setSelectedDuration("weekly");
+    else if (draft.rental_price_monthly) setSelectedDuration("monthly");
+
+    if (draft.min_rental_duration) {
+      const parsed = parseDuration(draft.min_rental_duration);
+      setDurationValue(parsed.value);
+      setDurationUnit(parsed.unit);
+    }
+    reset({ ...EMPTY_FORM_VALUES, ...draft, listing_type: "rent" });
     setAvailableDraft(null);
     setFeedbackMessage("Draft restored");
     setTimeout(() => setFeedbackMessage(null), 3000);
   };
+
+  // Sync min_rental_duration default value
+  useEffect(() => {
+    if (!watch("min_rental_duration")) {
+      const val = durationValue || 1;
+      const unit = durationUnit || "days";
+      const singularUnit = unit.replace(/s$/, "");
+      const formatted = `${val} ${val === 1 ? singularUnit : unit}`;
+      setValue("min_rental_duration", formatted, { shouldValidate: true });
+    }
+  }, [durationValue, durationUnit, setValue, watch]);
 
   // Autosave to localStorage 2s after last user change (only if user entered data)
   useEffect(() => {
@@ -538,8 +587,7 @@ export function ListingForm({ machine }: ListingFormProps) {
       allValues.category_id ||
       allValues.description?.trim() ||
       allValues.city?.trim() ||
-      allValues.state?.trim() ||
-      allValues.purchase_price
+      allValues.state?.trim()
     );
 
     if (!hasData) return;
@@ -581,32 +629,20 @@ export function ListingForm({ machine }: ListingFormProps) {
     // Validate Step 1 fields
     if (step === 1) {
       setPricingError(null);
-      const validListingType = await trigger("listing_type");
-      if (!validListingType) return;
+      setValue("listing_type", "rent");
 
-      const isRent = listingType === "rent" || listingType === "both";
-      const isSale = listingType === "sale" || listingType === "both";
+      const validDuration = await trigger("min_rental_duration");
+      if (!validDuration) return;
 
-      if (isRent) {
-        const validDuration = await trigger("min_rental_duration");
-        if (!validDuration) return;
+      if (!contactForPrice) {
+        let currentRate: number | undefined;
+        if (selectedDuration === "hourly") currentRate = watch("rental_price_hourly");
+        else if (selectedDuration === "daily") currentRate = watch("rental_price_daily");
+        else if (selectedDuration === "weekly") currentRate = watch("rental_price_weekly");
+        else if (selectedDuration === "monthly") currentRate = watch("rental_price_monthly");
 
-        if (!contactForPrice) {
-          const h = watch("rental_price_hourly");
-          const d = watch("rental_price_daily");
-          const w = watch("rental_price_weekly");
-          const m = watch("rental_price_monthly");
-          if (!h && !d && !w && !m) {
-            setPricingError("Please enter at least one rental rate (hourly, daily, weekly, or monthly) or check 'Contact for price'.");
-            return;
-          }
-        }
-      }
-
-      if (isSale && !contactForPrice) {
-        const p = watch("purchase_price");
-        if (!p || p <= 0) {
-          setPricingError("Please enter a valid sale price or check 'Contact for price'.");
+        if (!currentRate || currentRate <= 0) {
+          setPricingError(`Please enter a valid ${selectedDuration} rental rate or check 'Contact for price'.`);
           return;
         }
       }
@@ -651,7 +687,9 @@ export function ListingForm({ machine }: ListingFormProps) {
   const discardDraft = () => {
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     localStorage.removeItem(DRAFT_KEY);
-    setSelectedDurations(["daily"]);
+    setSelectedDuration("daily");
+    setDurationValue(1);
+    setDurationUnit("days");
     setPincode("");
     setPincodeStatus("idle");
     setGpsStatus("idle");
@@ -942,57 +980,70 @@ export function ListingForm({ machine }: ListingFormProps) {
               <div>
                 <h2 className="text-lg font-semibold">Pricing & Availability</h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Specify how you want to price your machine — by hour, day, week, month, or for direct sale.
+                  Specify your rental pricing — choose hourly, daily, weekly, or monthly rate.
                 </p>
               </div>
 
               <div className="grid gap-5 sm:grid-cols-2">
                 <Field label="Listing Type *" error={errors.listing_type?.message}>
-                  <Select error={!!errors.listing_type} {...register("listing_type")} defaultValue="">
-                    <option value="" disabled>Select listing type...</option>
+                  <Select error={!!errors.listing_type} {...register("listing_type")} defaultValue="rent">
                     <option value="rent">For Rent</option>
-                    <option value="sale">For Sale</option>
-                    <option value="both">Rent & Sale</option>
                   </Select>
                 </Field>
 
-                {(listingType === "rent" || listingType === "both") && (
-                  <Field label="Minimum Rental Duration *" error={errors.min_rental_duration?.message}>
-                    <Select error={!!errors.min_rental_duration} {...register("min_rental_duration")} defaultValue="">
-                      <option value="" disabled>Select minimum duration...</option>
-                      <option value="1_hour">1 Hour</option>
-                      <option value="1_day">1 Day</option>
-                      <option value="1_week">1 Week</option>
-                      <option value="1_month">1 Month</option>
+                <Field 
+                  label="Minimum Rental Duration *" 
+                  error={errors.min_rental_duration?.message}
+                  hint="Set minimum period (e.g. 2 weeks, 3 months, 5 days, 12 hours)"
+                >
+                  <div className="grid grid-cols-[1fr_1.4fr] gap-2.5">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={365}
+                      placeholder="e.g. 2"
+                      value={durationValue}
+                      onChange={(e) => {
+                        const val = e.target.value === "" ? "" : Math.max(1, parseInt(e.target.value, 10) || 1);
+                        handleDurationChange(val, durationUnit);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "-" || e.key === "e" || e.key === "+" || e.key === ".") e.preventDefault();
+                      }}
+                      error={!!errors.min_rental_duration}
+                    />
+                    <Select
+                      value={durationUnit}
+                      onChange={(e) => {
+                        const unit = e.target.value as "hours" | "days" | "weeks" | "months";
+                        handleDurationChange(durationValue === "" ? 1 : durationValue, unit);
+                      }}
+                      error={!!errors.min_rental_duration}
+                    >
+                      <option value="days">Days</option>
+                      <option value="weeks">Weeks</option>
+                      <option value="months">Months</option>
+                      <option value="hours">Hours</option>
                     </Select>
-                  </Field>
-                )}
+                  </div>
+                </Field>
               </div>
 
-              {/* ── Rate Duration Selector for Rent ── */}
-              {(listingType === "rent" || listingType === "both") && !contactForPrice && (
+              {/* ── Single Rate Duration Selector for Rent ── */}
+              {!contactForPrice && (
                 <div className="space-y-4 rounded-2xl border border-border bg-card/60 p-5">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div>
                       <label className="text-sm font-semibold text-foreground">
-                        Select Rate Durations
+                        Select Rate Duration
                       </label>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Choose which duration rates you accept (Hourly, Daily, Weekly, Monthly)
+                        Choose which duration rate to set (Hourly, Daily, Weekly, or Monthly)
                       </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedDurations(["hourly", "daily", "weekly", "monthly"])}
-                        className="text-xs font-medium text-primary hover:underline"
-                      >
-                        Select All
-                      </button>
                     </div>
                   </div>
 
-                  {/* Duration selection pills */}
+                  {/* Duration selection pills (Single selection) */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
                       { id: "hourly", label: "Hourly Rate", unit: "₹ / hour", icon: Clock },
@@ -1000,13 +1051,13 @@ export function ListingForm({ machine }: ListingFormProps) {
                       { id: "weekly", label: "Weekly Rate", unit: "₹ / week", icon: CalendarDays },
                       { id: "monthly", label: "Monthly Rate", unit: "₹ / month", icon: CalendarRange },
                     ].map((dur) => {
-                      const isSelected = selectedDurations.includes(dur.id);
+                      const isSelected = selectedDuration === dur.id;
                       const Icon = dur.icon;
                       return (
                         <button
                           key={dur.id}
                           type="button"
-                          onClick={() => toggleDuration(dur.id)}
+                          onClick={() => selectDuration(dur.id as "hourly" | "daily" | "weekly" | "monthly")}
                           className={cn(
                             "relative flex flex-col items-start p-3.5 rounded-xl border text-left transition-all duration-200 cursor-pointer",
                             isSelected
@@ -1034,10 +1085,10 @@ export function ListingForm({ machine }: ListingFormProps) {
                     })}
                   </div>
 
-                  {/* Active Rate Input Fields */}
-                  <div className="grid gap-4 sm:grid-cols-2 pt-2">
-                    {selectedDurations.includes("hourly") && (
-                      <Field label="Hourly Rate (₹)" error={errors.rental_price_hourly?.message} hint="Price per hour of operation">
+                  {/* Active Single Rate Input Field */}
+                  <div className="pt-2">
+                    {selectedDuration === "hourly" && (
+                      <Field label="Hourly Rate (₹) *" error={errors.rental_price_hourly?.message} hint="Price per hour of operation">
                         <Input
                           type="number"
                           placeholder="e.g. 800"
@@ -1051,8 +1102,8 @@ export function ListingForm({ machine }: ListingFormProps) {
                       </Field>
                     )}
 
-                    {selectedDurations.includes("daily") && (
-                      <Field label="Daily Rate (₹)" error={errors.rental_price_daily?.message} hint="Price per 8-hour / daily shift">
+                    {selectedDuration === "daily" && (
+                      <Field label="Daily Rate (₹) *" error={errors.rental_price_daily?.message} hint="Price per 8-hour / daily shift">
                         <Input
                           type="number"
                           placeholder="e.g. 4500"
@@ -1066,8 +1117,8 @@ export function ListingForm({ machine }: ListingFormProps) {
                       </Field>
                     )}
 
-                    {selectedDurations.includes("weekly") && (
-                      <Field label="Weekly Rate (₹)" error={errors.rental_price_weekly?.message} hint="Price per 7-day week">
+                    {selectedDuration === "weekly" && (
+                      <Field label="Weekly Rate (₹) *" error={errors.rental_price_weekly?.message} hint="Price per 7-day week">
                         <Input
                           type="number"
                           placeholder="e.g. 28000"
@@ -1081,8 +1132,8 @@ export function ListingForm({ machine }: ListingFormProps) {
                       </Field>
                     )}
 
-                    {selectedDurations.includes("monthly") && (
-                      <Field label="Monthly Rate (₹)" error={errors.rental_price_monthly?.message} hint="Price per 30-day month">
+                    {selectedDuration === "monthly" && (
+                      <Field label="Monthly Rate (₹) *" error={errors.rental_price_monthly?.message} hint="Price per 30-day month">
                         <Input
                           type="number"
                           placeholder="e.g. 90000"
@@ -1096,24 +1147,6 @@ export function ListingForm({ machine }: ListingFormProps) {
                       </Field>
                     )}
                   </div>
-                </div>
-              )}
-
-              {/* ── Sale Price ── */}
-              {(listingType === "sale" || listingType === "both") && !contactForPrice && (
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <Field label="Sale Price (₹) *" error={errors.purchase_price?.message} hint="Total asking price for purchase">
-                    <Input
-                      type="number"
-                      placeholder="e.g. 2500000"
-                      min={0}
-                      onKeyDown={(e) => {
-                        if (e.key === "-" || e.key === "e" || e.key === "+") e.preventDefault();
-                      }}
-                      error={!!errors.purchase_price}
-                      {...register("purchase_price", { valueAsNumber: true })}
-                    />
-                  </Field>
                 </div>
               )}
 

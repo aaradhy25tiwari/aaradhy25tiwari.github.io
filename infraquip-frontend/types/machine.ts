@@ -5,7 +5,7 @@ export type MachineRunningCondition = "running" | "not_running";
 export type MachineOwnershipType = "owner" | "dealer";
 export type ListingType = "rent" | "sale" | "both";
 export type MachineStatus = "pending" | "approved" | "rejected" | "paused" | "deleted";
-export type MinRentalDuration = "1_hour" | "1_day" | "1_week" | "1_month";
+export type MinRentalDuration = string;
 
 export interface Category {
   id: string;

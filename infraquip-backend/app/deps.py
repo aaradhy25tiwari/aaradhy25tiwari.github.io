@@ -66,10 +66,18 @@ async def verify_supabase_token(
         )
 
     # Look up our app user by Supabase auth UID
-    result = await db.execute(
-        select(User).where(User.auth_uid == auth_uid)
-    )
-    user = result.scalar_one_or_none()
+    try:
+        result = await db.execute(
+            select(User).where(User.auth_uid == auth_uid)
+        )
+        user = result.scalar_one_or_none()
+    except Exception as db_err:
+        import logging
+        logging.getLogger(__name__).warning(f"Database query error during auth token verification: {db_err}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection temporarily interrupted. Please retry.",
+        )
 
     if not user:
         raise HTTPException(
