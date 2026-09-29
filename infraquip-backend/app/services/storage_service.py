@@ -13,6 +13,16 @@ def _get_client():
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
 
 
+def _ensure_bucket(supabase):
+    try:
+        supabase.storage.get_bucket(BUCKET)
+    except Exception:
+        try:
+            supabase.storage.create_bucket(BUCKET, options={"public": True})
+        except Exception:
+            pass
+
+
 async def upload_machine_image(
     file: UploadFile,
     vendor_id: str,
@@ -32,14 +42,25 @@ async def upload_machine_image(
     content = await file.read()
     content_type = file.content_type or "image/jpeg"
 
-    response = supabase.storage.from_(BUCKET).upload(
-        path=storage_path,
-        file=content,
-        file_options={"content-type": content_type, "upsert": "false"},
-    )
+    try:
+        response = supabase.storage.from_(BUCKET).upload(
+            path=storage_path,
+            file=content,
+            file_options={"content-type": content_type, "upsert": "false"},
+        )
+    except Exception as e:
+        if "Bucket not found" in str(e) or "NoSuchBucket" in str(e):
+            _ensure_bucket(supabase)
+            response = supabase.storage.from_(BUCKET).upload(
+                path=storage_path,
+                file=content,
+                file_options={"content-type": content_type, "upsert": "false"},
+            )
+        else:
+            raise e
 
     # Build public URL
-    public_url = supabase.storage.from_(BUCKET).get_public_url(storage_path)
+    public_url = supabase.storage.from_(BUCKET).get_public_url(storage_path).rstrip("?")
 
     return storage_path, public_url
 

@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { 
   Loader2, CheckCircle, ChevronRight, ChevronLeft, Save, CloudOff, 
   LocateFixed, Search, Clock, Calendar, CalendarDays, CalendarRange, Check, Sparkles, ChevronDown 
@@ -18,32 +19,31 @@ import { getMakesForCategory, getModelsForMake, getCapacityForModel } from "@/li
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-// ── Validation schema ─────────────────────────────────────────
 const schema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters"),
   make: z.string().min(2, "Make / Brand is required"),
   model: z.string().min(1, "Model is required"),
   year_of_manufacture: z
-    .number()
+    .number({ message: "Year is required" })
     .min(1980, "Year must be 1980 or later")
     .max(CURRENT_YEAR, `Year cannot be in the future (max ${CURRENT_YEAR})`),
   condition: z.enum(["new", "excellent", "good", "fair"]),
   running_condition: z.enum(["running", "not_running"]),
-  hmr: z.number().min(0, "HMR cannot be negative").optional(),
+  hmr: z.number().min(0, "Cannot be negative").optional(),
   ownership_type: z.enum(["owner", "dealer"]),
   category_id: z.string().min(1, "Please select a category"),
   capacity_specs: z.string().min(3, "Capacity details are required"),
   description: z.string().min(10, "Description must be at least 10 characters"),
   listing_type: z.enum(["rent", "sale", "both"]),
-  min_rental_duration: z.string().optional(),
+  min_rental_duration: z.string().nullish(),
   availability: z.boolean(),
   city: z.string().min(2, "City is required").max(40, "City cannot exceed 40 characters"),
   state: z.string().min(2, "State is required").max(40, "State cannot exceed 40 characters"),
-  rental_price_hourly: z.number().positive("Hourly rate must be positive").optional(),
-  rental_price_daily: z.number().positive("Daily rate must be positive").optional(),
-  rental_price_weekly: z.number().positive("Weekly rate must be positive").optional(),
-  rental_price_monthly: z.number().positive("Monthly rate must be positive").optional(),
-  purchase_price: z.number().positive("Purchase price must be positive").optional(),
+  rental_price_hourly: z.number().positive("Price must be positive").optional(),
+  rental_price_daily: z.number().positive("Price must be positive").optional(),
+  rental_price_weekly: z.number().positive("Price must be positive").optional(),
+  rental_price_monthly: z.number().positive("Price must be positive").optional(),
+  purchase_price: z.number().positive("Price must be positive").optional(),
   contact_for_price: z.boolean(),
 });
 
@@ -277,12 +277,14 @@ const EMPTY_FORM_VALUES: Partial<FormData> = {
 export function ListingForm({ machine }: ListingFormProps) {
   const DRAFT_KEY = "infraquip_listing_draft";
   const router = useRouter();
+  const queryClient = useQueryClient();
   const isEditing = !!machine;
   const [categories, setCategories] = useState<Category[]>([]);
   const [step, setStep] = useState(0);
   const [serverError, setServerError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(machine?.id ?? null);
+  const [saveAction, setSaveAction] = useState<"photos" | "finish">("photos");
   const [draftSaved, setDraftSaved] = useState(false);
   const [availableDraft, setAvailableDraft] = useState<Partial<FormData> | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
@@ -304,28 +306,28 @@ export function ListingForm({ machine }: ListingFormProps) {
     resolver: zodResolver(schema),
     defaultValues: machine
       ? {
-          title: machine.title,
-          make: machine.make,
-          model: machine.model,
+          title: machine.title || "",
+          make: machine.make || "",
+          model: machine.model || "",
           year_of_manufacture: machine.year_of_manufacture,
           condition: machine.condition,
-          running_condition: machine.running_condition,
-          hmr: machine.hmr,
-          ownership_type: machine.ownership_type,
-          category_id: machine.category_id,
-          capacity_specs: machine.capacity_specs,
-          description: machine.description,
+          running_condition: machine.running_condition || "running",
+          hmr: machine.hmr ?? undefined,
+          ownership_type: machine.ownership_type || "owner",
+          category_id: machine.category_id || "",
+          capacity_specs: machine.capacity_specs || "",
+          description: machine.description || "",
           listing_type: machine.listing_type || "rent",
           min_rental_duration: machine.min_rental_duration ?? undefined,
-          availability: machine.availability,
-          city: machine.city,
-          state: machine.state,
-          rental_price_hourly: machine.rental_price_hourly,
-          rental_price_daily: machine.rental_price_daily,
-          rental_price_weekly: machine.rental_price_weekly,
-          rental_price_monthly: machine.rental_price_monthly,
-          purchase_price: machine.purchase_price,
-          contact_for_price: machine.contact_for_price,
+          availability: machine.availability ?? true,
+          city: machine.city || "",
+          state: machine.state || "",
+          rental_price_hourly: machine.rental_price_hourly ?? undefined,
+          rental_price_daily: machine.rental_price_daily ?? undefined,
+          rental_price_weekly: machine.rental_price_weekly ?? undefined,
+          rental_price_monthly: machine.rental_price_monthly ?? undefined,
+          purchase_price: machine.purchase_price ?? undefined,
+          contact_for_price: machine.contact_for_price ?? false,
         }
       : EMPTY_FORM_VALUES,
   });
@@ -348,6 +350,47 @@ export function ListingForm({ machine }: ListingFormProps) {
     register("model");
     register("min_rental_duration");
   }, [register]);
+
+  // Synchronize form when editing existing machine
+  useEffect(() => {
+    if (machine) {
+      reset({
+        title: machine.title || "",
+        make: machine.make || "",
+        model: machine.model || "",
+        year_of_manufacture: machine.year_of_manufacture,
+        condition: machine.condition,
+        running_condition: machine.running_condition || "running",
+        hmr: machine.hmr ?? undefined,
+        ownership_type: machine.ownership_type || "owner",
+        category_id: machine.category_id || "",
+        capacity_specs: machine.capacity_specs || "",
+        description: machine.description || "",
+        listing_type: (machine.listing_type as "rent" | "sale" | "both") || "rent",
+        min_rental_duration: machine.min_rental_duration ?? undefined,
+        availability: machine.availability ?? true,
+        city: machine.city || "",
+        state: machine.state || "",
+        rental_price_hourly: machine.rental_price_hourly ?? undefined,
+        rental_price_daily: machine.rental_price_daily ?? undefined,
+        rental_price_weekly: machine.rental_price_weekly ?? undefined,
+        rental_price_monthly: machine.rental_price_monthly ?? undefined,
+        purchase_price: machine.purchase_price ?? undefined,
+        contact_for_price: machine.contact_for_price ?? false,
+      });
+      if (machine.rental_price_hourly) setSelectedDuration("hourly");
+      else if (machine.rental_price_daily) setSelectedDuration("daily");
+      else if (machine.rental_price_weekly) setSelectedDuration("weekly");
+      else if (machine.rental_price_monthly) setSelectedDuration("monthly");
+
+      if (machine.min_rental_duration) {
+        const parsed = parseDuration(machine.min_rental_duration);
+        setDurationValue(parsed.value);
+        setDurationUnit(parsed.unit);
+      }
+      setSavedId(machine.id);
+    }
+  }, [machine, reset]);
 
   // ── Master data auto-suggestions ────────────────────────────
   const selectedCategoryId = watch("category_id");
@@ -631,6 +674,13 @@ export function ListingForm({ machine }: ListingFormProps) {
       setPricingError(null);
       setValue("listing_type", "rent");
 
+      // Ensure min_rental_duration is properly set
+      const val = durationValue || 1;
+      const unit = durationUnit || "days";
+      const singularUnit = unit.replace(/s$/, "");
+      const formatted = `${val} ${val === 1 ? singularUnit : unit}`;
+      setValue("min_rental_duration", formatted, { shouldValidate: true });
+
       const validDuration = await trigger("min_rental_duration");
       if (!validDuration) return;
 
@@ -641,10 +691,21 @@ export function ListingForm({ machine }: ListingFormProps) {
         else if (selectedDuration === "weekly") currentRate = watch("rental_price_weekly");
         else if (selectedDuration === "monthly") currentRate = watch("rental_price_monthly");
 
-        if (!currentRate || currentRate <= 0) {
+        if (currentRate === undefined || currentRate === null || isNaN(currentRate) || currentRate <= 0) {
           setPricingError(`Please enter a valid ${selectedDuration} rental rate or check 'Contact for price'.`);
           return;
         }
+
+        // Clean up unselected rates
+        if (selectedDuration !== "hourly") setValue("rental_price_hourly", undefined);
+        if (selectedDuration !== "daily") setValue("rental_price_daily", undefined);
+        if (selectedDuration !== "weekly") setValue("rental_price_weekly", undefined);
+        if (selectedDuration !== "monthly") setValue("rental_price_monthly", undefined);
+      } else {
+        setValue("rental_price_hourly", undefined);
+        setValue("rental_price_daily", undefined);
+        setValue("rental_price_weekly", undefined);
+        setValue("rental_price_monthly", undefined);
       }
     }
 
@@ -659,7 +720,7 @@ export function ListingForm({ machine }: ListingFormProps) {
       setStep(0);
       return;
     }
-    if (fieldErrors.listing_type || fieldErrors.min_rental_duration || fieldErrors.purchase_price) {
+    if (fieldErrors.listing_type || fieldErrors.min_rental_duration || fieldErrors.rental_price_hourly || fieldErrors.rental_price_daily || fieldErrors.rental_price_weekly || fieldErrors.rental_price_monthly) {
       setStep(1);
       return;
     }
@@ -668,13 +729,35 @@ export function ListingForm({ machine }: ListingFormProps) {
   const onSubmit = async (payload: FormData) => {
     setServerError(null);
     try {
-      if (isEditing && machine) {
-        await apiClient.put(`/vendor/listings/${machine.id}`, payload);
-        setDone(true);
-        setTimeout(() => router.push("/dashboard/vendor/listings"), 2000);
+      // Ensure only the chosen duration rate is passed (and others explicitly null to clear old rate in DB)
+      const cleanPayload: Record<string, any> = { ...payload };
+      if (!cleanPayload.contact_for_price) {
+        if (selectedDuration !== "hourly") cleanPayload.rental_price_hourly = null;
+        if (selectedDuration !== "daily") cleanPayload.rental_price_daily = null;
+        if (selectedDuration !== "weekly") cleanPayload.rental_price_weekly = null;
+        if (selectedDuration !== "monthly") cleanPayload.rental_price_monthly = null;
       } else {
-        const { data } = await apiClient.post<Machine>("/vendor/listings", payload);
+        cleanPayload.rental_price_hourly = null;
+        cleanPayload.rental_price_daily = null;
+        cleanPayload.rental_price_weekly = null;
+        cleanPayload.rental_price_monthly = null;
+      }
+      if (isEditing && machine) {
+        await apiClient.put(`/vendor/listings/${machine.id}`, cleanPayload);
+        await queryClient.invalidateQueries({ queryKey: ["vendor-listing", machine.id] });
+        await queryClient.invalidateQueries({ queryKey: ["vendor-listings"] });
+        if (saveAction === "photos") {
+          setFeedbackMessage("Location & changes saved");
+          setTimeout(() => setFeedbackMessage(null), 3000);
+          setStep(3); // Advance to Photos step
+        } else {
+          setDone(true);
+          setTimeout(() => router.push("/dashboard/vendor/listings"), 1500);
+        }
+      } else {
+        const { data } = await apiClient.post<Machine>("/vendor/listings", cleanPayload);
         setSavedId(data.id);
+        await queryClient.invalidateQueries({ queryKey: ["vendor-listings"] });
         localStorage.removeItem(DRAFT_KEY); // Clear draft on success
         setStep(3); // Move to photo upload step
       }
@@ -764,31 +847,41 @@ export function ListingForm({ machine }: ListingFormProps) {
 
       {/* Step indicator */}
       <div className="flex items-center gap-2">
-        {STEPS.map((s, i) => (
-          <div key={s.id} className="flex items-center gap-2 flex-1">
-            <button
-              type="button"
-              onClick={() => i < step && setStep(i)}
-              className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold transition-all flex-shrink-0",
-                i === step && "bg-primary text-primary-foreground shadow-lg shadow-primary/30",
-                i < step && "bg-emerald-500 text-white cursor-pointer",
-                i > step && "bg-muted text-muted-foreground cursor-not-allowed"
+        {STEPS.map((s, i) => {
+          const isAccessible = isEditing || i <= step;
+          return (
+            <div key={s.id} className="flex items-center gap-2 flex-1">
+              <button
+                type="button"
+                onClick={() => isAccessible && setStep(i)}
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold transition-all flex-shrink-0",
+                  i === step && "bg-primary text-primary-foreground shadow-lg shadow-primary/30",
+                  i < step && "bg-emerald-500 text-white cursor-pointer",
+                  isEditing && i !== step && "border border-primary/50 text-foreground hover:bg-primary/10 cursor-pointer",
+                  !isEditing && i > step && "bg-muted text-muted-foreground cursor-not-allowed"
+                )}
+              >
+                {i < step ? "✓" : i + 1}
+              </button>
+              <button
+                type="button"
+                onClick={() => isAccessible && setStep(i)}
+                disabled={!isAccessible}
+                className={cn(
+                  "text-xs font-medium hidden sm:block text-left transition-colors",
+                  i === step ? "text-foreground font-bold" : "text-muted-foreground",
+                  isAccessible && "hover:text-primary cursor-pointer"
+                )}
+              >
+                {s.label}
+              </button>
+              {i < STEPS.length - 1 && (
+                <div className={cn("h-px flex-1 mx-1", i < step ? "bg-emerald-500" : "bg-border")} />
               )}
-            >
-              {i < step ? "✓" : i + 1}
-            </button>
-            <span className={cn(
-              "text-xs font-medium hidden sm:block",
-              i === step ? "text-foreground" : "text-muted-foreground"
-            )}>
-              {s.label}
-            </span>
-            {i < STEPS.length - 1 && (
-              <div className={cn("h-px flex-1 mx-1", i < step ? "bg-emerald-500" : "bg-border")} />
-            )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
 
       {/* Draft autosave indicator */}
@@ -1341,7 +1434,7 @@ export function ListingForm({ machine }: ListingFormProps) {
           )}
 
           {/* ── Navigation ───────────────────────────────────── */}
-          <div className="flex items-center justify-between mt-8 pt-6 border-t border-border">
+          <div className="flex items-center justify-between mt-8 pt-6 border-t border-border flex-wrap gap-3">
             <Button
               type="button"
               variant="outline"
@@ -1352,38 +1445,61 @@ export function ListingForm({ machine }: ListingFormProps) {
               <ChevronLeft className="h-4 w-4" /> Back
             </Button>
 
-            {step < STEPS.length - 1 ? (
-              /* Step 2 is the last form step before images */
-              step === 2 ? (
-                <Button
-                  type="submit"
-                  className="btn-amber-glow gap-2"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" /> {isEditing ? "Saving..." : "Saving draft..."}</>
-                  ) : (
-                    <>{isEditing ? <><Save className="h-4 w-4" /> Save Changes</> : <>Save & Add Photos <ChevronRight className="h-4 w-4" /></>}</>
-                  )}
-                </Button>
-              ) : (
+            <div className="flex items-center gap-2.5">
+              {step < 2 && (
                 <Button type="button" onClick={nextStep} className="btn-amber-glow gap-2">
                   Next <ChevronRight className="h-4 w-4" />
                 </Button>
-              )
-            ) : (
-              <Button
-                type="button"
-                className="btn-amber-glow gap-2"
-                onClick={() => {
-                  setDone(true);
-                  setTimeout(() => router.push("/dashboard/vendor/listings"), 2000);
-                }}
-              >
-                <CheckCircle className="h-4 w-4" />
-                {isEditing ? "Done" : "Submit Listing"}
-              </Button>
-            )}
+              )}
+
+              {step === 2 && (
+                <>
+                  {isEditing && (
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      disabled={isSubmitting}
+                      onClick={() => setSaveAction("finish")}
+                      className="gap-2 border-border cursor-pointer"
+                    >
+                      <Save className="h-4 w-4" /> Save & Exit
+                    </Button>
+                  )}
+                  <Button
+                    type="submit"
+                    className="btn-amber-glow gap-2 cursor-pointer"
+                    disabled={isSubmitting}
+                    onClick={() => setSaveAction("photos")}
+                  >
+                    {isSubmitting ? (
+                      <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4" />
+                        {isEditing ? "Save & Go to Photos" : "Save & Add Photos"}
+                        <ChevronRight className="h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
+
+              {step === 3 && (
+                <Button
+                  type="button"
+                  className="btn-amber-glow gap-2 cursor-pointer"
+                  onClick={async () => {
+                    await queryClient.invalidateQueries({ queryKey: ["vendor-listing", machine?.id || savedId] });
+                    await queryClient.invalidateQueries({ queryKey: ["vendor-listings"] });
+                    setDone(true);
+                    setTimeout(() => router.push("/dashboard/vendor/listings"), 1500);
+                  }}
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  {isEditing ? "Done (Back to Listings)" : "Submit Listing"}
+                </Button>
+              )}
+            </div>
           </div>
         </form>
       </div>

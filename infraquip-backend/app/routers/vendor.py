@@ -219,7 +219,7 @@ async def update_listing(
     if not machine:
         raise HTTPException(status_code=404, detail="Listing not found")
 
-    update_data = payload.model_dump(exclude_none=True)
+    update_data = payload.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(machine, field, value)
 
@@ -285,7 +285,8 @@ async def upload_listing_image(
     count_result = await db.execute(
         select(func.count(MachineImage.id)).where(MachineImage.machine_id == machine.id)
     )
-    if (count_result.scalar() or 0) >= 10:
+    existing_count = count_result.scalar() or 0
+    if existing_count >= 10:
         raise HTTPException(status_code=400, detail="Maximum 10 images per listing")
 
     # Validate content type
@@ -300,7 +301,6 @@ async def upload_listing_image(
     )
 
     # Determine sort order and whether this is the primary
-    existing_count = count_result.scalar() or 0
     is_primary = existing_count == 0
 
     img = MachineImage(
@@ -424,95 +424,6 @@ async def delete_listing(
     machine.status = MachineStatus.deleted
     await db.commit()
 
-
-# ── POST /vendor/listings/{listing_id}/images ─────────────────
-@router.post("/listings/{listing_id}/images")
-async def upload_image(
-    listing_id: str,
-    file: UploadFile = File(...),
-    is_primary: bool = Form(False),
-    alt_text: Optional[str] = Form(None),
-    current_user: VendorUser = None,
-    db: DBSession = None,
-):
-    """Upload a machine image to Supabase Storage."""
-    result = await db.execute(
-        select(Machine).options(selectinload(Machine.images)).where(
-            Machine.id == uuid.UUID(listing_id),
-            Machine.vendor_id == current_user.id,
-        )
-    )
-    machine = result.scalar_one_or_none()
-    if not machine:
-        raise HTTPException(status_code=404, detail="Listing not found")
-
-    # Validate file type
-    if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
-        raise HTTPException(status_code=400, detail="Only JPEG, PNG, and WebP images are accepted.")
-
-    # Check image count limit from subscription
-    max_photos = 5
-    sub_result = await db.execute(
-        select(Subscription)
-        .where(Subscription.user_id == current_user.id, Subscription.status == "active")
-        .order_by(Subscription.created_at.desc())
-    )
-    sub = sub_result.scalar_one_or_none()
-    if sub and sub.plan:
-        max_photos = sub.plan.photos_per_listing
-
-    if len(machine.images) >= max_photos:
-        raise HTTPException(status_code=400, detail=f"Maximum {max_photos} images per listing.")
-
-    # Upload to Supabase Storage
-    storage_path, display_url = await upload_machine_image(
-        file, vendor_id=str(current_user.id), machine_id=listing_id
-    )
-
-    existing_count = len(machine.images)
-    new_sort_order = existing_count
-
-    if is_primary:
-        for img in machine.images:
-            img.is_primary = False
-
-    image = MachineImage(
-        id=uuid.uuid4(),
-        machine_id=machine.id,
-        storage_path=storage_path,
-        display_url=display_url,
-        alt_text=alt_text or machine.title,
-        sort_order=new_sort_order,
-        is_primary=is_primary or existing_count == 0,
-    )
-    db.add(image)
-    await db.commit()
-    return {"id": str(image.id), "display_url": display_url, "is_primary": image.is_primary}
-
-
-# ── DELETE /vendor/listings/{listing_id}/images/{image_id} ────
-@router.delete("/listings/{listing_id}/images/{image_id}", status_code=204)
-async def delete_image(
-    listing_id: str,
-    image_id: str,
-    current_user: VendorUser,
-    db: DBSession,
-):
-    """Delete an image from a listing."""
-    result = await db.execute(
-        select(MachineImage)
-        .join(Machine, MachineImage.machine_id == Machine.id)
-        .where(
-            MachineImage.id == uuid.UUID(image_id),
-            Machine.vendor_id == current_user.id,
-        )
-    )
-    img = result.scalar_one_or_none()
-    if not img:
-        raise HTTPException(status_code=404, detail="Image not found")
-    delete_storage_file(img.storage_path)
-    await db.delete(img)
-    await db.commit()
 
 
 # ── GET /vendor/enquiries ──────────────────────────────────────

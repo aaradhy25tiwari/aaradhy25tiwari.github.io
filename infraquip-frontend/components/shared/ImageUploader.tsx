@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Upload, X, Star, Loader2, ImagePlus, AlertCircle
+  X, Star, Loader2, ImagePlus, AlertCircle
 } from "lucide-react";
 import imageCompression from "browser-image-compression";
 import { cn, formatFileSize } from "@/lib/utils";
@@ -36,17 +36,34 @@ const MAX_FILES = 10;
 const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 
 interface PreviewFile {
+  id: string;
   file: File;
   preview: string;
   uploading: boolean;
   error?: string;
 }
 
+function dedupeImages(imgs?: UploadedImage[]): UploadedImage[] {
+  if (!imgs || !Array.isArray(imgs)) return [];
+  const seen = new Set<string>();
+  return imgs.filter((img) => {
+    if (!img || !img.id || seen.has(img.id)) return false;
+    seen.add(img.id);
+    return true;
+  });
+}
+
 export function ImageUploader({ machineId, existingImages = [], onImagesChange }: ImageUploaderProps) {
-  const [images, setImages] = useState<UploadedImage[]>(existingImages);
+  const [images, setImages] = useState<UploadedImage[]>(() => dedupeImages(existingImages));
   const [previews, setPreviews] = useState<PreviewFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (existingImages && Array.isArray(existingImages)) {
+      setImages(dedupeImages(existingImages));
+    }
+  }, [existingImages]);
 
   const uploadFile = useCallback(async (file: File): Promise<UploadedImage | null> => {
     try {
@@ -74,8 +91,9 @@ export function ImageUploader({ machineId, existingImages = [], onImagesChange }
 
     if (toProcess.length === 0) return;
 
-    // Add preview placeholders
+    // Add preview placeholders with unique IDs
     const newPreviews: PreviewFile[] = toProcess.map((file) => ({
+      id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       file,
       preview: URL.createObjectURL(file),
       uploading: true,
@@ -85,14 +103,15 @@ export function ImageUploader({ machineId, existingImages = [], onImagesChange }
     // Upload each
     for (let i = 0; i < toProcess.length; i++) {
       const result = await uploadFile(toProcess[i]);
+      const previewId = newPreviews[i].id;
       setPreviews((prev) => {
         const updated = [...prev];
-        const idx = updated.findIndex((p) => p.preview === newPreviews[i].preview);
+        const idx = updated.findIndex((p) => p.id === previewId);
         if (idx !== -1) {
           if (result) {
             updated.splice(idx, 1);
             setImages((imgs) => {
-              const next = [...imgs, result];
+              const next = dedupeImages([...imgs.filter((img) => img.id !== result.id), result]);
               onImagesChange?.(next);
               return next;
             });
@@ -196,9 +215,10 @@ export function ImageUploader({ machineId, existingImages = [], onImagesChange }
                 className="group relative aspect-square rounded-xl overflow-hidden border border-border bg-muted"
               >
                 <Image
-                  src={img.display_url}
+                  src={img.display_url.replace(/\?+$/, "")}
                   alt={img.alt_text ?? "Machine image"}
                   fill
+                  unoptimized
                   className="object-cover"
                   sizes="(max-width: 640px) 50vw, 25vw"
                 />
@@ -213,15 +233,17 @@ export function ImageUploader({ machineId, existingImages = [], onImagesChange }
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
                   {!img.is_primary && (
                     <button
+                      type="button"
                       onClick={() => setPrimary(img.id)}
-                      className="flex items-center gap-1 rounded-lg bg-white/20 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-white/30 transition-colors w-full justify-center"
+                      className="flex items-center gap-1 rounded-lg bg-white/20 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-white/30 transition-colors w-full justify-center cursor-pointer"
                     >
                       <Star className="h-3 w-3" /> Set as cover
                     </button>
                   )}
                   <button
+                    type="button"
                     onClick={() => handleDelete(img.id)}
-                    className="flex items-center gap-1 rounded-lg bg-destructive/80 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-destructive transition-colors w-full justify-center"
+                    className="flex items-center gap-1 rounded-lg bg-destructive/80 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-destructive transition-colors w-full justify-center cursor-pointer"
                   >
                     <X className="h-3 w-3" /> Remove
                   </button>
@@ -236,11 +258,12 @@ export function ImageUploader({ machineId, existingImages = [], onImagesChange }
             ))}
 
             {/* Preview placeholders (uploading) */}
-            {previews.map((p, i) => (
+            {previews.map((p) => (
               <motion.div
-                key={i}
+                key={p.id}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
                 className="relative aspect-square rounded-xl overflow-hidden border border-border bg-muted"
               >
                 <Image src={p.preview} alt="Uploading..." fill className="object-cover opacity-40" sizes="25vw" />

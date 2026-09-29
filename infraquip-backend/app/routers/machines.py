@@ -32,20 +32,27 @@ async def get_machine_detail(
             selectinload(Machine.vendor).selectinload(User.vendor_profile),
             selectinload(Machine.category),
         )
-        .where(Machine.slug == slug, Machine.status == MachineStatus.approved)
+        .where(Machine.slug == slug)
     )
     machine = result.scalar_one_or_none()
 
     if not machine:
+        raise HTTPException(status_code=404, detail="Listing not found.")
+
+    # Only approved machines are visible to public; vendor owner and admins can preview any status
+    is_owner = current_user and machine.vendor_id == current_user.id
+    is_admin = current_user and getattr(current_user, "role", None) == "admin"
+    if machine.status != MachineStatus.approved and not (is_owner or is_admin):
         raise HTTPException(status_code=404, detail="Listing not found or not yet approved.")
 
     # Increment view count (fire-and-forget style via direct update)
-    await db.execute(
-        update(Machine)
-        .where(Machine.id == machine.id)
-        .values(views_count=Machine.views_count + 1)
-    )
-    await db.commit()
+    if machine.status == MachineStatus.approved:
+        await db.execute(
+            update(Machine)
+            .where(Machine.id == machine.id)
+            .values(views_count=Machine.views_count + 1)
+        )
+        await db.commit()
 
     # Build response
     vendor_profile = machine.vendor.vendor_profile if machine.vendor else None
@@ -69,6 +76,8 @@ async def get_machine_detail(
     response = MachineDetailResponse(
         id=str(machine.id),
         slug=machine.slug,
+        category_id=machine.category_id,
+        sub_category_id=machine.sub_category_id,
         title=machine.title,
         make=machine.make,
         model=machine.model,

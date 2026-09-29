@@ -129,6 +129,72 @@ async def review_listing(
     raise HTTPException(status_code=400, detail="Action must be 'approve' or 'reject'.")
 
 
+# ── GET /admin/machines ─────────────────────────────────────────
+@router.get("/machines")
+async def get_admin_machines(
+    current_user: AdminUser,
+    db: DBSession,
+    status: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+):
+    """List all machines across the platform for admin with filtering & actions."""
+    offset = (page - 1) * per_page
+    stmt = (
+        select(Machine)
+        .options(
+            selectinload(Machine.images),
+            selectinload(Machine.vendor),
+            selectinload(Machine.category),
+        )
+        .order_by(Machine.created_at.desc())
+    )
+    if status and status != "all":
+        try:
+            stmt = stmt.where(Machine.status == MachineStatus(status))
+        except ValueError:
+            pass
+
+    total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
+    result = await db.execute(stmt.offset(offset).limit(per_page))
+    machines = result.scalars().all()
+
+    items = []
+    for m in machines:
+        primary_img = next((img for img in m.images if img.is_primary), None)
+        if not primary_img and m.images:
+            primary_img = m.images[0]
+        items.append({
+            "id": str(m.id),
+            "slug": m.slug,
+            "title": m.title,
+            "make": m.make,
+            "model": m.model,
+            "year_of_manufacture": m.year_of_manufacture,
+            "status": m.status.value if hasattr(m.status, "value") else str(m.status),
+            "rejection_reason": m.rejection_reason,
+            "vendor_name": m.vendor.full_name if m.vendor else "Unknown Vendor",
+            "vendor_email": m.vendor.email if m.vendor else None,
+            "city": m.city,
+            "state": m.state,
+            "rental_price_daily": float(m.rental_price_daily) if m.rental_price_daily else None,
+            "rental_price_monthly": float(m.rental_price_monthly) if m.rental_price_monthly else None,
+            "rental_price_hourly": float(m.rental_price_hourly) if m.rental_price_hourly else None,
+            "rental_price_weekly": float(m.rental_price_weekly) if m.rental_price_weekly else None,
+            "contact_for_price": m.contact_for_price,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+            "primary_image": primary_img.display_url if primary_img else None,
+            "category_name": m.category.name if m.category else None,
+        })
+
+    return {
+        "results": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+    }
+
+
 # ── GET /admin/stats ───────────────────────────────────────────
 @router.get("/stats", response_model=AdminStatsResponse)
 async def admin_stats(current_user: AdminUser, db: DBSession):

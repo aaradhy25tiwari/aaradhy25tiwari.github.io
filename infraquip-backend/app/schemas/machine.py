@@ -96,6 +96,8 @@ class MachineUpdateRequest(BaseModel):
     make: Optional[str] = Field(None, min_length=2, max_length=100)
     model: Optional[str] = Field(None, min_length=1, max_length=200)
     year_of_manufacture: Optional[int] = Field(None, ge=1980, le=datetime.now().year)
+    category_id: Optional[UUID] = None
+    sub_category_id: Optional[UUID] = None
     condition: Optional[MachineCondition] = None
     capacity_specs: Optional[str] = Field(None, min_length=5, max_length=500)
     specifications: Optional[Dict[str, Any]] = None
@@ -171,6 +173,8 @@ class MachineDetailResponse(BaseModel):
     """Full detail response for listing page."""
     id: UUID
     slug: str
+    category_id: Optional[UUID] = None
+    sub_category_id: Optional[UUID] = None
     title: str
     make: str
     model: str

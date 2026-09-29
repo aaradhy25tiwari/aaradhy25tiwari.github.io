@@ -111,71 +111,80 @@ export function VendorListingsPage() {
           {data.results.map((machine) => (
             <div
               key={machine.id}
-              className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition hover:border-primary/30"
+              className="group relative flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition hover:border-primary/40 hover:bg-card/90"
             >
-              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-muted">
-                {machine.primary_image?.display_url ? (
-                  <img src={machine.primary_image.display_url} alt={machine.title} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-xs text-muted-foreground">No img</div>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate font-semibold">{machine.title}</span>
-                  <span className={cn("rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider", statusStyles[machine.status])}>
-                    {machine.status}
-                  </span>
+              <Link
+                href={`/machines/${machine.slug}`}
+                className="flex flex-1 items-center gap-4 min-w-0"
+              >
+                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-muted">
+                  {machine.primary_image?.display_url ? (
+                    <img src={machine.primary_image.display_url} alt={machine.title} className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-xs text-muted-foreground">No img</div>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {machine.make} &middot; {machine.model} &middot; {machine.city}, {machine.state}
-                </p>
-                <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                  <span>{machine.views_count} views</span>
-                  <span>{machine.enquiries_count} enquiries</span>
-                  {machine.rental_price_daily ? (
-                    <span className="font-semibold text-foreground">{formatINR(machine.rental_price_daily)}/day</span>
-                  ) : machine.rental_price_hourly ? (
-                    <span className="font-semibold text-foreground">{formatINR(machine.rental_price_hourly)}/hr</span>
-                  ) : machine.rental_price_monthly ? (
-                    <span className="font-semibold text-foreground">{formatINR(machine.rental_price_monthly)}/mo</span>
-                  ) : machine.rental_price_weekly ? (
-                    <span className="font-semibold text-foreground">{formatINR(machine.rental_price_weekly)}/wk</span>
-                  ) : machine.purchase_price ? (
-                    <span className="font-semibold text-foreground">{formatINR(machine.purchase_price)}</span>
-                  ) : machine.contact_for_price ? (
-                    <span className="font-medium text-muted-foreground">Price on Request</span>
-                  ) : null}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-semibold group-hover:text-primary transition-colors">{machine.title}</span>
+                    <span className={cn("rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider", statusStyles[machine.status])}>
+                      {machine.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {machine.make} &middot; {machine.model} &middot; {machine.city}, {machine.state}
+                  </p>
+                  <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                    <span>{machine.views_count} views</span>
+                    <span>{machine.enquiries_count} enquiries</span>
+                    {machine.rental_price_daily ? (
+                      <span className="font-semibold text-foreground">{formatINR(machine.rental_price_daily)}/day</span>
+                    ) : machine.rental_price_hourly ? (
+                      <span className="font-semibold text-foreground">{formatINR(machine.rental_price_hourly)}/hr</span>
+                    ) : machine.rental_price_monthly ? (
+                      <span className="font-semibold text-foreground">{formatINR(machine.rental_price_monthly)}/mo</span>
+                    ) : machine.rental_price_weekly ? (
+                      <span className="font-semibold text-foreground">{formatINR(machine.rental_price_weekly)}/wk</span>
+                    ) : machine.purchase_price ? (
+                      <span className="font-semibold text-foreground">{formatINR(machine.purchase_price)}</span>
+                    ) : machine.contact_for_price ? (
+                      <span className="font-medium text-muted-foreground">Price on Request</span>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
+              </Link>
+              <div className="flex shrink-0 items-center gap-1 z-10">
                 <Link
                   href={`/dashboard/vendor/listings/${machine.id}/edit`}
                   className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                   aria-label="Edit listing"
+                  title="Edit listing"
                 >
                   <Pencil className="h-4 w-4" />
                 </Link>
                 {(machine.status === "approved" || machine.status === "paused") && (
                   <button
                     onClick={() => toggleMutation.mutate(machine.id)}
-                    className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground cursor-pointer"
                     aria-label={machine.status === "paused" ? "Activate listing" : "Pause listing"}
+                    title={machine.status === "paused" ? "Activate listing" : "Pause listing"}
                   >
                     {machine.status === "paused" ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
                   </button>
                 )}
                 <button
                   onClick={() => { if (confirm("Delete this listing?")) deleteMutation.mutate(machine.id); }}
-                  className="rounded-lg p-2 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                  className="rounded-lg p-2 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive cursor-pointer"
                   aria-label="Delete listing"
+                  title="Delete listing"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
                 <Link
                   href={`/machines/${machine.slug}`}
                   className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                  aria-label="View listing"
+                  aria-label="View listing preview"
+                  title="View listing preview"
                 >
                   <Eye className="h-4 w-4" />
                 </Link>
