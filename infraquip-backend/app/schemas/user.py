@@ -36,9 +36,16 @@ class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
 
+class VerifyOtpRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6)
+
+
 class ResetPasswordRequest(BaseModel):
-    token: str
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6)
     new_password: str = Field(min_length=8, max_length=128)
+    confirm_password: Optional[str] = None
 
 
 # ── Response Schemas ──────────────────────────────────────────
@@ -102,6 +109,7 @@ class UserResponse(BaseModel):
     is_verified: bool
     is_banned: bool
     must_change_password: bool = False
+    temp_password_expires_at: Optional[datetime] = None
     dark_mode_preference: str
     text_size_preference: str
     created_at: datetime

@@ -68,15 +68,36 @@ class AccountRequestListResponse(BaseModel):
     total_pages: int
 
 
-def _gen_temp_password(length: int = 14) -> str:
-    """Generate a readable temporary password: letters + digits, no ambiguous chars."""
-    alphabet = string.ascii_letters.replace("l", "").replace("O", "").replace("I", "") + string.digits
-    # Ensure at least 1 uppercase, 1 lowercase, 1 digit
+def _gen_temp_password(length: int = 12) -> str:
+    """Generate a compliant temporary password: uppercase, lowercase, digits, and special characters."""
+    specials = "@#$!%*?"
+    digits = string.digits
+    uppers = string.ascii_uppercase.replace("O", "").replace("I", "")
+    lowers = string.ascii_lowercase.replace("l", "").replace("o", "")
+    
     while True:
-        pwd = "".join(secrets.choice(alphabet) for _ in range(length))
+        parts = [
+            secrets.choice(uppers),
+            secrets.choice(uppers),
+            secrets.choice(lowers),
+            secrets.choice(lowers),
+            secrets.choice(digits),
+            secrets.choice(digits),
+            secrets.choice(specials),
+            secrets.choice(specials),
+        ]
+        all_chars = uppers + lowers + digits + specials
+        remaining = length - len(parts)
+        for _ in range(max(0, remaining)):
+            parts.append(secrets.choice(all_chars))
+        
+        secrets.SystemRandom().shuffle(parts)
+        pwd = "".join(parts)
+        
         if (any(c.isupper() for c in pwd)
                 and any(c.islower() for c in pwd)
-                and any(c.isdigit() for c in pwd)):
+                and any(c.isdigit() for c in pwd)
+                and any(c in specials for c in pwd)):
             return pwd
 
 
@@ -239,6 +260,9 @@ async def approve_account_request(
     )
     free_plan = plan_result.scalar_one_or_none()
 
+    from datetime import timedelta
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+
     # Create app User row
     user = User(
         id=uuid.uuid4(),
@@ -249,6 +273,7 @@ async def approve_account_request(
         role=role_enum,
         is_verified=True,            # Admin-vetted
         must_change_password=True,   # Force password change on first login
+        temp_password_expires_at=expires_at,  # Valid for 24 hours only
     )
     db.add(user)
     await db.flush()

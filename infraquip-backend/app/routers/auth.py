@@ -15,6 +15,7 @@ from app.models.user import User, UserRole, VendorProfile, CustomerProfile, Brok
 from app.models.subscription import Subscription, SubscriptionPlan
 from app.schemas.user import (
     RegisterRequest, ForgotPasswordRequest,
+    VerifyOtpRequest, ResetPasswordRequest,
     UserResponse, UpdateUserPreferencesRequest,
     UpdateVendorProfileRequest, UpdateCustomerProfileRequest,
     UpdateBrokerProfileRequest,
@@ -64,6 +65,19 @@ async def change_password(
     if not re.search(r"[0-9]", payload.new_password):
         raise HTTPException(status_code=400, detail="Password must contain at least one number.")
 
+    # Check 24-hour expiration if temporary password was issued
+    if current_user.temp_password_expires_at:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        exp = current_user.temp_password_expires_at
+        if not exp.tzinfo:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp < now:
+            raise HTTPException(
+                status_code=400,
+                detail="Your temporary password has expired (valid for 24 hours). Please use 'Forgot Password' on the login screen to receive an OTP reset code.",
+            )
+
     # Update password in Supabase Auth
     supabase = get_supabase()
     try:
@@ -74,8 +88,9 @@ async def change_password(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Password update failed: {e}")
 
-    # Clear the must_change_password flag
+    # Clear the must_change_password flag & expiry
     current_user.must_change_password = False
+    current_user.temp_password_expires_at = None
     await db.commit()
 
     return {"message": "Password updated successfully."}
@@ -103,17 +118,164 @@ async def get_me(current_user: CurrentUser, db: DBSession):
 
 # ── POST /auth/forgot-password ─────────────────────────────────
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
-async def forgot_password(payload: ForgotPasswordRequest):
-    """Send password reset email via Supabase Auth."""
-    supabase = get_supabase()
-    try:
-        supabase.auth.reset_password_email(
-            payload.email,
-            options={"redirect_to": f"{settings.ALLOWED_ORIGINS.split(',')[0]}/reset-password"},
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: DBSession,
+):
+    """Generate and email a 6-digit OTP for password reset."""
+    email_clean = str(payload.email).strip().lower()
+    result = await db.execute(select(User).where(User.email == email_clean))
+    user = result.scalar_one_or_none()
+
+    if user:
+        import secrets
+        from datetime import datetime, timezone, timedelta
+        from app.models.password_reset_otp import PasswordResetOTP
+        from app.services.email_service import send_password_reset_otp_email
+
+        # Generate a secure 6-digit numeric OTP
+        otp_code = "".join(secrets.choice("0123456789") for _ in range(6))
+
+        # Invalidate any prior unused OTPs for this email
+        prior_otps = await db.execute(
+            select(PasswordResetOTP).where(
+                PasswordResetOTP.email == email_clean,
+                PasswordResetOTP.is_used == False,
+            )
         )
-    except Exception:
-        pass  # Always return 200 to avoid email enumeration
-    return {"message": "If an account exists, a reset email has been sent."}
+        for prior in prior_otps.scalars().all():
+            prior.is_used = True
+
+        # Store new OTP valid for 10 minutes
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+        otp_entry = PasswordResetOTP(
+            id=uuid.uuid4(),
+            email=email_clean,
+            otp=otp_code,
+            expires_at=expires_at,
+            is_used=False,
+        )
+        db.add(otp_entry)
+        await db.commit()
+
+        # Send OTP email
+        background_tasks.add_task(
+            send_password_reset_otp_email,
+            email_clean,
+            otp_code,
+            user.full_name,
+        )
+
+    # Always return 200 to prevent email enumeration
+    return {"message": "If an account exists, a 6-digit verification code has been sent to your email."}
+
+
+# ── POST /auth/verify-reset-otp ────────────────────────────────
+@router.post("/verify-reset-otp", status_code=status.HTTP_200_OK)
+async def verify_reset_otp(
+    payload: VerifyOtpRequest,
+    db: DBSession,
+):
+    """Verify if OTP is valid and not expired."""
+    from app.models.password_reset_otp import PasswordResetOTP
+    email_clean = str(payload.email).strip().lower()
+    result = await db.execute(
+        select(PasswordResetOTP)
+        .where(
+            PasswordResetOTP.email == email_clean,
+            PasswordResetOTP.otp == payload.otp.strip(),
+            PasswordResetOTP.is_used == False,
+        )
+        .order_by(PasswordResetOTP.created_at.desc())
+    )
+    otp_record = result.scalar_one_or_none()
+
+    if not otp_record or not otp_record.is_valid():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code. Please request a new one.",
+        )
+
+    return {"valid": True, "message": "Verification code is valid."}
+
+
+# ── POST /auth/reset-password ──────────────────────────────────
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: DBSession,
+):
+    """Verify OTP and reset user's password in Supabase Auth & database."""
+    import re
+    from app.models.password_reset_otp import PasswordResetOTP
+    email_clean = str(payload.email).strip().lower()
+
+    # 1. Validate password rules
+    if payload.confirm_password and payload.new_password != payload.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match.")
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+    if not re.search(r"[A-Z]", payload.new_password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one uppercase letter.")
+    if not re.search(r"[a-z]", payload.new_password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one lowercase letter.")
+    if not re.search(r"[0-9]", payload.new_password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one number.")
+
+    # 2. Check and validate OTP
+    result = await db.execute(
+        select(PasswordResetOTP)
+        .where(
+            PasswordResetOTP.email == email_clean,
+            PasswordResetOTP.otp == payload.otp.strip(),
+            PasswordResetOTP.is_used == False,
+        )
+        .order_by(PasswordResetOTP.created_at.desc())
+    )
+    otp_record = result.scalar_one_or_none()
+
+    if not otp_record or not otp_record.is_valid():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code. Please request a new one.",
+        )
+
+    # 3. Find User
+    user_result = await db.execute(select(User).where(User.email == email_clean))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    # 4. Update in Supabase Auth
+    supabase = get_supabase()
+    supabase_uid = str(user.auth_uid) if user.auth_uid else None
+
+    if supabase_uid:
+        try:
+            supabase.auth.admin.update_user_by_id(
+                supabase_uid,
+                {"password": payload.new_password},
+            )
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Failed to update password: {e}")
+    else:
+        try:
+            resp = supabase.auth.admin.create_user({
+                "email": user.email,
+                "password": payload.new_password,
+                "email_confirm": True,
+            })
+            user.auth_uid = uuid.UUID(resp.user.id)
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Failed to update password: {e}")
+
+    # 5. Mark OTP as used and clear must_change_password
+    otp_record.is_used = True
+    user.must_change_password = False
+    await db.commit()
+
+    return {"message": "Password reset successfully. You can now log in with your new password."}
 
 
 # ── PUT /auth/me ───────────────────────────────────────────────

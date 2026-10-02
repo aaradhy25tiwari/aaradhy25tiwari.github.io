@@ -19,6 +19,8 @@ from app.schemas.machine import (
     MachineDetailResponse, MachineListItemResponse, PaginatedMachineResponse,
 )
 from app.services.storage_service import upload_machine_image, delete_storage_file
+from app.services.email_service import send_listing_created_email
+from app.config import settings
 
 router = APIRouter()
 
@@ -92,6 +94,7 @@ async def create_listing(
     payload: MachineCreateRequest,
     current_user: VendorUser,
     db: DBSession,
+    background_tasks: BackgroundTasks,
 ):
     """Create a new machine listing (status: pending for admin review)."""
     # Check subscription limit
@@ -161,6 +164,17 @@ async def create_listing(
     db.add(machine)
     await db.commit()
     await db.refresh(machine)
+
+    # Trigger email to vendor in background
+    base_origin = settings.ALLOWED_ORIGINS.split(",")[0].strip() if settings.ALLOWED_ORIGINS else "http://localhost:3000"
+    dashboard_url = f"{base_origin}/dashboard/vendor/listings"
+    background_tasks.add_task(
+        send_listing_created_email,
+        current_user.email,
+        current_user.full_name or "Vendor",
+        machine.title,
+        dashboard_url,
+    )
 
     # Fetch with relationships
     result = await db.execute(

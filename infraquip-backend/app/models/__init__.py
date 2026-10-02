@@ -14,6 +14,7 @@ from app.models.analytics import (
 )
 from app.models.account_request import AccountRequest, AccountRequestStatus
 from app.models.master_data import EquipmentMasterData
+from app.models.password_reset_otp import PasswordResetOTP
 
 __all__ = [
     "User", "VendorProfile", "CustomerProfile", "BrokerProfile", "UserRole",
@@ -25,4 +26,5 @@ __all__ = [
     "Review", "Wishlist", "Notification",
     "MachineAnalytics", "PlatformAnalytics", "AuditLog",
     "AccountRequest", "AccountRequestStatus", "EquipmentMasterData",
+    "PasswordResetOTP",
 ]

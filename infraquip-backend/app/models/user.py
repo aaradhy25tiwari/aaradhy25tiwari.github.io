@@ -46,6 +46,7 @@ class User(Base):
     is_verified = Column(Boolean, default=False, nullable=False)
     is_banned = Column(Boolean, default=False, nullable=False)
     must_change_password = Column(Boolean, default=False, nullable=False)
+    temp_password_expires_at = Column(DateTime(timezone=True), nullable=True)
     dark_mode_preference = Column(
         Enum(DarkModePreference, name="darkpreference"), default=DarkModePreference.system
     )
