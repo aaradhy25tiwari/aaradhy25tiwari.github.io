@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Loader2, MessageSquare, Filter, X, CheckCircle2, Clock, AlertCircle } from "lucide-react";
@@ -24,8 +25,16 @@ const statusStyles: Record<string, string> = {
 };
 
 export function VendorEnquiriesPage() {
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const urlStatus = searchParams.get("status");
+  const [statusFilter, setStatusFilter] = useState<string | null>(urlStatus || null);
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    if (urlStatus) {
+      setStatusFilter(urlStatus);
+    }
+  }, [urlStatus]);
 
   const { data, isLoading, error } = useQuery<{ results: EnquiryItem[]; total: number; total_pages: number }>({
     queryKey: ["vendor-enquiries", statusFilter, page],

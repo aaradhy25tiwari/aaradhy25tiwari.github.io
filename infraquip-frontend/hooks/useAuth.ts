@@ -60,12 +60,18 @@ export function useAuth() {
 
   useEffect(() => {
     // Initial session check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        // Clear invalid stale tokens locally
+        supabase.auth.signOut({ scope: "local" }).catch(() => {});
+        setState({ user: null, loading: false, error: null });
+      } else if (session) {
         fetchUser();
       } else {
         setState({ user: null, loading: false, error: null });
       }
+    }).catch(() => {
+      setState({ user: null, loading: false, error: null });
     });
 
     // Listen for auth state changes

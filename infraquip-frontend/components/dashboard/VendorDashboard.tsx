@@ -80,36 +80,42 @@ export function VendorDashboard() {
       value: stats.approved_listings,
       icon: CheckCircle2,
       color: "text-emerald-500",
+      href: "/dashboard/vendor/listings?status=approved",
     },
     {
       label: "Pending",
       value: stats.pending_listings,
       icon: AlertCircle,
       color: "text-amber-500",
+      href: "/dashboard/vendor/listings?status=pending",
     },
     {
       label: "Paused",
       value: stats.paused_listings ?? 0,
       icon: PauseCircle,
       color: "text-muted-foreground",
+      href: "/dashboard/vendor/listings?status=paused",
     },
     {
       label: "Total Views",
       value: stats.total_views,
       icon: Eye,
       color: "text-primary",
+      href: "/dashboard/vendor/listings",
     },
     {
       label: "Enquiries",
       value: stats.total_enquiries,
       icon: MessageSquare,
       color: "text-blue-500",
+      href: "/dashboard/vendor/enquiries",
     },
     {
       label: "Unread",
       value: stats.unread_enquiries,
       icon: Activity,
       color: "text-rose-500",
+      href: "/dashboard/vendor/enquiries?status=pending",
     },
   ];
 
@@ -122,13 +128,22 @@ export function VendorDashboard() {
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {statCards.map((card) => (
-          <div key={card.label} className="stat-card">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <card.icon className={`h-4 w-4 ${card.color}`} />
-              <span>{card.label}</span>
+          <Link
+            key={card.label}
+            href={card.href}
+            className="stat-card group block transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md cursor-pointer"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground transition-colors group-hover:text-foreground">
+                <card.icon className={`h-4 w-4 ${card.color}`} />
+                <span>{card.label}</span>
+              </div>
+              <span className="text-xs font-medium text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-hover:text-primary">
+                View &rarr;
+              </span>
             </div>
             <p className="mt-2 text-2xl font-bold">{card.value}</p>
-          </div>
+          </Link>
         ))}
       </div>
 

@@ -36,9 +36,25 @@ export async function proxy(request: NextRequest) {
     const { data, error } = await supabase.auth.getUser();
     if (!error && data?.user) {
       user = data.user;
+    } else if (error) {
+      // If the refresh token is invalid/not found, clear stale Supabase cookies
+      const allCookies = request.cookies.getAll();
+      allCookies.forEach((cookie) => {
+        if (cookie.name.startsWith("sb-")) {
+          supabaseResponse.cookies.delete(cookie.name);
+          request.cookies.delete(cookie.name);
+        }
+      });
     }
   } catch (authError) {
-    // Network timeout, stale refresh token, or offline DNS — proceed gracefully as guest
+    // Stale refresh token or network issue — clear stale cookies and proceed as guest
+    const allCookies = request.cookies.getAll();
+    allCookies.forEach((cookie) => {
+      if (cookie.name.startsWith("sb-")) {
+        supabaseResponse.cookies.delete(cookie.name);
+        request.cookies.delete(cookie.name);
+      }
+    });
     user = null;
   }
 

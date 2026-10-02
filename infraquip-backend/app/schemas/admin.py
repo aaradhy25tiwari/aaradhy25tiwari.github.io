@@ -53,6 +53,7 @@ class AdminUserResponse(BaseModel):
     role: str
     is_verified: bool
     is_banned: bool
+    is_active: bool = True
     created_at: datetime
 
 

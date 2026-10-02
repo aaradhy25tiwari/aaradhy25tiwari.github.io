@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Shield, Users } from "lucide-react";
+import { Loader2, Search, CheckCircle2, Ban, UserCheck, Users } from "lucide-react";
 import apiClient from "@/lib/api/client";
 import { formatRelativeTime, cn } from "@/lib/utils";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -11,18 +12,32 @@ interface AdminUser {
   email: string;
   full_name: string | null;
   role: string;
+  is_verified: boolean;
+  is_banned: boolean;
   is_active: boolean;
   created_at: string;
 }
 
+interface UserListResponse {
+  results: AdminUser[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
 export default function AdminUsersPage() {
   const queryClient = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
-  const { data, isLoading } = useQuery<AdminUser[]>({
-    queryKey: ["admin-users-list"],
+  const { data, isLoading } = useQuery<UserListResponse>({
+    queryKey: ["admin-users-list", search, page],
     queryFn: async () => {
-      const { data } = await apiClient.get<any>("/admin/users");
-      return data.results;
+      const params = new URLSearchParams({ page: String(page), per_page: "20" });
+      if (search.trim()) params.set("search", search.trim());
+      const { data } = await apiClient.get<UserListResponse>(`/admin/users?${params}`);
+      return data;
     },
   });
 
@@ -35,25 +50,55 @@ export default function AdminUsersPage() {
     },
   });
 
+  const toggleBanMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await apiClient.patch(`/admin/users/${userId}/ban`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users-list"] });
+    },
+  });
+
+  const users = data?.results ?? [];
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">User Management</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Manage user roles and account status.</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">User Management</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {data ? `${data.total} user${data.total !== 1 ? "s" : ""} registered` : "Manage user roles and account status."}
+          </p>
+        </div>
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search by name or email..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="w-full rounded-xl border border-border bg-card py-2 pl-9 pr-4 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin" /></div>
-      ) : !data?.length ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      ) : !users.length ? (
         <EmptyState
           icon={Users}
           title="No users found"
-          description="There are currently no users registered on the platform."
+          description={search ? "No users matched your search criteria." : "There are currently no users registered on the platform."}
         />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border">
+        <div className="overflow-x-auto rounded-2xl border border-border bg-card">
           <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left">
+            <thead className="border-b border-border bg-muted/40 text-left">
               <tr>
                 <th className="p-4 font-medium">Name</th>
                 <th className="p-4 font-medium">Email</th>
@@ -63,42 +108,117 @@ export default function AdminUsersPage() {
                 <th className="p-4 font-medium">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {data.map((u) => (
-                <tr key={u.id} className="border-t border-border">
-                  <td className="p-4 font-medium">{u.full_name || "---"}</td>
+            <tbody className="divide-y divide-border">
+              {users.map((u) => (
+                <tr key={u.id} className="transition hover:bg-muted/20">
+                  <td className="p-4">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-foreground">{u.full_name || "---"}</span>
+                      {u.is_verified && (
+                        <span title="Verified User">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="p-4 text-muted-foreground">{u.email}</td>
                   <td className="p-4">
-                    <span className={cn(
-                      "rounded-full px-2.5 py-0.5 text-[10px] font-medium",
-                      u.role === "admin" && "bg-rose-500/10 text-rose-500",
-                      u.role === "vendor" && "bg-amber-500/10 text-amber-500",
-                      u.role === "broker" && "bg-violet-500/10 text-violet-500",
-                      u.role === "customer" && "bg-blue-500/10 text-blue-500",
-                    )}>{u.role}</span>
-                  </td>
-                  <td className="p-4">
-                    <span className={u.is_active ? "text-emerald-500" : "text-muted-foreground"}>
-                      {u.is_active ? "Active" : "Inactive"}
+                    <span
+                      className={cn(
+                        "rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider",
+                        u.role === "admin" && "bg-rose-500/10 text-rose-500 border border-rose-500/20",
+                        u.role === "vendor" && "bg-amber-500/10 text-amber-500 border border-amber-500/20",
+                        u.role === "broker" && "bg-violet-500/10 text-violet-500 border border-violet-500/20",
+                        u.role === "customer" && "bg-blue-500/10 text-blue-500 border border-blue-500/20"
+                      )}
+                    >
+                      {u.role}
                     </span>
                   </td>
-                  <td className="p-4 text-muted-foreground">{formatRelativeTime(u.created_at)}</td>
                   <td className="p-4">
-                    <select
-                      value={u.role}
-                      onChange={(e) => toggleRoleMutation.mutate({ userId: u.id, role: e.target.value })}
-                      className="rounded-lg border border-border bg-background px-2 py-1 text-xs"
-                    >
-                      <option value="customer">Customer</option>
-                      <option value="vendor">Vendor</option>
-                      <option value="broker">Broker</option>
-                      <option value="admin">Admin</option>
-                    </select>
+                    {u.is_banned ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-destructive/30 bg-destructive/10 px-2.5 py-0.5 text-xs font-medium text-destructive">
+                        <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+                        Banned
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-500">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Active
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-4 text-xs text-muted-foreground">{formatRelativeTime(u.created_at)}</td>
+                  <td className="p-4">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={u.role}
+                        onChange={(e) => toggleRoleMutation.mutate({ userId: u.id, role: e.target.value })}
+                        className="rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-medium focus:border-primary focus:outline-none"
+                      >
+                        <option value="customer">Customer</option>
+                        <option value="vendor">Vendor</option>
+                        <option value="broker">Broker</option>
+                        <option value="admin">Admin</option>
+                      </select>
+
+                      <button
+                        onClick={() => {
+                          const action = u.is_banned ? "unban" : "ban";
+                          if (confirm(`Are you sure you want to ${action} ${u.full_name || u.email}?`)) {
+                            toggleBanMutation.mutate(u.id);
+                          }
+                        }}
+                        className={cn(
+                          "flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition cursor-pointer",
+                          u.is_banned
+                            ? "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"
+                            : "border-destructive/30 text-destructive hover:bg-destructive/10"
+                        )}
+                        title={u.is_banned ? "Unban account" : "Ban account"}
+                      >
+                        {u.is_banned ? (
+                          <>
+                            <UserCheck className="h-3.5 w-3.5" />
+                            Unban
+                          </>
+                        ) : (
+                          <>
+                            <Ban className="h-3.5 w-3.5" />
+                            Ban
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+
+          {data && data.total_pages > 1 && (
+            <div className="flex items-center justify-between border-t border-border p-4">
+              <span className="text-xs text-muted-foreground">
+                Page {data.page} of {data.total_pages}
+              </span>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: data.total_pages }, (_, i) => i + 1).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-lg text-xs font-medium transition",
+                      page === p
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    )}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

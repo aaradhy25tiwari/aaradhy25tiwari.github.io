@@ -260,6 +260,7 @@ async def list_users(
             role=u.role.value if hasattr(u.role, "value") else u.role,
             is_verified=u.is_verified,
             is_banned=u.is_banned,
+            is_active=not u.is_banned,
             created_at=u.created_at,
         )
         for u in users

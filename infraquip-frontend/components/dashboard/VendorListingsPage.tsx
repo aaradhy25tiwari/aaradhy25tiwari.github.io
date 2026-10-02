@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Loader2, Plus, Eye, Pencil, Pause, Play, Trash2, Search, X } from "lucide-react";
@@ -17,8 +18,16 @@ const statusStyles: Record<string, string> = {
 
 export function VendorListingsPage() {
   const queryClient = useQueryClient();
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const urlStatus = searchParams.get("status");
+  const [statusFilter, setStatusFilter] = useState<string | null>(urlStatus || null);
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    if (urlStatus) {
+      setStatusFilter(urlStatus);
+    }
+  }, [urlStatus]);
 
   const { data, isLoading, error } = useQuery<{ results: MachineListItem[]; total: number; total_pages: number }>({
     queryKey: ["vendor-listings", statusFilter, page],
