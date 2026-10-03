@@ -18,8 +18,13 @@ from app.schemas.admin import (
     ReviewDecisionRequest, ReviewQueueResponse, ReviewQueueItem,
     AdminStatsResponse, AdminUserResponse, AdminUserListResponse,
 )
-from app.services.email_service import send_listing_approved_email, send_listing_rejected_email
+from app.services.email_service import (
+    send_listing_approved_email,
+    send_listing_rejected_email,
+    send_account_reactivated_email,
+)
 from app.config import settings
+from app.routers.account_requests import _gen_temp_password
 
 router = APIRouter()
 
@@ -261,6 +266,10 @@ async def list_users(
             is_verified=u.is_verified,
             is_banned=u.is_banned,
             is_active=not u.is_banned,
+            failed_login_attempts=u.failed_login_attempts or 0,
+            reactivation_requested=u.reactivation_requested or False,
+            reactivation_requested_at=u.reactivation_requested_at,
+            reactivation_message=u.reactivation_message,
             created_at=u.created_at,
         )
         for u in users
@@ -310,6 +319,9 @@ async def list_vendors(
             "business_name": u.vendor_profile.company_name if u.vendor_profile else None,
             "is_verified": u.is_verified,
             "is_banned": u.is_banned,
+            "failed_login_attempts": u.failed_login_attempts or 0,
+            "reactivation_requested": u.reactivation_requested or False,
+            "reactivation_requested_at": u.reactivation_requested_at,
             "created_at": u.created_at,
         })
 
@@ -330,8 +342,79 @@ async def ban_user(user_id: str, current_user: AdminUser, db: DBSession):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user.is_banned = not user.is_banned
+    if not user.is_banned:
+        user.failed_login_attempts = 0
+        user.reactivation_requested = False
     await db.commit()
     return {"message": f"User {'banned' if user.is_banned else 'unbanned'}."}
+
+
+# ── POST /admin/users/{user_id}/reactivate ────────────────────
+@router.post("/users/{user_id}/reactivate")
+async def reactivate_user(
+    user_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """Admin approves account reactivation: resets failed attempts, generates new 24h temp password, and emails user."""
+    from datetime import datetime, timezone, timedelta
+    from supabase import create_client
+
+    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Generate fresh compliant temporary password
+    temp_password = _gen_temp_password()
+
+    # Update in Supabase Auth
+    supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+    if user.auth_uid:
+        try:
+            supabase.auth.admin.update_user_by_id(
+                str(user.auth_uid),
+                {"password": temp_password},
+            )
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Failed to update auth credentials: {e}")
+    else:
+        try:
+            resp = supabase.auth.admin.create_user({
+                "email": user.email,
+                "password": temp_password,
+                "email_confirm": True,
+            })
+            user.auth_uid = uuid.UUID(resp.user.id)
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Failed to create auth credentials: {e}")
+
+    # Unblock, reset counters, and set 24h expiration
+    user.is_banned = False
+    user.failed_login_attempts = 0
+    user.reactivation_requested = False
+    user.reactivation_requested_at = None
+    user.reactivation_message = None
+    user.must_change_password = True
+    user.temp_password_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    # User remains unverified until they log in with the new temp password
+    user.is_verified = False
+
+    await db.commit()
+
+    # Email new credentials to user
+    background_tasks.add_task(
+        send_account_reactivated_email,
+        user.email,
+        user.full_name,
+        temp_password,
+    )
+
+    return {
+        "success": True,
+        "message": f"Account for {user.email} has been reactivated. A new temporary password (valid for 24 hours) has been sent to their email.",
+    }
 
 
 # ── GET /admin/analytics/timeseries ────────────────────────────

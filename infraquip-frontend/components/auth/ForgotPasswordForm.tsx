@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, CheckCircle, Mail, KeyRound, Eye, EyeOff, ShieldCheck, ArrowLeft, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import apiClient from "@/lib/api/client";
-import { cn } from "@/lib/utils";
+import { cn, scrollToTop } from "@/lib/utils";
 
 const emailSchema = z.object({
   email: z.string().email("Enter a valid email address"),
@@ -72,6 +72,7 @@ export function ForgotPasswordForm() {
       await apiClient.post("/auth/forgot-password", { email: data.email });
       setEmail(data.email);
       setStep("otp");
+      scrollToTop();
     } catch (err: any) {
       setServerError(err.message || "Failed to send verification code. Please try again.");
     }
@@ -103,6 +104,7 @@ export function ForgotPasswordForm() {
         confirm_password: data.confirmPassword,
       });
       setStep("success");
+      scrollToTop();
       setTimeout(() => {
         router.push("/login");
       }, 3000);

@@ -394,3 +394,79 @@ def send_payment_receipt_email(
     </div>
     """
     _send(email, f"Receipt: InfraQuip {plan_name}", html)
+
+
+def send_account_reactivation_otp_email(
+    email: str, otp: str, full_name: str | None = None
+) -> None:
+    """Sent when a blocked user requests an OTP to verify identity for account reactivation."""
+    greeting = f"Hi {full_name}," if full_name else "Hello,"
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px; color: #1f2937;">
+      <div style="text-align: center; margin-bottom: 32px;">
+        <h1 style="color: #f59e0b; font-size: 28px; margin: 0; font-weight: 800;">InfraQuip</h1>
+        <p style="color: #6b7280; margin: 4px 0 0; font-size: 14px;">Construction Equipment Marketplace</p>
+      </div>
+      <h2 style="color: #111827; font-size: 20px; font-weight: 700;">Account Reactivation Verification Code</h2>
+      <p style="color: #4b5563; line-height: 1.6; font-size: 15px;">
+        {greeting} we received a request to reactivate your blocked InfraQuip account. To confirm your identity and send your request to our administrators, use the one-time verification code below:
+      </p>
+      <div style="margin: 28px 0; padding: 24px; background: #111827; border-radius: 14px; text-align: center;">
+        <p style="margin: 0 0 8px; color: #9ca3af; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Reactivation Code</p>
+        <p style="margin: 0; color: #f59e0b; font-size: 36px; font-weight: 800; letter-spacing: 0.25em; font-family: monospace;">{otp}</p>
+      </div>
+      <div style="margin: 20px 0; padding: 14px 16px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px;">
+        <p style="margin: 0; color: #92400e; font-size: 13px;">
+          ⏱️ This OTP code is valid for <strong>10 minutes</strong>. Do not share this code with anyone.
+        </p>
+      </div>
+      <p style="color: #6b7280; font-size: 13px; line-height: 1.5;">
+        If you did not initiate this request, someone may have entered your email address. You can safely ignore this email.
+      </p>
+      {EMAIL_FOOTER}
+    </div>
+    """
+    _send(email, f"Your InfraQuip Reactivation Code: {otp}", html)
+
+
+def send_account_reactivated_email(
+    email: str, full_name: str, temp_password: str
+) -> None:
+    """Sent when admin approves reactivation and issues new temporary credentials."""
+    base_url = _get_base_url()
+    login_url = f"{base_url}/login"
+    
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px; color: #1f2937;">
+      <div style="text-align: center; margin-bottom: 32px;">
+        <h1 style="color: #f59e0b; font-size: 28px; margin: 0; font-weight: 800;">InfraQuip</h1>
+      </div>
+      <h2 style="color: #111827; font-size: 20px; font-weight: 700;">🔓 Your Account Has Been Reactivated!</h2>
+      <p style="color: #4b5563; line-height: 1.6; font-size: 15px;">
+        Hi {full_name}, your account reactivation request has been approved by the admin. Your failed login attempts counter has been reset, and a new temporary password has been generated for you:
+      </p>
+      <div style="margin: 24px 0; padding: 24px; background: #111827; border-radius: 12px; font-family: monospace;">
+        <p style="margin: 0 0 6px; color: #9ca3af; font-size: 12px; text-transform: uppercase;">Login Email</p>
+        <p style="margin: 0 0 16px; color: #f9fafb; font-size: 16px; font-weight: 600;">{email}</p>
+        <p style="margin: 0 0 6px; color: #9ca3af; font-size: 12px; text-transform: uppercase;">New Temporary Password</p>
+        <p style="margin: 0; color: #f59e0b; font-size: 20px; font-weight: 700; letter-spacing: 0.08em;">{temp_password}</p>
+      </div>
+      <div style="margin: 20px 0; padding: 16px; background: #fef2f2; border-left: 4px solid #ef4444; border-radius: 6px;">
+        <p style="margin: 0 0 4px; color: #991b1b; font-size: 14px; font-weight: 700;">
+          ⏱️ Valid for 24 hours only
+        </p>
+        <p style="margin: 0; color: #7f1d1d; font-size: 13px; line-height: 1.5;">
+          This temporary password will expire in 24 hours. Please log in promptly and set your new permanent password.
+        </p>
+      </div>
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="{login_url}"
+           style="display: inline-block; background: #f59e0b; color: #111827; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 15px;">
+          Log In to InfraQuip →
+        </a>
+      </div>
+      {EMAIL_FOOTER}
+    </div>
+    """
+    _send(email, "Your InfraQuip account is reactivated — new temporary password inside", html)
+

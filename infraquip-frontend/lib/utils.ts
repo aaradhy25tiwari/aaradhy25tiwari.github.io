@@ -82,3 +82,11 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+// ── Smooth Scroll to Top ──────────────────────────────────────
+export function scrollToTop(behavior: ScrollBehavior = "smooth") {
+  if (typeof window !== "undefined") {
+    window.scrollTo({ top: 0, left: 0, behavior });
+  }
+}
+

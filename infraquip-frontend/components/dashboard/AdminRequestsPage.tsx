@@ -8,7 +8,7 @@ import {
   HardHat, Handshake, RefreshCw, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, scrollToTop } from "@/lib/utils";
 import apiClient from "@/lib/api/client";
 import { EmptyState } from "@/components/shared/EmptyState";
 
@@ -396,7 +396,10 @@ export function AdminRequestsPage() {
               variant="outline"
               size="sm"
               disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
+              onClick={() => {
+                setPage((p) => p - 1);
+                scrollToTop();
+              }}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -404,7 +407,10 @@ export function AdminRequestsPage() {
               variant="outline"
               size="sm"
               disabled={page >= data.total_pages}
-              onClick={() => setPage((p) => p + 1)}
+              onClick={() => {
+                setPage((p) => p + 1);
+                scrollToTop();
+              }}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>

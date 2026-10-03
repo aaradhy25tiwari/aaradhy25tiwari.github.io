@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import apiClient from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, scrollToTop } from "@/lib/utils";
 import type { Category, Machine } from "@/types/machine";
 import { ImageUploader } from "@/components/shared/ImageUploader";
 import { getMakesForCategory, getModelsForMake, getCapacityForModel } from "@/lib/data/equipmentMasterData";
@@ -710,6 +710,7 @@ export function ListingForm({ machine }: ListingFormProps) {
     }
 
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    scrollToTop();
   };
 
   const onInvalid = (fieldErrors: Record<string, unknown>) => {
@@ -718,10 +719,12 @@ export function ListingForm({ machine }: ListingFormProps) {
     const hasStep0Error = step0Fields.some((f) => fieldErrors[f]);
     if (hasStep0Error) {
       setStep(0);
+      scrollToTop();
       return;
     }
     if (fieldErrors.listing_type || fieldErrors.min_rental_duration || fieldErrors.rental_price_hourly || fieldErrors.rental_price_daily || fieldErrors.rental_price_weekly || fieldErrors.rental_price_monthly) {
       setStep(1);
+      scrollToTop();
       return;
     }
   };
@@ -750,8 +753,10 @@ export function ListingForm({ machine }: ListingFormProps) {
           setFeedbackMessage("Location & changes saved");
           setTimeout(() => setFeedbackMessage(null), 3000);
           setStep(3); // Advance to Photos step
+          scrollToTop();
         } else {
           setDone(true);
+          scrollToTop();
           setTimeout(() => router.push("/dashboard/vendor/listings"), 1500);
         }
       } else {
@@ -760,10 +765,12 @@ export function ListingForm({ machine }: ListingFormProps) {
         await queryClient.invalidateQueries({ queryKey: ["vendor-listings"] });
         localStorage.removeItem(DRAFT_KEY); // Clear draft on success
         setStep(3); // Move to photo upload step
+        scrollToTop();
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Something went wrong.";
       setServerError(msg);
+      scrollToTop();
     }
   };
 

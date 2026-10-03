@@ -45,6 +45,10 @@ class User(Base):
     role = Column(Enum(UserRole), nullable=False, default=UserRole.customer)
     is_verified = Column(Boolean, default=False, nullable=False)
     is_banned = Column(Boolean, default=False, nullable=False)
+    failed_login_attempts = Column(Integer, default=0, nullable=False)
+    reactivation_requested = Column(Boolean, default=False, nullable=False)
+    reactivation_requested_at = Column(DateTime(timezone=True), nullable=True)
+    reactivation_message = Column(Text, nullable=True)
     must_change_password = Column(Boolean, default=False, nullable=False)
     temp_password_expires_at = Column(DateTime(timezone=True), nullable=True)
     dark_mode_preference = Column(

@@ -8,8 +8,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Send, CheckCircle, ArrowLeft } from "lucide-react";
 import apiClient from "@/lib/api/client";
-import { formatINR } from "@/lib/utils";
-import { cn } from "@/lib/utils";
+import { formatINR, cn, scrollToTop } from "@/lib/utils";
 import type { Machine } from "@/types/machine";
 
 const schema = z.object({
@@ -53,6 +52,7 @@ export function EnquiryFormPage({ machineId }: { machineId: string }) {
     },
     onSuccess: () => {
       setSuccess(true);
+      scrollToTop();
     },
   });
 

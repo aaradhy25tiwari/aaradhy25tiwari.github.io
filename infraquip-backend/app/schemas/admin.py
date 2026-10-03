@@ -54,6 +54,10 @@ class AdminUserResponse(BaseModel):
     is_verified: bool
     is_banned: bool
     is_active: bool = True
+    failed_login_attempts: Optional[int] = 0
+    reactivation_requested: Optional[bool] = False
+    reactivation_requested_at: Optional[datetime] = None
+    reactivation_message: Optional[str] = None
     created_at: datetime
 
 

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, AlertTriangle, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import Link from "next/link";
@@ -22,6 +22,9 @@ export function LoginForm() {
   const supabase = getSupabaseClient();
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null);
+  const [attemptedEmail, setAttemptedEmail] = useState("");
 
   const {
     register,
@@ -31,39 +34,105 @@ export function LoginForm() {
 
   const onSubmit = async (data: FormData) => {
     setServerError(null);
+    setIsBlocked(false);
     
     // Check if it's an email (has @) or a phone number
     const isEmail = data.emailOrPhone.includes("@");
+    const emailToTrack = isEmail ? data.emailOrPhone.trim().toLowerCase() : "";
+    setAttemptedEmail(emailToTrack);
     
     const credentials = isEmail
       ? { email: data.emailOrPhone, password: data.password }
       : { phone: data.emailOrPhone, password: data.password };
 
+    // Pre-check if account is already blocked
+    if (isEmail) {
+      try {
+        const apiClient = (await import("@/lib/api/client")).default;
+        const { data: preCheck } = await apiClient.post<{
+          blocked: boolean;
+          attempts_remaining: number;
+          message?: string;
+        }>("/auth/pre-login-check", { email: emailToTrack });
+
+        if (preCheck.blocked) {
+          setIsBlocked(true);
+          setAttemptsRemaining(0);
+          setServerError(
+            preCheck.message ||
+              "This account has been blocked due to multiple failed login attempts. Please request account reactivation."
+          );
+          return;
+        }
+      } catch (e) {
+        // Continue if pre-check encounters network issue
+      }
+    }
+
     try {
       const { error } = await supabase.auth.signInWithPassword(credentials);
 
       if (error) {
-        if (error.message.includes("Invalid login") || error.message.includes("Invalid credentials")) {
-          setServerError("Incorrect credentials. Please try again.");
-        } else if (error.message.includes("Email not confirmed")) {
-          setServerError("Please verify your account before logging in. Check your inbox.");
-        } else {
-          setServerError(error.message);
+        let errorMsg = "Incorrect credentials. Please try again.";
+        
+        // Record failed attempt on backend to track limits
+        if (isEmail) {
+          try {
+            const apiClient = (await import("@/lib/api/client")).default;
+            const { data: failResp } = await apiClient.post<{
+              blocked: boolean;
+              attempts_remaining: number | null;
+              message: string;
+            }>("/auth/login-failed", { email: emailToTrack });
+
+            if (failResp.blocked) {
+              setIsBlocked(true);
+              setAttemptsRemaining(0);
+              setServerError(failResp.message);
+              return;
+            } else if (failResp.attempts_remaining !== null) {
+              setAttemptsRemaining(failResp.attempts_remaining);
+              setServerError(failResp.message);
+              return;
+            }
+          } catch (apiErr) {
+            console.error("Failed to record login attempt", apiErr);
+          }
         }
+
+        if (error.message.includes("Email not confirmed")) {
+          errorMsg = "Please verify your account before logging in. Check your inbox.";
+        } else if (error.message) {
+          errorMsg = error.message;
+        }
+        setServerError(errorMsg);
         return;
       }
 
-      // Check if user must change their temp password first
+      // Login succeeded: update backend verification status & reset failed attempts
+      const apiClient = (await import("@/lib/api/client")).default;
       try {
-        const apiClient = (await import("@/lib/api/client")).default;
-        const { data: me } = await apiClient.get<{ must_change_password: boolean }>("/auth/me");
-        if (me.must_change_password) {
+        const { data: loginResp } = await apiClient.post<{
+          success: boolean;
+          must_change_password: boolean;
+          is_verified: boolean;
+        }>("/auth/login-success", { email: isEmail ? emailToTrack : "" });
+
+        if (loginResp.must_change_password) {
           router.push("/change-password");
           return;
         }
-      } catch (apiError) {
-        // If check fails, proceed to dashboard normally
-        console.error("Failed to fetch user preferences on login", apiError);
+      } catch (loginErr: any) {
+        // If temporary password has expired or user is blocked
+        if (loginErr?.response?.status === 400 || loginErr?.message?.includes("expired")) {
+          await supabase.auth.signOut({ scope: "local" });
+          setServerError(
+            loginErr?.message ||
+              "Your temporary password has expired (valid for 24 hours). Please use 'Forgot Password' or request reactivation."
+          );
+          return;
+        }
+        console.warn("login-success hook warning", loginErr);
       }
 
       router.push("/dashboard");
@@ -134,8 +203,40 @@ export function LoginForm() {
           )}
         </div>
 
-        {/* Server Error */}
-        {serverError && (
+        {/* Server Error & Attempt Warnings */}
+        {serverError && isBlocked && (
+          <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive space-y-3">
+            <div className="flex items-start gap-2.5">
+              <ShieldAlert className="h-5 w-5 flex-shrink-0 text-destructive mt-0.5" />
+              <div>
+                <p className="font-semibold text-sm">Account Blocked</p>
+                <p className="text-xs mt-0.5 leading-relaxed">{serverError}</p>
+              </div>
+            </div>
+            <div className="pt-1">
+              <Link
+                href={`/reactivate-account${attemptedEmail ? `?email=${encodeURIComponent(attemptedEmail)}` : ""}`}
+                className="inline-flex items-center justify-center w-full px-3 py-2.5 rounded-lg bg-destructive text-white text-xs font-semibold hover:bg-destructive/90 transition shadow-sm"
+              >
+                Request Account Reactivation via Email OTP →
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {serverError && !isBlocked && attemptsRemaining !== null && attemptsRemaining < 4 && (
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3.5 text-xs text-amber-500 flex items-start gap-2.5">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-500" />
+            <div className="space-y-1">
+              <p className="font-semibold text-amber-500">{serverError}</p>
+              <p className="text-[11px] text-amber-500/80 leading-relaxed">
+                Security Warning: After 4 failed attempts, your account will be automatically blocked to prevent unauthorized access.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {serverError && !isBlocked && (attemptsRemaining === null || attemptsRemaining >= 4) && (
           <div className="rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
             {serverError}
           </div>

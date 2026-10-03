@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Loader2, MessageSquare, Filter, X, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import apiClient from "@/lib/api/client";
-import { formatRelativeTime, cn } from "@/lib/utils";
+import { formatRelativeTime, cn, scrollToTop } from "@/lib/utils";
 
 interface EnquiryItem {
   id: string;
@@ -138,9 +138,12 @@ export function VendorEnquiriesPage() {
               {Array.from({ length: data.total_pages }, (_, i) => i + 1).map((p) => (
                 <button
                   key={p}
-                  onClick={() => setPage(p)}
+                  onClick={() => {
+                    setPage(p);
+                    scrollToTop();
+                  }}
                   className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-lg text-sm transition",
+                    "flex h-8 w-8 items-center justify-center rounded-lg text-sm transition cursor-pointer",
                     page === p ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80",
                   )}
                 >

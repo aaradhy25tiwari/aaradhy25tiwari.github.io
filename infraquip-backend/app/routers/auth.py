@@ -88,12 +88,256 @@ async def change_password(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Password update failed: {e}")
 
-    # Clear the must_change_password flag & expiry
+    # Clear the must_change_password flag & expiry, mark verified & reset failed attempts
     current_user.must_change_password = False
     current_user.temp_password_expires_at = None
+    current_user.is_verified = True
+    current_user.failed_login_attempts = 0
     await db.commit()
 
     return {"message": "Password updated successfully."}
+
+
+# ── POST /auth/pre-login-check ────────────────────────────────
+class PreLoginCheckRequest(BaseModel):
+    email: str
+
+
+@router.post("/pre-login-check", status_code=status.HTTP_200_OK)
+async def pre_login_check(payload: PreLoginCheckRequest, db: DBSession):
+    """Check if account is blocked before login attempt."""
+    email_clean = str(payload.email).strip().lower()
+    result = await db.execute(select(User).where(User.email == email_clean))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        return {"blocked": False, "attempts_remaining": 4, "is_verified": False}
+
+    if user.is_banned:
+        return {
+            "blocked": True,
+            "attempts_remaining": 0,
+            "is_verified": user.is_verified,
+            "message": "This account is blocked due to security reasons. Please request account reactivation.",
+        }
+
+    attempts_left = max(0, 4 - (user.failed_login_attempts or 0))
+    return {
+        "blocked": False,
+        "attempts_remaining": attempts_left,
+        "is_verified": user.is_verified,
+    }
+
+
+# ── POST /auth/login-failed ───────────────────────────────────
+class LoginFailedRequest(BaseModel):
+    email: str
+
+
+@router.post("/login-failed", status_code=status.HTTP_200_OK)
+async def login_failed(payload: LoginFailedRequest, db: DBSession):
+    """Increment failed login attempts (max 4). Block account if attempts exhausted."""
+    email_clean = str(payload.email).strip().lower()
+    result = await db.execute(select(User).where(User.email == email_clean))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        return {
+            "blocked": False,
+            "attempts_remaining": None,
+            "message": "Incorrect credentials. Please try again.",
+        }
+
+    if user.is_banned:
+        return {
+            "blocked": True,
+            "attempts_remaining": 0,
+            "message": "This account has been blocked due to multiple failed login attempts. Please request account reactivation.",
+        }
+
+    user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+
+    if user.failed_login_attempts >= 4:
+        user.is_banned = True
+        user.failed_login_attempts = 4
+        await db.commit()
+        return {
+            "blocked": True,
+            "attempts_remaining": 0,
+            "message": "Your account has been blocked after 4 failed password attempts. You can request account reactivation using your registered email.",
+        }
+
+    attempts_left = 4 - user.failed_login_attempts
+    await db.commit()
+    return {
+        "blocked": False,
+        "attempts_remaining": attempts_left,
+        "message": f"Incorrect password. You have {attempts_left} attempt{'s' if attempts_left != 1 else ''} remaining before your account is blocked.",
+    }
+
+
+# ── POST /auth/login-success ──────────────────────────────────
+class LoginSuccessRequest(BaseModel):
+    email: str
+
+
+@router.post("/login-success", status_code=status.HTTP_200_OK)
+async def login_success(payload: LoginSuccessRequest, db: DBSession):
+    """Handle successful login: activate/verify user, reset failed attempts counter."""
+    from datetime import datetime, timezone
+    email_clean = str(payload.email).strip().lower()
+    result = await db.execute(select(User).where(User.email == email_clean))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        return {"success": True, "must_change_password": False, "is_verified": True}
+
+    if user.is_banned:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is blocked. Please request account reactivation.",
+        )
+
+    # Check 24-hour expiration of temporary password if applicable
+    if user.temp_password_expires_at:
+        now = datetime.now(timezone.utc)
+        exp = user.temp_password_expires_at
+        if not exp.tzinfo:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp < now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Your temporary password has expired (valid for 24 hours). Please use 'Forgot Password' or request reactivation.",
+            )
+
+    # First login / valid login sets user to verified and resets failed attempts
+    user.is_verified = True
+    user.failed_login_attempts = 0
+    await db.commit()
+
+    return {
+        "success": True,
+        "must_change_password": user.must_change_password,
+        "is_verified": user.is_verified,
+    }
+
+
+# ── POST /auth/request-reactivation ───────────────────────────
+class ReactivationRequestPayload(BaseModel):
+    email: str
+
+
+@router.post("/request-reactivation", status_code=status.HTTP_200_OK)
+async def request_reactivation(
+    payload: ReactivationRequestPayload,
+    background_tasks: BackgroundTasks,
+    db: DBSession,
+):
+    """Send OTP for account reactivation verification to user's registered email."""
+    import secrets
+    from datetime import datetime, timezone, timedelta
+    from app.models.account_reactivation_otp import AccountReactivationOTP
+    from app.services.email_service import send_account_reactivation_otp_email
+
+    email_clean = str(payload.email).strip().lower()
+    result = await db.execute(select(User).where(User.email == email_clean))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        return {"message": "If an account exists, a 6-digit reactivation verification code has been sent to your email."}
+
+    if not user.is_banned and (user.failed_login_attempts or 0) < 4:
+        return {"message": "Your account is active. You can log in directly or reset your password if forgotten."}
+
+    # Generate 6-digit numeric OTP
+    otp_code = "".join(secrets.choice("0123456789") for _ in range(6))
+
+    # Invalidate prior unused OTPs
+    prior_otps = await db.execute(
+        select(AccountReactivationOTP).where(
+            AccountReactivationOTP.email == email_clean,
+            AccountReactivationOTP.is_used == False,
+        )
+    )
+    for prior in prior_otps.scalars().all():
+        prior.is_used = True
+
+    # 10 minute expiration
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    otp_entry = AccountReactivationOTP(
+        id=uuid.uuid4(),
+        email=email_clean,
+        otp=otp_code,
+        expires_at=expires_at,
+        is_used=False,
+    )
+    db.add(otp_entry)
+    await db.commit()
+
+    # Dispatch email in background
+    background_tasks.add_task(
+        send_account_reactivation_otp_email,
+        email_clean,
+        otp_code,
+        user.full_name,
+    )
+
+    return {"message": "If an account exists, a 6-digit reactivation verification code has been sent to your email."}
+
+
+# ── POST /auth/verify-reactivation-otp ─────────────────────────
+class VerifyReactivationOtpPayload(BaseModel):
+    email: str
+    otp: str
+    message: str | None = None
+
+
+@router.post("/verify-reactivation-otp", status_code=status.HTTP_200_OK)
+async def verify_reactivation_otp(
+    payload: VerifyReactivationOtpPayload,
+    db: DBSession,
+):
+    """Verify OTP and submit reactivation request to Admin."""
+    from datetime import datetime, timezone
+    from app.models.account_reactivation_otp import AccountReactivationOTP
+
+    email_clean = str(payload.email).strip().lower()
+    result = await db.execute(
+        select(AccountReactivationOTP)
+        .where(
+            AccountReactivationOTP.email == email_clean,
+            AccountReactivationOTP.otp == payload.otp.strip(),
+            AccountReactivationOTP.is_used == False,
+        )
+        .order_by(AccountReactivationOTP.created_at.desc())
+    )
+    otp_record = result.scalar_one_or_none()
+
+    if not otp_record or not otp_record.is_valid():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code. Please request a new one.",
+        )
+
+    # Find user
+    user_result = await db.execute(select(User).where(User.email == email_clean))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    # Mark OTP used and set reactivation request on user
+    otp_record.is_used = True
+    user.reactivation_requested = True
+    user.reactivation_requested_at = datetime.now(timezone.utc)
+    if payload.message:
+        user.reactivation_message = payload.message
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "Your identity has been verified and your reactivation request has been sent to the Admin. You will receive an email with your credentials once approved.",
+    }
 
 
 # ── GET /auth/me ───────────────────────────────────────────────

@@ -271,7 +271,8 @@ async def approve_account_request(
         full_name=req.full_name,
         phone=req.phone,
         role=role_enum,
-        is_verified=True,            # Admin-vetted
+        is_verified=False,           # Unverified until user performs their first login
+        failed_login_attempts=0,
         must_change_password=True,   # Force password change on first login
         temp_password_expires_at=expires_at,  # Valid for 24 hours only
     )

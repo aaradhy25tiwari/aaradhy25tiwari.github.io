@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Search, CheckCircle2, Ban, UserCheck, Users } from "lucide-react";
+import { Loader2, Search, CheckCircle2, Ban, UserCheck, Users, Clock, AlertTriangle, KeyRound } from "lucide-react";
 import apiClient from "@/lib/api/client";
-import { formatRelativeTime, cn } from "@/lib/utils";
+import { formatRelativeTime, cn, scrollToTop } from "@/lib/utils";
 import { EmptyState } from "@/components/shared/EmptyState";
 
 interface AdminUser {
@@ -15,6 +15,10 @@ interface AdminUser {
   is_verified: boolean;
   is_banned: boolean;
   is_active: boolean;
+  failed_login_attempts?: number;
+  reactivation_requested?: boolean;
+  reactivation_requested_at?: string | null;
+  reactivation_message?: string | null;
   created_at: string;
 }
 
@@ -30,6 +34,7 @@ export default function AdminUsersPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [actionMessage, setActionMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   const { data, isLoading } = useQuery<UserListResponse>({
     queryKey: ["admin-users-list", search, page],
@@ -59,6 +64,22 @@ export default function AdminUsersPage() {
     },
   });
 
+  const reactivateMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data } = await apiClient.post<{ message: string }>(`/admin/users/${userId}/reactivate`);
+      return data;
+    },
+    onSuccess: (res) => {
+      setActionMessage({ text: res.message, type: "success" });
+      queryClient.invalidateQueries({ queryKey: ["admin-users-list"] });
+      setTimeout(() => setActionMessage(null), 6000);
+    },
+    onError: (err: any) => {
+      setActionMessage({ text: err.message || "Failed to reactivate account.", type: "error" });
+      setTimeout(() => setActionMessage(null), 6000);
+    },
+  });
+
   const users = data?.results ?? [];
 
   return (
@@ -84,6 +105,25 @@ export default function AdminUsersPage() {
           />
         </div>
       </div>
+
+      {actionMessage && (
+        <div
+          className={cn(
+            "rounded-xl border px-4 py-3 text-sm flex items-center justify-between transition-all",
+            actionMessage.type === "success"
+              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
+              : "bg-destructive/10 border-destructive/20 text-destructive"
+          )}
+        >
+          <span>{actionMessage.text}</span>
+          <button
+            onClick={() => setActionMessage(null)}
+            className="text-xs font-semibold hover:underline cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex justify-center py-16">
@@ -112,12 +152,26 @@ export default function AdminUsersPage() {
               {users.map((u) => (
                 <tr key={u.id} className="transition hover:bg-muted/20">
                   <td className="p-4">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-foreground">{u.full_name || "---"}</span>
-                      {u.is_verified && (
-                        <span title="Verified User">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                        </span>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-foreground">{u.full_name || "---"}</span>
+                        {u.is_verified && (
+                          <span title="Verified User">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          </span>
+                        )}
+                      </div>
+                      {u.reactivation_requested && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 text-[10px] font-semibold text-purple-400 animate-pulse">
+                            <AlertTriangle className="h-3 w-3" /> Reactivation Requested
+                          </span>
+                          {u.reactivation_message && (
+                            <span className="text-[10px] text-muted-foreground italic truncate max-w-xs" title={u.reactivation_message}>
+                              &quot;{u.reactivation_message}&quot;
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
                   </td>
@@ -136,21 +190,33 @@ export default function AdminUsersPage() {
                     </span>
                   </td>
                   <td className="p-4">
-                    {u.is_banned ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-destructive/30 bg-destructive/10 px-2.5 py-0.5 text-xs font-medium text-destructive">
-                        <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
-                        Banned
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-500">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        Active
-                      </span>
-                    )}
+                    <div className="flex flex-col gap-1 items-start">
+                      {u.is_banned ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-destructive/30 bg-destructive/10 px-2.5 py-0.5 text-xs font-medium text-destructive">
+                          <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+                          Blocked {(u.failed_login_attempts ?? 0) >= 4 ? "(4 Failed Attempts)" : ""}
+                        </span>
+                      ) : !u.is_verified ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-500">
+                          <Clock className="h-3 w-3" />
+                          Unverified (Pending 1st Login)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-500">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          Active / Verified
+                        </span>
+                      )}
+                      {!u.is_banned && (u.failed_login_attempts ?? 0) > 0 && (
+                        <span className="text-[10px] text-amber-500/90 font-medium">
+                          {u.failed_login_attempts}/4 failed attempts
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="p-4 text-xs text-muted-foreground">{formatRelativeTime(u.created_at)}</td>
                   <td className="p-4">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <select
                         value={u.role}
                         onChange={(e) => toggleRoleMutation.mutate({ userId: u.id, role: e.target.value })}
@@ -161,6 +227,27 @@ export default function AdminUsersPage() {
                         <option value="broker">Broker</option>
                         <option value="admin">Admin</option>
                       </select>
+
+                      {/* Reactivate Button */}
+                      {(u.is_banned || u.reactivation_requested) && (
+                        <button
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `Reactivate account for ${u.full_name || u.email}?\n\nThis will reset failed attempts, generate a new temporary password (valid for 24 hours), and email it to the user.`
+                              )
+                            ) {
+                              reactivateMutation.mutate(u.id);
+                            }
+                          }}
+                          disabled={reactivateMutation.isPending}
+                          className="flex items-center gap-1 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition cursor-pointer"
+                          title="Generate new 24-hour temporary password and email to user"
+                        >
+                          <KeyRound className="h-3.5 w-3.5" />
+                          Reactivate
+                        </button>
+                      )}
 
                       <button
                         onClick={() => {
@@ -205,9 +292,12 @@ export default function AdminUsersPage() {
                 {Array.from({ length: data.total_pages }, (_, i) => i + 1).map((p) => (
                   <button
                     key={p}
-                    onClick={() => setPage(p)}
+                    onClick={() => {
+                      setPage(p);
+                      scrollToTop();
+                    }}
                     className={cn(
-                      "flex h-8 w-8 items-center justify-center rounded-lg text-xs font-medium transition",
+                      "flex h-8 w-8 items-center justify-center rounded-lg text-xs font-medium transition cursor-pointer",
                       page === p
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted text-muted-foreground hover:bg-muted/80"

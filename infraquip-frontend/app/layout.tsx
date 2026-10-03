@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
@@ -9,6 +10,7 @@ import { ChatbotWrapper } from "@/components/chat/ChatbotWrapper";
 import { CookieBanner } from "@/components/layout/CookieBanner";
 import { StickyMobileCta } from "@/components/layout/StickyMobileCta";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
+import { ScrollToTopOnNavigation } from "@/components/shared/ScrollToTopOnNavigation";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -178,6 +180,9 @@ export default function RootLayout({
         </a>
 
         <Providers>
+          <Suspense fallback={null}>
+            <ScrollToTopOnNavigation />
+          </Suspense>
           <div className="flex min-h-screen flex-col">
             <Navbar />
             <main id="main-content" className="flex-1 relative z-0">

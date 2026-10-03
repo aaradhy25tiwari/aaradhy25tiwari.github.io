@@ -9,7 +9,7 @@ import {
   ChevronDown, LayoutGrid, List, Map, Loader2, Share2, Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn, formatINR, getConditionColor, getListingTypeLabel } from "@/lib/utils";
+import { cn, formatINR, getConditionColor, getListingTypeLabel, scrollToTop } from "@/lib/utils";
 import apiClient from "@/lib/api/client";
 import type { MachineListItem, SearchFilters } from "@/types/machine";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -459,7 +459,10 @@ export function MachinesClientPage() {
                 <Button
                   variant="outline" size="sm"
                   disabled={filters.page === 1}
-                  onClick={() => updateFilter("page", (filters.page ?? 1) - 1)}
+                  onClick={() => {
+                    updateFilter("page", (filters.page ?? 1) - 1);
+                    scrollToTop();
+                  }}
                 >Previous</Button>
                 <span className="text-sm text-muted-foreground px-4">
                   Page {data.page} of {data.total_pages}
@@ -467,7 +470,10 @@ export function MachinesClientPage() {
                 <Button
                   variant="outline" size="sm"
                   disabled={filters.page === data.total_pages}
-                  onClick={() => updateFilter("page", (filters.page ?? 1) + 1)}
+                  onClick={() => {
+                    updateFilter("page", (filters.page ?? 1) + 1);
+                    scrollToTop();
+                  }}
                 >Next</Button>
               </div>
             )}

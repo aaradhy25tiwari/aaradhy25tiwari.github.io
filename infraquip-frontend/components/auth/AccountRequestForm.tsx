@@ -9,7 +9,7 @@ import {
   Phone, MapPin, FileText, MessageSquare, Hash
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, scrollToTop } from "@/lib/utils";
 import apiClient from "@/lib/api/client";
 
 // ── Schema ────────────────────────────────────────────────────
@@ -66,6 +66,7 @@ export function AccountRequestForm() {
     try {
       await apiClient.post("/account-requests", { ...data, role });
       setSubmitted(true);
+      scrollToTop();
     } catch (err: unknown) {
       setServerError(
         err instanceof Error ? err.message : "Something went wrong. Please try again."
