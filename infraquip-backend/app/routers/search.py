@@ -3,7 +3,7 @@ Search Router — Full-text + geo-filtered machine search with Redis caching
 """
 import math
 from typing import Optional, List
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 
@@ -16,12 +16,16 @@ from app.models.user import User, VendorProfile
 from app.models.analytics import Wishlist
 from app.schemas.machine import MachineListItemResponse, PaginatedMachineResponse
 from app.services.cache_service import cache_get, cache_set, build_search_cache_key
+from app.core.rate_limiter import limiter
+from app.config import settings
 
 router = APIRouter()
 
 
 @router.get("", response_model=PaginatedMachineResponse)
+@limiter.limit(settings.RATE_LIMIT_SEARCH)
 async def search_machines(
+    request: Request,
     db: DBSession,
     current_user: OptionalUser,
     q: Optional[str] = Query(None, max_length=200),

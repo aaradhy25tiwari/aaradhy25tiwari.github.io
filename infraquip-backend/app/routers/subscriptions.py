@@ -15,6 +15,7 @@ from app.schemas.subscription import (
     CreateOrderRequest, CreateOrderResponse,
     SubscribeRequest, SubscriptionVerifyResponse,
 )
+from app.core.rate_limiter import limiter, get_authenticated_user_key
 from app.config import settings
 
 router = APIRouter()
@@ -22,7 +23,8 @@ router = APIRouter()
 
 # ── GET /subscriptions/plans ───────────────────────────────────
 @router.get("/plans")
-async def list_plans(db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_PUBLIC)
+async def list_plans(request: Request, db: DBSession):
     """Return all active subscription plans grouped by role."""
     result = await db.execute(
         select(SubscriptionPlan)
@@ -69,7 +71,8 @@ async def list_plans(db: DBSession):
 
 # ── GET /subscriptions/my ──────────────────────────────────────
 @router.get("/my", response_model=SubscriptionResponse)
-async def get_my_subscription(current_user: CurrentUser, db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def get_my_subscription(request: Request, current_user: CurrentUser, db: DBSession):
     """Return the current user's active subscription."""
     result = await db.execute(
         select(Subscription)
@@ -150,7 +153,9 @@ async def get_my_subscription(current_user: CurrentUser, db: DBSession):
 
 # ── POST /subscriptions/create-order ───────────────────────────
 @router.post("/create-order", response_model=CreateOrderResponse)
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def create_subscription_order(
+    request: Request,
     payload: CreateOrderRequest,
     current_user: CurrentUser,
     db: DBSession,
@@ -201,7 +206,13 @@ async def create_subscription_order(
 
 # ── POST /subscriptions/verify ─────────────────────────────────
 @router.post("/verify", response_model=SubscriptionVerifyResponse)
-async def verify_payment(payload: SubscribeRequest, current_user: CurrentUser, db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def verify_payment(
+    request: Request,
+    payload: SubscribeRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
     """Verify Razorpay payment signature and activate subscription."""
 
     # Validate signature
@@ -257,9 +268,15 @@ async def verify_payment(payload: SubscribeRequest, current_user: CurrentUser, d
 
 # ── POST /subscriptions/verify-payment (alias for RazorpayButton)
 @router.post("/verify-payment", response_model=SubscriptionVerifyResponse)
-async def verify_payment_alias(payload: SubscribeRequest, current_user: CurrentUser, db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def verify_payment_alias(
+    request: Request,
+    payload: SubscribeRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
     """Alias of /verify for compatibility with frontend RazorpayButton."""
-    return await verify_payment(payload, current_user, db)
+    return await verify_payment(request, payload, current_user, db)
 
 
 # ── POST /subscriptions/webhook ────────────────────────────────

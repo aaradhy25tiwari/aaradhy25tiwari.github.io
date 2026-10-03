@@ -79,10 +79,28 @@ class Settings(BaseSettings):
                 hosts.append(host)
         return hosts
 
-    # ── Rate Limiting ─────────────────────────────────────────────
-    RATE_LIMIT_PER_MINUTE: int = 100
-    LOGIN_RATE_LIMIT: int = 5
-    LOGIN_LOCKOUT_MINUTES: int = 15
+    # ── Tiered Rate Limiting Configurations ───────────────────────
+    RATE_LIMIT_DEFAULT: str = "100/minute"
+
+    # Tier 1: Authentication Routes (per-IP & per-account with exponential backoff)
+    RATE_LIMIT_AUTH_PER_IP: int = 10          # Max baseline auth attempts per minute per IP
+    RATE_LIMIT_AUTH_PER_ACCOUNT: int = 5      # Max baseline auth attempts per minute per account
+    AUTH_BACKOFF_WINDOW_SECONDS: int = 60     # Sliding observation window (seconds)
+    AUTH_BACKOFF_BASE_SECONDS: int = 15       # Initial backoff cooldown (seconds)
+    AUTH_BACKOFF_FACTOR: float = 2.0          # Exponential backoff multiplier
+    AUTH_BACKOFF_MAX_SECONDS: int = 900       # Maximum backoff cap (15 minutes)
+
+    # Tier 2: Public Endpoints (Moderate Limits)
+    RATE_LIMIT_PUBLIC: str = "60/minute"
+    RATE_LIMIT_SEARCH: str = "30/minute"
+    RATE_LIMIT_PUBLIC_LEADS: str = "30/minute"
+
+    # Tier 3: Authenticated User Actions (Looser Limits)
+    RATE_LIMIT_AUTHENTICATED: str = "180/minute"
+    RATE_LIMIT_ADMIN: str = "300/minute"
+    RATE_LIMIT_CHAT: str = "60/minute"
+    RATE_LIMIT_CHATBOT: str = "20/minute"
+
 
     # ── JWT ───────────────────────────────────────────────────────
     JWT_ALGORITHM: str = "HS256"

@@ -5,7 +5,7 @@ import uuid
 import json
 import logging
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 
@@ -13,6 +13,7 @@ from app.deps import CurrentUser, OptionalUser, DBSession
 from app.models.machine import Machine, MachineStatus
 from app.models.enquiry import Enquiry, EnquiryStatus
 from app.services.cache_service import cache_get, cache_set
+from app.core.rate_limiter import limiter
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -207,7 +208,9 @@ async def call_gemini(messages: list) -> str:
 # ── POST /chatbot ─────────────────────────────────────────────
 
 @router.post("", response_model=ChatResponse)
+@limiter.limit(settings.RATE_LIMIT_CHATBOT)
 async def chat_with_ai(
+    request: Request,
     payload: ChatRequest,
     user: OptionalUser,
     db: DBSession,

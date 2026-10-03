@@ -3,12 +3,14 @@ Public Leads Feed Router
 """
 from datetime import datetime, date
 from typing import List, Optional
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.deps import DBSession
 from app.models.enquiry import Enquiry
+from app.core.rate_limiter import limiter
+from app.config import settings
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -28,7 +30,8 @@ class PublicLeadResponse(BaseModel):
 
 
 @router.get("", response_model=List[PublicLeadResponse])
-async def get_live_leads(db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_PUBLIC_LEADS)
+async def get_live_leads(request: Request, db: DBSession):
     """
     Fetch the latest enquiries with customer PII stripped, for public display to drive vendor signups.
     """

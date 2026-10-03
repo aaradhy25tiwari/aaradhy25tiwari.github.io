@@ -201,3 +201,20 @@ class MachineDocument(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     machine = relationship("Machine", back_populates="documents")
+
+
+class EquipmentMasterCatalog(Base):
+    __tablename__ = "equipment_master_catalog"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    category_name = Column(String(100), nullable=False)
+    make = Column(String(100), nullable=False)
+    model = Column(String(200), nullable=False)
+    capacity_specs = Column(String(300), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_master_cat_make", "category_name", "make"),
+        Index("idx_master_model", "model"),
+    )
+

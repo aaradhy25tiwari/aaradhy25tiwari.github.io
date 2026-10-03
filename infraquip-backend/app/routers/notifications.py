@@ -1,16 +1,19 @@
 """Notifications router."""
 import uuid
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from sqlalchemy import select, update
 
 from app.deps import CurrentUser, DBSession
 from app.models.analytics import Notification
+from app.core.rate_limiter import limiter, get_authenticated_user_key
+from app.config import settings
 
 router = APIRouter()
 
 
 @router.get("")
-async def get_notifications(current_user: CurrentUser, db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def get_notifications(request: Request, current_user: CurrentUser, db: DBSession):
     result = await db.execute(
         select(Notification)
         .where(Notification.user_id == current_user.id)
@@ -34,7 +37,8 @@ async def get_notifications(current_user: CurrentUser, db: DBSession):
 
 
 @router.patch("/{notification_id}/read")
-async def mark_read(notification_id: str, current_user: CurrentUser, db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def mark_read(request: Request, notification_id: str, current_user: CurrentUser, db: DBSession):
     await db.execute(
         update(Notification)
         .where(Notification.id == uuid.UUID(notification_id), Notification.user_id == current_user.id)
@@ -45,7 +49,8 @@ async def mark_read(notification_id: str, current_user: CurrentUser, db: DBSessi
 
 
 @router.patch("/read-all")
-async def mark_all_read(current_user: CurrentUser, db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def mark_all_read(request: Request, current_user: CurrentUser, db: DBSession):
     await db.execute(
         update(Notification)
         .where(Notification.user_id == current_user.id, Notification.is_read == False)
@@ -53,3 +58,4 @@ async def mark_all_read(current_user: CurrentUser, db: DBSession):
     )
     await db.commit()
     return {"message": "All notifications marked as read."}
+

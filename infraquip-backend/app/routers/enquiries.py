@@ -3,7 +3,8 @@ Enquiries Router — Customer creates enquiry, both parties message
 """
 import uuid
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, status, BackgroundTasks
+from datetime import datetime
+from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel, Field
@@ -13,6 +14,7 @@ from app.models.user import UserRole
 from app.models.machine import Machine, MachineStatus
 from app.models.enquiry import Enquiry, EnquiryMessage, EnquiryStatus
 from app.services.email_service import send_enquiry_received_email
+from app.core.rate_limiter import limiter, get_authenticated_user_key
 from app.config import settings
 
 router = APIRouter()
@@ -35,7 +37,9 @@ class MessageCreateRequest(BaseModel):
 
 # ── POST /enquiries ────────────────────────────────────────────
 @router.post("", status_code=status.HTTP_201_CREATED)
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def create_enquiry(
+    request: Request,
     payload: EnquiryCreateRequest,
     current_user: CurrentUser,
     db: DBSession,
@@ -128,7 +132,8 @@ async def create_enquiry(
 
 # ── GET /enquiries/{enquiry_id} ────────────────────────────────
 @router.get("/{enquiry_id}")
-async def get_enquiry(enquiry_id: str, current_user: CurrentUser, db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def get_enquiry(request: Request, enquiry_id: str, current_user: CurrentUser, db: DBSession):
     result = await db.execute(
         select(Enquiry)
         .options(selectinload(Enquiry.messages), selectinload(Enquiry.machine))
@@ -172,7 +177,9 @@ async def get_enquiry(enquiry_id: str, current_user: CurrentUser, db: DBSession)
 
 # ── POST /enquiries/{enquiry_id}/messages ──────────────────────
 @router.post("/{enquiry_id}/messages")
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def send_message(
+    request: Request,
     enquiry_id: str,
     payload: MessageCreateRequest,
     current_user: CurrentUser,

@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { 
   Loader2, CheckCircle, ChevronRight, ChevronLeft, Save, CloudOff, 
   LocateFixed, Search, Clock, Calendar, CalendarDays, CalendarRange, Check, Sparkles, ChevronDown 
@@ -15,7 +15,12 @@ import { Button } from "@/components/ui/button";
 import { cn, scrollToTop } from "@/lib/utils";
 import type { Category, Machine } from "@/types/machine";
 import { ImageUploader } from "@/components/shared/ImageUploader";
-import { getMakesForCategory, getModelsForMake, getCapacityForModel } from "@/lib/data/equipmentMasterData";
+import { 
+  getMakesForCategory, 
+  getModelsForMake, 
+  getCapacityForModel, 
+  type EquipmentMasterItem 
+} from "@/lib/data/equipmentMasterData";
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -106,117 +111,8 @@ function Select({ className, error, children, ...props }: React.SelectHTMLAttrib
   );
 }
 
-// ── Custom Autosuggest Combobox (replaces native datalist) ──
-interface ComboboxItem {
-  label: string;
-  subLabel?: string;
-  value: string;
-}
-
-function ComboboxInput({
-  value,
-  onChange,
-  onSelect,
-  placeholder,
-  error,
-  items,
-  disabled,
-}: {
-  value: string;
-  onChange: (val: string) => void;
-  onSelect?: (item: ComboboxItem) => void;
-  placeholder?: string;
-  error?: boolean;
-  items: ComboboxItem[];
-  disabled?: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const query = (value || "").toLowerCase().trim();
-  const filteredItems = items.filter((item) => {
-    if (!query) return true;
-    return (
-      item.label.toLowerCase().includes(query) ||
-      (item.subLabel && item.subLabel.toLowerCase().includes(query))
-    );
-  });
-
-  return (
-    <div ref={containerRef} className="relative w-full">
-      <div className="relative">
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => {
-            onChange(e.target.value);
-            setIsOpen(true);
-          }}
-          onFocus={() => {
-            setIsOpen(true);
-          }}
-          placeholder={placeholder}
-          disabled={disabled}
-          autoComplete="off"
-          className={cn(
-            "w-full rounded-xl border bg-background px-4 py-2.5 pr-10 text-sm outline-none transition-all placeholder:text-muted-foreground/50",
-            "focus:ring-2 focus:ring-primary/20 focus:border-primary",
-            error ? "border-destructive" : "border-border",
-            disabled && "opacity-50 cursor-not-allowed"
-          )}
-        />
-        <button
-          type="button"
-          tabIndex={-1}
-          onClick={() => setIsOpen((prev) => !prev)}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-        >
-          <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", isOpen && "rotate-180")} />
-        </button>
-      </div>
-
-      {/* Suggestion Dropdown */}
-      {isOpen && filteredItems.length > 0 && (
-        <div className="absolute left-0 top-full mt-1.5 w-full rounded-2xl border border-border bg-card/95 backdrop-blur-md p-1.5 shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-border/20 animate-in fade-in zoom-in-95 duration-150">
-          {filteredItems.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onChange(item.value);
-                if (onSelect) onSelect(item);
-                setIsOpen(false);
-              }}
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-primary/10 hover:text-primary cursor-pointer group"
-            >
-              <span className="font-medium text-foreground group-hover:text-primary">
-                {item.label}
-              </span>
-              {item.subLabel && (
-                <span className="text-xs text-muted-foreground group-hover:text-primary/70 bg-muted/60 group-hover:bg-primary/10 px-2 py-0.5 rounded-md">
-                  {item.subLabel}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Duration parser helper ────────────────────────────────────
+
 function parseDuration(raw?: string | null): { value: number | ""; unit: "hours" | "days" | "weeks" | "months" } {
   if (!raw) return { value: 1, unit: "days" };
   const str = raw.toLowerCase().trim();
@@ -392,12 +288,101 @@ export function ListingForm({ machine }: ListingFormProps) {
     }
   }, [machine, reset]);
 
-  // ── Master data auto-suggestions ────────────────────────────
+  // ── Master data dynamic catalog ────────────────────────────
+  const OTHER_OPTION = "__other__";
+  const [selectedMake, setSelectedMake] = useState<string>("");
+  const [customMake, setCustomMake] = useState<string>("");
+  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [customModel, setCustomModel] = useState<string>("");
+
+  const { data: dynamicCatalog = [] } = useQuery<EquipmentMasterItem[]>({
+    queryKey: ["master-catalog"],
+    queryFn: async () => {
+      try {
+        const res = await apiClient.get<EquipmentMasterItem[]>("/categories/master-catalog");
+        return res.data;
+      } catch {
+        return [];
+      }
+    },
+    staleTime: 60_000,
+  });
+
   const selectedCategoryId = watch("category_id");
-  const currentMake = watch("make");
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
-  const suggestedMakes = getMakesForCategory(selectedCategory?.name);
-  const suggestedModels = getModelsForMake(currentMake, selectedCategory?.name);
+  const availableMakes = getMakesForCategory(selectedCategory?.name, dynamicCatalog);
+  const availableModels = getModelsForMake(
+    selectedMake === OTHER_OPTION ? "" : selectedMake,
+    selectedCategory?.name,
+    dynamicCatalog
+  );
+
+  // Sync initial make & model when editing
+  useEffect(() => {
+    if (machine) {
+      if (machine.make) {
+        const isKnown = availableMakes.some((m) => m.toLowerCase() === machine.make.toLowerCase());
+        if (isKnown) {
+          const match = availableMakes.find((m) => m.toLowerCase() === machine.make.toLowerCase()) || machine.make;
+          setSelectedMake(match);
+          setCustomMake("");
+        } else {
+          setSelectedMake(OTHER_OPTION);
+          setCustomMake(machine.make);
+        }
+      }
+      if (machine.model) {
+        const isKnownModel = availableModels.some((m) => m.model.toLowerCase() === machine.model.toLowerCase());
+        if (isKnownModel) {
+          const match = availableModels.find((m) => m.model.toLowerCase() === machine.model.toLowerCase())?.model || machine.model;
+          setSelectedModel(match);
+          setCustomModel("");
+        } else {
+          setSelectedModel(OTHER_OPTION);
+          setCustomModel(machine.model);
+        }
+      }
+    }
+  }, [machine, availableMakes.length, dynamicCatalog.length]);
+
+  const handleMakeChange = (val: string) => {
+    setSelectedMake(val);
+    if (val === OTHER_OPTION) {
+      setValue("make", customMake || "", { shouldValidate: true, shouldDirty: true });
+      setSelectedModel(OTHER_OPTION);
+      setValue("model", customModel || "", { shouldValidate: true, shouldDirty: true });
+    } else {
+      setCustomMake("");
+      setValue("make", val, { shouldValidate: true, shouldDirty: true });
+      setSelectedModel("");
+      setCustomModel("");
+      setValue("model", "", { shouldValidate: true, shouldDirty: true });
+    }
+  };
+
+  const handleModelChange = (val: string) => {
+    setSelectedModel(val);
+    if (val === OTHER_OPTION) {
+      setValue("model", customModel || "", { shouldValidate: true, shouldDirty: true });
+    } else {
+      setCustomModel("");
+      setValue("model", val, { shouldValidate: true, shouldDirty: true });
+      const cap = getCapacityForModel(selectedMake, val, selectedCategory?.name, dynamicCatalog);
+      if (cap && !watch("capacity_specs")) {
+        setValue("capacity_specs", cap, { shouldValidate: true, shouldDirty: true });
+      }
+    }
+  };
+
+  const handleCustomMakeChange = (val: string) => {
+    setCustomMake(val);
+    setValue("make", val, { shouldValidate: true, shouldDirty: true });
+  };
+
+  const handleCustomModelChange = (val: string) => {
+    setCustomModel(val);
+    setValue("model", val, { shouldValidate: true, shouldDirty: true });
+  };
 
   // ── Single Rate duration option (Hourly, Daily, Weekly, Monthly) ──
   const [selectedDuration, setSelectedDuration] = useState<"hourly" | "daily" | "weekly" | "monthly">(() => {
@@ -419,6 +404,7 @@ export function ListingForm({ machine }: ListingFormProps) {
     if (id !== "weekly") setValue("rental_price_weekly", undefined);
     if (id !== "monthly") setValue("rental_price_monthly", undefined);
   };
+
 
   // ── Location helpers with multi-provider fallbacks ───────────
   const [pincode, setPincode] = useState("");
@@ -600,6 +586,29 @@ export function ListingForm({ machine }: ListingFormProps) {
       const parsed = parseDuration(draft.min_rental_duration);
       setDurationValue(parsed.value);
       setDurationUnit(parsed.unit);
+    }
+    if (draft.make) {
+      const isKnown = availableMakes.some((m) => m.toLowerCase() === draft.make?.toLowerCase());
+      if (isKnown) {
+        const match = availableMakes.find((m) => m.toLowerCase() === draft.make?.toLowerCase()) || draft.make;
+        setSelectedMake(match);
+        setCustomMake("");
+      } else {
+        setSelectedMake(OTHER_OPTION);
+        setCustomMake(draft.make);
+      }
+    }
+    if (draft.model) {
+      const modelsForThisMake = getModelsForMake(draft.make, selectedCategory?.name, dynamicCatalog);
+      const isKnownModel = modelsForThisMake.some((m) => m.model.toLowerCase() === draft.model?.toLowerCase());
+      if (isKnownModel) {
+        const match = modelsForThisMake.find((m) => m.model.toLowerCase() === draft.model?.toLowerCase())?.model || draft.model;
+        setSelectedModel(match);
+        setCustomModel("");
+      } else {
+        setSelectedModel(OTHER_OPTION);
+        setCustomModel(draft.model);
+      }
     }
     reset({ ...EMPTY_FORM_VALUES, ...draft, listing_type: "rent" });
     setAvailableDraft(null);
@@ -786,6 +795,10 @@ export function ListingForm({ machine }: ListingFormProps) {
     setPricingError(null);
     setServerError(null);
     setAvailableDraft(null);
+    setSelectedMake("");
+    setCustomMake("");
+    setSelectedModel("");
+    setCustomModel("");
     reset(EMPTY_FORM_VALUES);
     setStep(0);
     setFeedbackMessage("Draft discarded");
@@ -940,52 +953,75 @@ export function ListingForm({ machine }: ListingFormProps) {
                   </Select>
                 </Field>
 
-                {/* Make with Custom Autocomplete Combobox */}
+                {/* Make Dropdown strictly from Excel/Master Catalog */}
                 <Field 
                   label="Make / Brand *" 
                   error={errors.make?.message} 
-                  hint={suggestedMakes.length > 0 ? "Select from suggestions or type brand name" : "e.g. JCB, CATERPILLAR, VOLVO..."}
+                  hint={selectedMake === OTHER_OPTION ? "Specify your custom brand name below" : "Select brand strictly from master catalog or choose Other"}
                 >
-                  <ComboboxInput
-                    value={watch("make") || ""}
-                    onChange={(val) => setValue("make", val, { shouldValidate: true })}
-                    onSelect={(item) => setValue("make", item.value, { shouldValidate: true })}
-                    placeholder="e.g. JCB, CATERPILLAR, VOLVO..."
-                    error={!!errors.make}
-                    items={suggestedMakes.map((m) => ({ label: m, value: m }))}
-                  />
+                  <div className="space-y-2">
+                    <Select
+                      value={selectedMake}
+                      onChange={(e) => handleMakeChange(e.target.value)}
+                      error={!!errors.make && !customMake}
+                    >
+                      <option value="" disabled>Select Make / Brand...</option>
+                      {availableMakes.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                      <option value={OTHER_OPTION}>Other (Not in list)</option>
+                    </Select>
+                    {selectedMake === OTHER_OPTION && (
+                      <Input
+                        placeholder="Please specify Make / Brand name *"
+                        value={customMake}
+                        onChange={(e) => handleCustomMakeChange(e.target.value)}
+                        error={!!errors.make}
+                        className="animate-in fade-in zoom-in-95 duration-150"
+                      />
+                    )}
+                  </div>
                 </Field>
 
-                {/* Model with Custom Autocomplete Combobox & Auto-filled Capacity */}
+                {/* Model Dropdown strictly from Excel/Master Catalog */}
                 <Field 
                   label="Model *" 
                   error={errors.model?.message} 
-                  hint={suggestedModels.length > 0 ? "Select model or type custom model" : "e.g. 3CX, 320D..."}
+                  hint={selectedModel === OTHER_OPTION ? "Specify your custom model name below" : "Select model strictly from catalog or choose Other"}
                 >
-                  <ComboboxInput
-                    value={watch("model") || ""}
-                    onChange={(val) => {
-                      setValue("model", val, { shouldValidate: true });
-                      const cap = getCapacityForModel(currentMake, val);
-                      if (cap && !watch("capacity_specs")) {
-                        setValue("capacity_specs", cap, { shouldValidate: true });
-                      }
-                    }}
-                    onSelect={(item) => {
-                      setValue("model", item.value, { shouldValidate: true });
-                      const cap = getCapacityForModel(currentMake, item.value) || item.subLabel;
-                      if (cap && !watch("capacity_specs")) {
-                        setValue("capacity_specs", cap, { shouldValidate: true });
-                      }
-                    }}
-                    placeholder="e.g. 3CX, 3DX, 320D..."
-                    error={!!errors.model}
-                    items={suggestedModels.map((item) => ({
-                      label: item.model,
-                      subLabel: item.capacity ? item.capacity : undefined,
-                      value: item.model,
-                    }))}
-                  />
+                  <div className="space-y-2">
+                    <Select
+                      value={selectedModel}
+                      onChange={(e) => handleModelChange(e.target.value)}
+                      disabled={!selectedMake || selectedMake === OTHER_OPTION}
+                      error={!!errors.model && !customModel}
+                    >
+                      {!selectedMake ? (
+                        <option value="">Select a Make first...</option>
+                      ) : selectedMake === OTHER_OPTION ? (
+                        <option value={OTHER_OPTION}>Other (Custom Make)</option>
+                      ) : (
+                        <>
+                          <option value="" disabled>Select Model...</option>
+                          {availableModels.map((item) => (
+                            <option key={item.model} value={item.model}>
+                              {item.model} {item.capacity ? `(${item.capacity})` : ""}
+                            </option>
+                          ))}
+                          <option value={OTHER_OPTION}>Other (Not in list)</option>
+                        </>
+                      )}
+                    </Select>
+                    {(selectedModel === OTHER_OPTION || selectedMake === OTHER_OPTION) && (
+                      <Input
+                        placeholder="Please specify Model name *"
+                        value={customModel}
+                        onChange={(e) => handleCustomModelChange(e.target.value)}
+                        error={!!errors.model}
+                        className="animate-in fade-in zoom-in-95 duration-150"
+                      />
+                    )}
+                  </div>
                 </Field>
 
                 {/* Year of Manufacture — Cannot be in future */}
@@ -1002,6 +1038,7 @@ export function ListingForm({ machine }: ListingFormProps) {
                     {...register("year_of_manufacture", { valueAsNumber: true })}
                   />
                 </Field>
+
 
                 <Field label="Condition *" error={errors.condition?.message}>
                   <Select error={!!errors.condition} {...register("condition")} defaultValue="">

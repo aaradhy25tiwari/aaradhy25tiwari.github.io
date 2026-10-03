@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Package, Users, Building2, MessageSquare, Star,
-  Shield, Bell, TrendingUp, ChevronLeft, UserCheck, Menu, X,
+  Shield, Bell, TrendingUp, ChevronLeft, UserCheck, Menu, X, Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -16,6 +16,7 @@ const navItems = [
   { label: "Overview",          href: "/admin",                  icon: LayoutDashboard },
   { label: "Account Requests",  href: "/admin/requests",         icon: UserCheck, badgeKey: "requests" },
   { label: "Machines",          href: "/admin/machines",         icon: Package },
+  { label: "Master Catalog",    href: "/admin/master-data",      icon: Database },
   { label: "Users",             href: "/admin/users",            icon: Users },
   { label: "Vendors",           href: "/admin/vendors",          icon: Building2 },
   { label: "Enquiries",         href: "/admin/enquiries",        icon: MessageSquare },

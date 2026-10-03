@@ -1,10 +1,7 @@
-"""
-Auth Router — Account request flow, Login (via Supabase), Me, Change Password, Forgot/Reset
-Registration is gated: users submit a request; admin approves and sends temp credentials.
-"""
 import uuid
-from fastapi import APIRouter, HTTPException, status, BackgroundTasks
-from pydantic import BaseModel
+import logging
+from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Request
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from supabase import create_client, Client
 
@@ -20,6 +17,12 @@ from app.schemas.user import (
     UpdateVendorProfileRequest, UpdateCustomerProfileRequest,
     UpdateBrokerProfileRequest,
 )
+from app.core.rate_limiter import (
+    limiter, check_auth_rate_limit, auth_backoff_tracker,
+    get_authenticated_user_key, get_client_ip
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -42,18 +45,19 @@ async def register_deprecated():
 
 # ── POST /auth/change-password ────────────────────────────────
 class ChangePasswordRequest(BaseModel):
-    new_password: str
-    confirm_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+    confirm_password: str = Field(min_length=8, max_length=128)
 
 
 @router.post("/change-password", status_code=status.HTTP_200_OK)
 async def change_password(
+    request: Request,
     payload: ChangePasswordRequest,
     current_user: CurrentUser,
     db: DBSession,
 ):
     """Force-change password. Clears must_change_password flag on success."""
-    from pydantic import BaseModel as _BM
+    await check_auth_rate_limit(request, current_user.email)
     import re
 
     if payload.new_password != payload.confirm_password:
@@ -86,7 +90,11 @@ async def change_password(
             {"password": payload.new_password},
         )
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Password update failed: {e}")
+        logger.error(f"Supabase password update failed for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Password update service temporarily unavailable. Please try again.",
+        )
 
     # Clear the must_change_password flag & expiry, mark verified & reset failed attempts
     current_user.must_change_password = False
@@ -100,12 +108,17 @@ async def change_password(
 
 # ── POST /auth/pre-login-check ────────────────────────────────
 class PreLoginCheckRequest(BaseModel):
-    email: str
+    email: EmailStr
 
 
 @router.post("/pre-login-check", status_code=status.HTTP_200_OK)
-async def pre_login_check(payload: PreLoginCheckRequest, db: DBSession):
-    """Check if account is blocked before login attempt."""
+async def pre_login_check(
+    request: Request,
+    payload: PreLoginCheckRequest,
+    db: DBSession,
+):
+    """Check if account is blocked before login attempt. Applies rate limit with exponential backoff."""
+    await check_auth_rate_limit(request, payload.email)
     email_clean = str(payload.email).strip().lower()
     result = await db.execute(select(User).where(User.email == email_clean))
     user = result.scalar_one_or_none()
@@ -131,12 +144,17 @@ async def pre_login_check(payload: PreLoginCheckRequest, db: DBSession):
 
 # ── POST /auth/login-failed ───────────────────────────────────
 class LoginFailedRequest(BaseModel):
-    email: str
+    email: EmailStr
 
 
 @router.post("/login-failed", status_code=status.HTTP_200_OK)
-async def login_failed(payload: LoginFailedRequest, db: DBSession):
+async def login_failed(
+    request: Request,
+    payload: LoginFailedRequest,
+    db: DBSession,
+):
     """Increment failed login attempts (max 4). Block account if attempts exhausted."""
+    await check_auth_rate_limit(request, payload.email)
     email_clean = str(payload.email).strip().lower()
     result = await db.execute(select(User).where(User.email == email_clean))
     user = result.scalar_one_or_none()
@@ -178,14 +196,21 @@ async def login_failed(payload: LoginFailedRequest, db: DBSession):
 
 # ── POST /auth/login-success ──────────────────────────────────
 class LoginSuccessRequest(BaseModel):
-    email: str
+    email: EmailStr
 
 
 @router.post("/login-success", status_code=status.HTTP_200_OK)
-async def login_success(payload: LoginSuccessRequest, db: DBSession):
-    """Handle successful login: activate/verify user, reset failed attempts counter."""
+async def login_success(
+    request: Request,
+    payload: LoginSuccessRequest,
+    db: DBSession,
+):
+    """Handle successful login: activate/verify user, reset failed attempts counter & rate limit backoffs."""
     from datetime import datetime, timezone
     email_clean = str(payload.email).strip().lower()
+    await auth_backoff_tracker.reset_key(f"account:{email_clean}")
+    await auth_backoff_tracker.reset_key(f"ip:{get_client_ip(request)}")
+
     result = await db.execute(select(User).where(User.email == email_clean))
     user = result.scalar_one_or_none()
 
@@ -224,16 +249,18 @@ async def login_success(payload: LoginSuccessRequest, db: DBSession):
 
 # ── POST /auth/request-reactivation ───────────────────────────
 class ReactivationRequestPayload(BaseModel):
-    email: str
+    email: EmailStr
 
 
 @router.post("/request-reactivation", status_code=status.HTTP_200_OK)
 async def request_reactivation(
+    request: Request,
     payload: ReactivationRequestPayload,
     background_tasks: BackgroundTasks,
     db: DBSession,
 ):
     """Send OTP for account reactivation verification to user's registered email."""
+    await check_auth_rate_limit(request, payload.email)
     import secrets
     from datetime import datetime, timezone, timedelta
     from app.models.account_reactivation_otp import AccountReactivationOTP
@@ -287,17 +314,19 @@ async def request_reactivation(
 
 # ── POST /auth/verify-reactivation-otp ─────────────────────────
 class VerifyReactivationOtpPayload(BaseModel):
-    email: str
-    otp: str
-    message: str | None = None
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    message: str | None = Field(None, max_length=1000)
 
 
 @router.post("/verify-reactivation-otp", status_code=status.HTTP_200_OK)
 async def verify_reactivation_otp(
+    request: Request,
     payload: VerifyReactivationOtpPayload,
     db: DBSession,
 ):
     """Verify OTP and submit reactivation request to Admin."""
+    await check_auth_rate_limit(request, payload.email)
     from datetime import datetime, timezone
     from app.models.account_reactivation_otp import AccountReactivationOTP
 
@@ -340,11 +369,7 @@ async def verify_reactivation_otp(
     }
 
 
-# ── GET /auth/me ───────────────────────────────────────────────
-@router.get("/me", response_model=UserResponse)
-async def get_me(current_user: CurrentUser, db: DBSession):
-    """Return the authenticated user's full profile."""
-    # Eagerly load relationships via a fresh query with joinedload
+async def _fetch_full_user(user_id, db: DBSession) -> User:
     from sqlalchemy.orm import selectinload
     result = await db.execute(
         select(User)
@@ -354,20 +379,29 @@ async def get_me(current_user: CurrentUser, db: DBSession):
             selectinload(User.broker_profile),
             selectinload(User.subscriptions).selectinload(Subscription.plan),
         )
-        .where(User.id == current_user.id)
+        .where(User.id == user_id)
     )
-    user = result.scalar_one()
-    return user
+    return result.scalar_one()
+
+
+# ── GET /auth/me ───────────────────────────────────────────────
+@router.get("/me", response_model=UserResponse)
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def get_me(request: Request, current_user: CurrentUser, db: DBSession):
+    """Return the authenticated user's full profile."""
+    return await _fetch_full_user(current_user.id, db)
 
 
 # ── POST /auth/forgot-password ─────────────────────────────────
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
 async def forgot_password(
+    request: Request,
     payload: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
     db: DBSession,
 ):
     """Generate and email a 6-digit OTP for password reset."""
+    await check_auth_rate_limit(request, payload.email)
     email_clean = str(payload.email).strip().lower()
     result = await db.execute(select(User).where(User.email == email_clean))
     user = result.scalar_one_or_none()
@@ -418,10 +452,12 @@ async def forgot_password(
 # ── POST /auth/verify-reset-otp ────────────────────────────────
 @router.post("/verify-reset-otp", status_code=status.HTTP_200_OK)
 async def verify_reset_otp(
+    request: Request,
     payload: VerifyOtpRequest,
     db: DBSession,
 ):
     """Verify if OTP is valid and not expired."""
+    await check_auth_rate_limit(request, payload.email)
     from app.models.password_reset_otp import PasswordResetOTP
     email_clean = str(payload.email).strip().lower()
     result = await db.execute(
@@ -447,10 +483,12 @@ async def verify_reset_otp(
 # ── POST /auth/reset-password ──────────────────────────────────
 @router.post("/reset-password", status_code=status.HTTP_200_OK)
 async def reset_password(
+    request: Request,
     payload: ResetPasswordRequest,
     db: DBSession,
 ):
     """Verify OTP and reset user's password in Supabase Auth & database."""
+    await check_auth_rate_limit(request, payload.email)
     import re
     from app.models.password_reset_otp import PasswordResetOTP
     email_clean = str(payload.email).strip().lower()
@@ -502,7 +540,11 @@ async def reset_password(
                 {"password": payload.new_password},
             )
         except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Failed to update password: {e}")
+            logger.error(f"Supabase password reset failed for {user.email}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Authentication service temporarily unavailable. Please try again.",
+            )
     else:
         try:
             resp = supabase.auth.admin.create_user({
@@ -512,7 +554,11 @@ async def reset_password(
             })
             user.auth_uid = uuid.UUID(resp.user.id)
         except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Failed to update password: {e}")
+            logger.error(f"Supabase user creation during reset failed for {user.email}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Authentication service temporarily unavailable. Please try again.",
+            )
 
     # 5. Mark OTP as used and clear must_change_password
     otp_record.is_used = True
@@ -524,7 +570,9 @@ async def reset_password(
 
 # ── PUT /auth/me ───────────────────────────────────────────────
 @router.put("/me", response_model=UserResponse)
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def update_me(
+    request: Request,
     payload: UpdateUserPreferencesRequest,
     current_user: CurrentUser,
     db: DBSession,
@@ -545,7 +593,9 @@ async def update_me(
 
 # ── PUT /auth/me/vendor-profile ────────────────────────────────
 @router.put("/me/vendor-profile", response_model=UserResponse)
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def update_vendor_profile(
+    request: Request,
     payload: UpdateVendorProfileRequest,
     current_user: CurrentUser,
     db: DBSession,
@@ -565,12 +615,14 @@ async def update_vendor_profile(
         setattr(profile, field, value)
 
     await db.commit()
-    return await get_me(current_user, db)
+    return await _fetch_full_user(current_user.id, db)
 
 
 # ── PUT /auth/me/broker-profile ───────────────────────────────
 @router.put("/me/broker-profile", response_model=UserResponse)
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def update_broker_profile(
+    request: Request,
     payload: UpdateBrokerProfileRequest,
     current_user: CurrentUser,
     db: DBSession,
@@ -590,12 +642,14 @@ async def update_broker_profile(
         setattr(profile, field, value)
 
     await db.commit()
-    return await get_me(current_user, db)
+    return await _fetch_full_user(current_user.id, db)
 
 
 # ── PUT /auth/me/customer-profile ─────────────────────────────
 @router.put("/me/customer-profile", response_model=UserResponse)
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def update_customer_profile(
+    request: Request,
     payload: UpdateCustomerProfileRequest,
     current_user: CurrentUser,
     db: DBSession,
@@ -615,4 +669,6 @@ async def update_customer_profile(
         setattr(profile, field, value)
 
     await db.commit()
-    return await get_me(current_user, db)
+    return await _fetch_full_user(current_user.id, db)
+
+

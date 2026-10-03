@@ -3,7 +3,7 @@ Machines Router — Public listing detail, vendor CRUD stub.
 Full CRUD lives in vendor.py; this router exposes public endpoints.
 """
 import uuid
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Request
 from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
@@ -11,12 +11,16 @@ from app.deps import OptionalUser, DBSession
 from app.models.machine import Machine, MachineStatus, MachineImage
 from app.models.user import User, VendorProfile
 from app.schemas.machine import MachineDetailResponse
+from app.core.rate_limiter import limiter
+from app.config import settings
 
 router = APIRouter()
 
 
 @router.get("/{slug}", response_model=MachineDetailResponse)
+@limiter.limit(settings.RATE_LIMIT_PUBLIC)
 async def get_machine_detail(
+    request: Request,
     slug: str,
     db: DBSession,
     current_user: OptionalUser,
@@ -137,7 +141,8 @@ async def get_machine_detail(
 
 # ── GET /machines/sitemap — for Next.js sitemap generator ─────
 @router.get("/sitemap", response_model=list[dict])
-async def get_sitemap_slugs(db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_PUBLIC)
+async def get_sitemap_slugs(request: Request, db: DBSession):
     """Return all approved machine slugs + updated_at for sitemap generation."""
     result = await db.execute(
         select(Machine.slug, Machine.updated_at)

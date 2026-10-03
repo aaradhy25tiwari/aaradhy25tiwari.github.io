@@ -2,7 +2,7 @@
 Customer Dashboard Router — Wishlists, enquiry history, preferences
 """
 import uuid
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Request
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
@@ -12,13 +12,16 @@ from app.models.machine import Machine, MachineStatus, MachineImage
 from app.models.enquiry import Enquiry
 from app.schemas.wishlist import WishlistItemResponse, WishlistListResponse
 from app.schemas.enquiry import EnquiryListItemResponse
+from app.core.rate_limiter import limiter, get_authenticated_user_key
+from app.config import settings
 
 router = APIRouter()
 
 
 # ── GET /customer/wishlist ─────────────────────────────────────
 @router.get("/wishlist", response_model=WishlistListResponse)
-async def get_wishlist(current_user: CustomerOrBrokerUser, db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def get_wishlist(request: Request, current_user: CustomerOrBrokerUser, db: DBSession):
     result = await db.execute(
         select(Wishlist)
         .options(selectinload(Wishlist.machine).selectinload(Machine.images))
@@ -54,7 +57,8 @@ async def get_wishlist(current_user: CustomerOrBrokerUser, db: DBSession):
 
 # ── POST /customer/wishlist/{machine_id} ───────────────────────
 @router.post("/wishlist/{machine_id}", status_code=status.HTTP_201_CREATED)
-async def add_to_wishlist(machine_id: str, current_user: CustomerOrBrokerUser, db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def add_to_wishlist(request: Request, machine_id: str, current_user: CustomerOrBrokerUser, db: DBSession):
     machine_result = await db.execute(
         select(Machine).where(
             Machine.id == uuid.UUID(machine_id),
@@ -82,7 +86,8 @@ async def add_to_wishlist(machine_id: str, current_user: CustomerOrBrokerUser, d
 
 # ── DELETE /customer/wishlist/{machine_id} ─────────────────────
 @router.delete("/wishlist/{machine_id}", status_code=204)
-async def remove_from_wishlist(machine_id: str, current_user: CustomerOrBrokerUser, db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def remove_from_wishlist(request: Request, machine_id: str, current_user: CustomerOrBrokerUser, db: DBSession):
     result = await db.execute(
         select(Wishlist).where(
             Wishlist.user_id == current_user.id,
@@ -98,7 +103,8 @@ async def remove_from_wishlist(machine_id: str, current_user: CustomerOrBrokerUs
 
 # ── GET /customer/enquiries ────────────────────────────────────
 @router.get("/enquiries")
-async def get_customer_enquiries(current_user: CustomerOrBrokerUser, db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def get_customer_enquiries(request: Request, current_user: CustomerOrBrokerUser, db: DBSession):
     result = await db.execute(
         select(Enquiry)
         .options(selectinload(Enquiry.machine))
@@ -122,7 +128,8 @@ async def get_customer_enquiries(current_user: CustomerOrBrokerUser, db: DBSessi
 
 # ── GET /customer/stats ────────────────────────────────────────
 @router.get("/stats")
-async def get_customer_stats(current_user: CustomerOrBrokerUser, db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def get_customer_stats(request: Request, current_user: CustomerOrBrokerUser, db: DBSession):
     wishlist_count = (await db.execute(
         select(func.count(Wishlist.id)).where(Wishlist.user_id == current_user.id)
     )).scalar() or 0
@@ -132,3 +139,4 @@ async def get_customer_stats(current_user: CustomerOrBrokerUser, db: DBSession):
     )).scalar() or 0
 
     return {"wishlist_count": wishlist_count, "total_enquiries": enquiry_count}
+

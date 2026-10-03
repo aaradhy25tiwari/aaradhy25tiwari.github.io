@@ -6,7 +6,7 @@ import uuid
 import re
 import math
 from typing import Optional
-from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Query
+from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Query, Request
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
@@ -20,6 +20,7 @@ from app.schemas.machine import (
 )
 from app.services.storage_service import upload_machine_image, delete_storage_file
 from app.services.email_service import send_listing_created_email
+from app.core.rate_limiter import limiter, get_authenticated_user_key
 from app.config import settings
 
 router = APIRouter()
@@ -27,7 +28,9 @@ router = APIRouter()
 
 # ── GET /vendor/listings ───────────────────────────────────────
 @router.get("/listings", response_model=PaginatedMachineResponse)
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def get_vendor_listings(
+    request: Request,
     current_user: VendorUser,
     db: DBSession,
     page: int = Query(1, ge=1),
@@ -90,7 +93,9 @@ async def get_vendor_listings(
 
 # ── POST /vendor/listings ──────────────────────────────────────
 @router.post("/listings", response_model=MachineDetailResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def create_listing(
+    request: Request,
     payload: MachineCreateRequest,
     current_user: VendorUser,
     db: DBSession,
@@ -191,7 +196,9 @@ async def create_listing(
 
 # ── GET /vendor/listings/{listing_id} ─────────────────────────
 @router.get("/listings/{listing_id}", response_model=MachineDetailResponse)
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def get_vendor_listing(
+    request: Request,
     listing_id: str,
     current_user: VendorUser,
     db: DBSession,
@@ -216,7 +223,9 @@ async def get_vendor_listing(
 
 # ── PUT /vendor/listings/{listing_id} ─────────────────────────
 @router.put("/listings/{listing_id}")
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def update_listing(
+    request: Request,
     listing_id: str,
     payload: MachineUpdateRequest,
     current_user: VendorUser,
@@ -248,7 +257,9 @@ async def update_listing(
 
 # ── PATCH /vendor/listings/{listing_id}/toggle ─────────────────
 @router.patch("/listings/{listing_id}/toggle")
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def toggle_listing_availability(
+    request: Request,
     listing_id: str,
     current_user: VendorUser,
     db: DBSession,
@@ -277,7 +288,9 @@ async def toggle_listing_availability(
 
 # ── POST /vendor/listings/{listing_id}/images ──────────────────
 @router.post("/listings/{listing_id}/images", status_code=status.HTTP_201_CREATED)
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def upload_listing_image(
+    request: Request,
     listing_id: str,
     current_user: VendorUser,
     db: DBSession,
@@ -343,7 +356,9 @@ async def upload_listing_image(
 
 # ── PATCH /vendor/listings/{listing_id}/images/{image_id}/primary
 @router.patch("/listings/{listing_id}/images/{image_id}/primary")
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def set_primary_image(
+    request: Request,
     listing_id: str,
     image_id: str,
     current_user: VendorUser,
@@ -374,7 +389,9 @@ async def set_primary_image(
 
 # ── DELETE /vendor/listings/{listing_id}/images/{image_id} ─────
 @router.delete("/listings/{listing_id}/images/{image_id}", status_code=204)
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def delete_listing_image(
+    request: Request,
     listing_id: str,
     image_id: str,
     current_user: VendorUser,
@@ -420,7 +437,9 @@ async def delete_listing_image(
 
 # ── DELETE /vendor/listings/{listing_id} ───────────────────────
 @router.delete("/listings/{listing_id}", status_code=204)
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def delete_listing(
+    request: Request,
     listing_id: str,
     current_user: VendorUser,
     db: DBSession,
@@ -442,7 +461,9 @@ async def delete_listing(
 
 # ── GET /vendor/enquiries ──────────────────────────────────────
 @router.get("/enquiries")
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def get_vendor_enquiries(
+    request: Request,
     current_user: VendorUser,
     db: DBSession,
     status_filter: Optional[str] = Query(None),
@@ -489,7 +510,8 @@ async def get_vendor_enquiries(
 
 # ── GET /vendor/stats ──────────────────────────────────────────
 @router.get("/stats")
-async def get_vendor_stats(current_user: VendorUser, db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def get_vendor_stats(request: Request, current_user: VendorUser, db: DBSession):
     """Aggregated stats for vendor dashboard."""
     try:
         listings_by_status = await db.execute(
@@ -525,13 +547,19 @@ async def get_vendor_stats(current_user: VendorUser, db: DBSession):
             "unread_enquiries": unread_enquiries.scalar() or 0,
         }
     except Exception as e:
-        import traceback
-        raise HTTPException(status_code=400, detail=str(e) + " " + traceback.format_exc())
+        import logging
+        logging.getLogger(__name__).error(f"Failed to calculate vendor stats: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve vendor statistics. Please try again later.",
+        )
 
 
 # ── GET /vendor/enquiries/{id} ─────────────────────────────────
 @router.get("/enquiries/{enquiry_id}")
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def get_vendor_enquiry_thread(
+    request: Request,
     enquiry_id: str,
     current_user: VendorUser,
     db: DBSession,
@@ -589,7 +617,9 @@ from app.schemas.enquiry import MessageCreateRequest
 from app.models.enquiry import EnquiryMessage
 
 @router.post("/enquiries/{enquiry_id}/reply")
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def reply_to_enquiry(
+    request: Request,
     enquiry_id: str,
     payload: MessageCreateRequest,
     current_user: VendorUser,

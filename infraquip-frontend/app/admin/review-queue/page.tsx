@@ -77,6 +77,38 @@ export default function AdminReviewQueuePage() {
     rejectMutation.mutate({ id: rejectId, reason: rejectionReason.trim() });
   };
 
+  const [masterSuccessMsg, setMasterSuccessMsg] = useState<string | null>(null);
+
+  const addToMasterMutation = useMutation({
+    mutationFn: async ({
+      listingId,
+      make,
+      model,
+      category_name,
+      add_type,
+    }: {
+      listingId: string;
+      make: string;
+      model: string;
+      category_name?: string;
+      add_type: string;
+    }) => {
+      const { data } = await apiClient.post(`/admin/review-queue/${listingId}/add-to-master`, {
+        make,
+        model,
+        category_name,
+        add_type,
+      });
+      return data;
+    },
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ["master-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-master-catalog"] });
+      setMasterSuccessMsg(res.message || "Successfully updated master catalog!");
+      setTimeout(() => setMasterSuccessMsg(null), 4000);
+    },
+  });
+
   return (
     <div className="space-y-6">
       <div>
@@ -107,7 +139,7 @@ export default function AdminReviewQueuePage() {
                 <div>
                   <p className="font-medium text-sm lg:text-base truncate">{machine.title}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {machine.vendor_name} &middot; {machine.city}, {machine.state} &middot; {formatRelativeTime(machine.created_at)}
+                    {machine.vendor_name} &middot; <span className="font-semibold text-foreground">{machine.make}</span> {machine.model} &middot; {machine.city}, {machine.state} &middot; {formatRelativeTime(machine.created_at)}
                   </p>
                 </div>
               </div>
@@ -116,7 +148,7 @@ export default function AdminReviewQueuePage() {
                   onClick={() => setPreviewMachine(machine)}
                   className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-medium transition hover:bg-muted"
                 >
-                  <Eye className="h-3.5 w-3.5" /> Preview
+                  <Eye className="h-3.5 w-3.5" /> Preview & Master Options
                 </button>
                 <button
                   onClick={() => approveMutation.mutate(machine.id)}
@@ -194,8 +226,8 @@ export default function AdminReviewQueuePage() {
         </DialogContent>
       </Dialog>
 
-      {/* Preview Modal */}
-      <Dialog open={!!previewMachine} onOpenChange={(o) => !o && setPreviewMachine(null)}>
+      {/* Preview & Master Catalog Options Modal */}
+      <Dialog open={!!previewMachine} onOpenChange={(o) => { if (!o) { setPreviewMachine(null); setMasterSuccessMsg(null); } }}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           {previewMachine && (
             <>
@@ -232,20 +264,90 @@ export default function AdminReviewQueuePage() {
                   <div>
                     <h3 className="text-sm font-semibold mb-2">Machine Details</h3>
                     <div className="grid grid-cols-2 gap-y-2 text-sm">
-                      <p className="text-muted-foreground">Make:</p>
+                      <p className="text-muted-foreground">Category:</p>
+                      <p className="font-medium">{previewMachine.category_name || "GENERAL"}</p>
+                      <p className="text-muted-foreground">Make / Brand:</p>
                       <p className="font-medium">{previewMachine.make}</p>
                       <p className="text-muted-foreground">Model:</p>
                       <p className="font-medium">{previewMachine.model}</p>
-                      <p className="text-muted-foreground">Category:</p>
-                      <p className="font-medium">{previewMachine.category_name || "N/A"}</p>
                       <p className="text-muted-foreground">Location:</p>
                       <p className="font-medium">{previewMachine.city}, {previewMachine.state}</p>
                     </div>
                   </div>
                   
-                  {/* Ideally fetch full machine details here via a separate query, but for now we use summary data */}
-                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-600">
-                    <strong>Note:</strong> Currently viewing summary data. Approve to publish to the marketplace.
+                  {/* Master Catalog Management Section for Admin */}
+                  <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-primary">
+                        Master Catalog Options
+                      </h4>
+                      <span className="text-[11px] text-muted-foreground">Updates list for all vendors</span>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      Add this vendor's make and/or model to the platform master list:
+                    </p>
+
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          addToMasterMutation.mutate({
+                            listingId: previewMachine.id,
+                            make: previewMachine.make,
+                            model: previewMachine.model,
+                            category_name: previewMachine.category_name,
+                            add_type: "both",
+                          })
+                        }
+                        disabled={addToMasterMutation.isPending}
+                        className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition shadow-sm disabled:opacity-50 cursor-pointer"
+                      >
+                        {addToMasterMutation.isPending && <Loader2 className="h-3 w-3 animate-spin" />}
+                        + Add Make & Model to Master
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          addToMasterMutation.mutate({
+                            listingId: previewMachine.id,
+                            make: previewMachine.make,
+                            model: "Standard Series",
+                            category_name: previewMachine.category_name,
+                            add_type: "make_only",
+                          })
+                        }
+                        disabled={addToMasterMutation.isPending}
+                        className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted transition disabled:opacity-50 cursor-pointer"
+                      >
+                        + Add Make Only
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          addToMasterMutation.mutate({
+                            listingId: previewMachine.id,
+                            make: previewMachine.make,
+                            model: previewMachine.model,
+                            category_name: previewMachine.category_name,
+                            add_type: "model_only",
+                          })
+                        }
+                        disabled={addToMasterMutation.isPending}
+                        className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted transition disabled:opacity-50 cursor-pointer"
+                      >
+                        + Add Model Only
+                      </button>
+                    </div>
+
+                    {masterSuccessMsg && (
+                      <div className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 p-2 text-xs font-medium text-emerald-600 animate-in fade-in duration-200">
+                        <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+                        <span>{masterSuccessMsg}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -276,3 +378,4 @@ export default function AdminReviewQueuePage() {
     </div>
   );
 }
+

@@ -7,15 +7,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy.exc import SQLAlchemyError
 import logging
 import asyncio
 import httpx
 import os
 
 from app.config import settings
+from app.core.rate_limiter import limiter, custom_rate_limit_exceeded_handler
 from app.routers import (
     auth, machines, search, vendor, customer,
     enquiries, subscriptions, admin, notifications, categories,
@@ -24,9 +24,6 @@ from app.routers import (
 
 logging.basicConfig(level=logging.INFO if not settings.DEBUG else logging.DEBUG)
 logger = logging.getLogger(__name__)
-
-# ── Rate Limiter (uses Redis-backed store when available) ─────
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
 
 async def self_ping():
@@ -76,7 +73,8 @@ def create_app() -> FastAPI:
 
     # ── Rate limiter ──────────────────────────────────────────
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_exception_handler(RateLimitExceeded, custom_rate_limit_exceeded_handler)
+
 
     # ── Middleware ─────────────────────────────────────────────
     app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -99,10 +97,18 @@ def create_app() -> FastAPI:
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(self)"
         return response
 
-    # ── Global exception handler ───────────────────────────────
+    # ── Global exception handlers ──────────────────────────────
+    @app.exception_handler(SQLAlchemyError)
+    async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+        logger.error(f"Database error during request {request.method} {request.url.path}: {exc}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "A database error occurred. Please try again later."},
+        )
+
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):
-        logger.error(f"Unhandled exception: {exc}", exc_info=True)
+        logger.error(f"Unhandled exception during request {request.method} {request.url.path}: {exc}", exc_info=True)
         return JSONResponse(
             status_code=500,
             content={"detail": "An unexpected error occurred. Please try again."},

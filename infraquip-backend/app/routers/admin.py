@@ -1,10 +1,8 @@
-"""
-Admin Router — Listing review queue, user management, platform stats
-"""
 import uuid
 import math
+import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request, status
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
@@ -23,15 +21,19 @@ from app.services.email_service import (
     send_listing_rejected_email,
     send_account_reactivated_email,
 )
+from app.core.rate_limiter import limiter, get_authenticated_user_key
 from app.config import settings
 from app.routers.account_requests import _gen_temp_password
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 # ── GET /admin/review-queue ────────────────────────────────────
 @router.get("/review-queue", response_model=ReviewQueueResponse)
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
 async def get_review_queue(
+    request: Request,
     current_user: AdminUser,
     db: DBSession,
     page: int = Query(1, ge=1),
@@ -79,7 +81,9 @@ async def get_review_queue(
 
 # ── POST /admin/review-queue/{listing_id} ─────────────────────
 @router.post("/review-queue/{listing_id}")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
 async def review_listing(
+    request: Request,
     listing_id: str,
     payload: ReviewDecisionRequest,
     background_tasks: BackgroundTasks,
@@ -136,7 +140,9 @@ async def review_listing(
 
 # ── GET /admin/machines ─────────────────────────────────────────
 @router.get("/machines")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
 async def get_admin_machines(
+    request: Request,
     current_user: AdminUser,
     db: DBSession,
     status: Optional[str] = None,
@@ -202,7 +208,8 @@ async def get_admin_machines(
 
 # ── GET /admin/stats ───────────────────────────────────────────
 @router.get("/stats", response_model=AdminStatsResponse)
-async def admin_stats(current_user: AdminUser, db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def admin_stats(request: Request, current_user: AdminUser, db: DBSession):
     """Platform-wide statistics."""
     total_users = (await db.execute(select(func.count(User.id)))).scalar() or 0
     total_listings = (await db.execute(select(func.count(Machine.id)))).scalar() or 0
@@ -237,7 +244,9 @@ async def admin_stats(current_user: AdminUser, db: DBSession):
 
 # ── GET /admin/users ───────────────────────────────────────────
 @router.get("/users", response_model=AdminUserListResponse)
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
 async def list_users(
+    request: Request,
     current_user: AdminUser,
     db: DBSession,
     search: Optional[str] = Query(None, max_length=100),
@@ -285,7 +294,9 @@ async def list_users(
 
 # ── GET /admin/vendors ─────────────────────────────────────────
 @router.get("/vendors")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
 async def list_vendors(
+    request: Request,
     current_user: AdminUser,
     db: DBSession,
     search: Optional[str] = Query(None, max_length=100),
@@ -336,7 +347,8 @@ async def list_vendors(
 
 # ── PATCH /admin/users/{user_id}/ban ──────────────────────────
 @router.patch("/users/{user_id}/ban")
-async def ban_user(user_id: str, current_user: AdminUser, db: DBSession):
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def ban_user(request: Request, user_id: str, current_user: AdminUser, db: DBSession):
     result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
     user = result.scalar_one_or_none()
     if not user:
@@ -351,7 +363,9 @@ async def ban_user(user_id: str, current_user: AdminUser, db: DBSession):
 
 # ── POST /admin/users/{user_id}/reactivate ────────────────────
 @router.post("/users/{user_id}/reactivate")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
 async def reactivate_user(
+    request: Request,
     user_id: str,
     background_tasks: BackgroundTasks,
     current_user: AdminUser,
@@ -378,7 +392,8 @@ async def reactivate_user(
                 {"password": temp_password},
             )
         except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Failed to update auth credentials: {e}")
+            logger.error("Failed to update auth credentials for reactivation: %s", e)
+            raise HTTPException(status_code=502, detail="Authentication service temporarily unavailable. Please try again.")
     else:
         try:
             resp = supabase.auth.admin.create_user({
@@ -388,7 +403,8 @@ async def reactivate_user(
             })
             user.auth_uid = uuid.UUID(resp.user.id)
         except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Failed to create auth credentials: {e}")
+            logger.error("Failed to create auth credentials for reactivation: %s", e)
+            raise HTTPException(status_code=502, detail="Authentication service temporarily unavailable. Please try again.")
 
     # Unblock, reset counters, and set 24h expiration
     user.is_banned = False
@@ -419,7 +435,9 @@ async def reactivate_user(
 
 # ── GET /admin/analytics/timeseries ────────────────────────────
 @router.get("/analytics/timeseries")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
 async def analytics_timeseries(
+    request: Request,
     current_user: AdminUser,
     db: DBSession,
     days: int = Query(30, ge=1, le=365),
@@ -512,3 +530,262 @@ async def analytics_timeseries(
             ),
         },
     }
+
+
+# ── Equipment Master Catalog Admin APIs ──────────────────────────
+
+from pydantic import BaseModel
+
+class MasterCatalogItemCreate(BaseModel):
+    category_name: str
+    make: str
+    model: str
+    capacity_specs: Optional[str] = None
+
+class MasterCatalogItemUpdate(BaseModel):
+    category_name: Optional[str] = None
+    make: Optional[str] = None
+    model: Optional[str] = None
+    capacity_specs: Optional[str] = None
+
+class AddListingToMasterRequest(BaseModel):
+    category_name: Optional[str] = None
+    make: Optional[str] = None
+    model: Optional[str] = None
+    capacity_specs: Optional[str] = None
+    add_type: str = "both"  # "make_only", "model_only", "both"
+
+
+@router.get("/master-catalog")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def get_admin_master_catalog(
+    request: Request,
+    current_user: AdminUser,
+    db: DBSession,
+    search: Optional[str] = Query(None, max_length=100),
+    category: Optional[str] = Query(None, max_length=100),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+):
+    """Admin endpoint to list, search, and filter all equipment master data."""
+    from app.models.machine import EquipmentMasterCatalog
+
+    offset = (page - 1) * per_page
+    stmt = select(EquipmentMasterCatalog).order_by(
+        EquipmentMasterCatalog.category_name,
+        EquipmentMasterCatalog.make,
+        EquipmentMasterCatalog.model,
+    )
+
+    if search:
+        s = f"%{search}%"
+        stmt = stmt.where(
+            EquipmentMasterCatalog.category_name.ilike(s) |
+            EquipmentMasterCatalog.make.ilike(s) |
+            EquipmentMasterCatalog.model.ilike(s) |
+            EquipmentMasterCatalog.capacity_specs.ilike(s)
+        )
+    if category and category != "all":
+        stmt = stmt.where(EquipmentMasterCatalog.category_name.ilike(category))
+
+    total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
+    result = await db.execute(stmt.offset(offset).limit(per_page))
+    items = result.scalars().all()
+
+    return {
+        "results": [
+            {
+                "id": str(i.id),
+                "category_name": i.category_name,
+                "make": i.make,
+                "model": i.model,
+                "capacity_specs": i.capacity_specs,
+                "created_at": i.created_at.isoformat() if i.created_at else None,
+            }
+            for i in items
+        ],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": math.ceil(total / per_page) if total > 0 else 0,
+    }
+
+
+@router.post("/master-catalog")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def create_master_catalog_item(
+    request: Request,
+    payload: MasterCatalogItemCreate,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """Add a new equipment make/model/capacity to the master catalog."""
+    from app.models.machine import EquipmentMasterCatalog
+
+    category_name = payload.category_name.strip().upper()
+    make = payload.make.strip()
+    model = payload.model.strip()
+    capacity_specs = payload.capacity_specs.strip() if payload.capacity_specs else None
+
+    if not category_name or not make or not model:
+        raise HTTPException(status_code=400, detail="Category, Make, and Model are required.")
+
+    # Check for duplicate
+    existing = await db.execute(
+        select(EquipmentMasterCatalog).where(
+            EquipmentMasterCatalog.category_name.ilike(category_name),
+            EquipmentMasterCatalog.make.ilike(make),
+            EquipmentMasterCatalog.model.ilike(model),
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail=f"Model '{model}' for make '{make}' already exists under '{category_name}'.")
+
+    new_item = EquipmentMasterCatalog(
+        category_name=category_name,
+        make=make,
+        model=model,
+        capacity_specs=capacity_specs,
+    )
+    db.add(new_item)
+    await db.commit()
+    await db.refresh(new_item)
+
+    return {
+        "id": str(new_item.id),
+        "category_name": new_item.category_name,
+        "make": new_item.make,
+        "model": new_item.model,
+        "capacity_specs": new_item.capacity_specs,
+        "message": f"Successfully added {make} {model} to master catalog.",
+    }
+
+
+@router.put("/master-catalog/{item_id}")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def update_master_catalog_item(
+    request: Request,
+    item_id: str,
+    payload: MasterCatalogItemUpdate,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """Edit an existing master catalog entry."""
+    from app.models.machine import EquipmentMasterCatalog
+
+    result = await db.execute(
+        select(EquipmentMasterCatalog).where(EquipmentMasterCatalog.id == uuid.UUID(item_id))
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="Master catalog item not found.")
+
+    if payload.category_name is not None:
+        item.category_name = payload.category_name.strip().upper()
+    if payload.make is not None:
+        item.make = payload.make.strip()
+    if payload.model is not None:
+        item.model = payload.model.strip()
+    if payload.capacity_specs is not None:
+        item.capacity_specs = payload.capacity_specs.strip() if payload.capacity_specs else None
+
+    await db.commit()
+    await db.refresh(item)
+
+    return {
+        "id": str(item.id),
+        "category_name": item.category_name,
+        "make": item.make,
+        "model": item.model,
+        "capacity_specs": item.capacity_specs,
+        "message": "Master catalog item updated successfully.",
+    }
+
+
+@router.delete("/master-catalog/{item_id}")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def delete_master_catalog_item(
+    request: Request,
+    item_id: str,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """Delete an entry from the equipment master catalog."""
+    from app.models.machine import EquipmentMasterCatalog
+
+    result = await db.execute(
+        select(EquipmentMasterCatalog).where(EquipmentMasterCatalog.id == uuid.UUID(item_id))
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="Master catalog item not found.")
+
+    await db.delete(item)
+    await db.commit()
+    return {"message": f"Deleted {item.make} {item.model} from master catalog."}
+
+
+@router.post("/review-queue/{listing_id}/add-to-master")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def add_listing_to_master(
+    request: Request,
+    listing_id: str,
+    payload: AddListingToMasterRequest,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """
+    Admin action to add make/model from a reviewed listing directly into the master catalog.
+    Supports adding Make only (with placeholder or base model), Model only, or Both.
+    """
+    from app.models.machine import EquipmentMasterCatalog
+
+    # Fetch listing
+    result = await db.execute(
+        select(Machine)
+        .options(selectinload(Machine.category))
+        .where(Machine.id == uuid.UUID(listing_id))
+    )
+    machine = result.scalar_one_or_none()
+    if not machine:
+        raise HTTPException(status_code=404, detail="Listing not found.")
+
+    category_name = (payload.category_name or (machine.category.name if machine.category else "GENERAL")).strip().upper()
+    make = (payload.make or machine.make).strip()
+    model = (payload.model or machine.model).strip()
+    capacity_specs = (payload.capacity_specs or machine.capacity_specs or "").strip() or None
+
+    # Check if already in master catalog
+    existing = await db.execute(
+        select(EquipmentMasterCatalog).where(
+            EquipmentMasterCatalog.category_name.ilike(category_name),
+            EquipmentMasterCatalog.make.ilike(make),
+            EquipmentMasterCatalog.model.ilike(model),
+        )
+    )
+    if existing.scalar_one_or_none():
+        return {
+            "already_exists": True,
+            "message": f"'{make} - {model}' is already present in the master catalog.",
+        }
+
+    new_item = EquipmentMasterCatalog(
+        category_name=category_name,
+        make=make,
+        model=model,
+        capacity_specs=capacity_specs,
+    )
+    db.add(new_item)
+    await db.commit()
+    await db.refresh(new_item)
+
+    return {
+        "success": True,
+        "id": str(new_item.id),
+        "category_name": new_item.category_name,
+        "make": new_item.make,
+        "model": new_item.model,
+        "capacity_specs": new_item.capacity_specs,
+        "message": f"Added '{make} - {model}' under '{category_name}' to the master catalog.",
+    }
+

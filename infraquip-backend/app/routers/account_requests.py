@@ -6,7 +6,7 @@ import secrets
 import string
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, status
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, status, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -21,26 +21,33 @@ from app.services.email_service import (
     send_account_approved_email,
     send_account_rejected_email,
 )
+from app.core.rate_limiter import limiter, check_auth_rate_limit, get_authenticated_user_key
 from typing import Literal
 
 router = APIRouter()
 
 
+
+from pydantic import BaseModel, EmailStr, Field
+import logging
+
+logger = logging.getLogger(__name__)
+
 # ── Pydantic schemas ───────────────────────────────────────────
 
 class AccountRequestCreate(BaseModel):
-    full_name: str
+    full_name: str = Field(min_length=2, max_length=150, pattern=r"^[a-zA-Z\s\.\'-]+$")
     email: EmailStr
-    phone: str | None = None    
+    phone: str | None = Field(None, pattern=r"^\+?[1-9]\d{9,14}$")
     role: Literal["customer", "vendor", "broker"] = "customer"
-    company_name: str | None = None
-    city: str | None = None
-    gstin_pan: str | None = None
-    message: str | None = None
+    company_name: str | None = Field(None, min_length=2, max_length=200)
+    city: str | None = Field(None, min_length=2, max_length=100)
+    gstin_pan: str | None = Field(None, max_length=30)
+    message: str | None = Field(None, max_length=1000)
 
 
 class RejectPayload(BaseModel):
-    reason: str
+    reason: str = Field(min_length=3, max_length=500)
 
 
 class AccountRequestOut(BaseModel):
@@ -109,11 +116,13 @@ def get_supabase():
 # ── POST /account-requests  (PUBLIC — no auth required) ────────
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def submit_account_request(
+    request: Request,
     payload: AccountRequestCreate,
     background_tasks: BackgroundTasks,
     db: DBSession,
 ):
-    """Submit a new account request for admin review."""
+    """Submit a new account request for admin review. Applies exponential backoff rate limiting."""
+    await check_auth_rate_limit(request, payload.email)
     # Check for duplicate email in requests
     existing_req = await db.execute(
         select(AccountRequest).where(AccountRequest.email == payload.email)
@@ -158,13 +167,16 @@ async def submit_account_request(
 
 # ── GET /admin/account-requests ────────────────────────────────
 @router.get("/admin", response_model=AccountRequestListResponse)
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
 async def list_account_requests(
+    request: Request,
     admin: AdminUser,
     db: DBSession,
     status_filter: str | None = Query(None, alias="status"),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=50),
 ):
+
     """List account requests. Admin only."""
     q = select(AccountRequest).order_by(AccountRequest.created_at.desc())
     count_q = select(func.count()).select_from(AccountRequest)
@@ -242,7 +254,11 @@ async def approve_account_request(
             },
         })
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Supabase user creation failed: {e}")
+        logger.error(f"Supabase user creation failed for account request {req.email}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to provision user credentials with authentication provider. Please try again.",
+        )
 
     auth_uid = auth_resp.user.id
     role_enum = {

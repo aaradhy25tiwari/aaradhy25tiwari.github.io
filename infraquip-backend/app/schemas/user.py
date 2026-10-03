@@ -2,7 +2,7 @@
 Pydantic schemas for User, Auth, and Profiles
 """
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from uuid import UUID
 from app.models.user import UserRole
@@ -38,12 +38,12 @@ class ForgotPasswordRequest(BaseModel):
 
 class VerifyOtpRequest(BaseModel):
     email: EmailStr
-    otp: str = Field(min_length=6, max_length=6)
+    otp: str = Field(pattern=r"^\d{6}$", description="6-digit numeric OTP")
 
 
 class ResetPasswordRequest(BaseModel):
     email: EmailStr
-    otp: str = Field(min_length=6, max_length=6)
+    otp: str = Field(pattern=r"^\d{6}$", description="6-digit numeric OTP")
     new_password: str = Field(min_length=8, max_length=128)
     confirm_password: Optional[str] = None
 
@@ -150,7 +150,7 @@ class UpdateBrokerProfileRequest(BaseModel):
 
 
 class UpdateUserPreferencesRequest(BaseModel):
-    dark_mode_preference: Optional[str] = None
-    text_size_preference: Optional[str] = None
+    dark_mode_preference: Optional[Literal["system", "dark", "light"]] = None
+    text_size_preference: Optional[Literal["sm", "base", "lg", "xl"]] = None
     full_name: Optional[str] = Field(None, min_length=2, max_length=200)
     phone: Optional[str] = Field(None, pattern=r"^\+?[1-9]\d{9,14}$")
