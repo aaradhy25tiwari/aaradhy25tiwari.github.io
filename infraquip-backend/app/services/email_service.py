@@ -296,7 +296,11 @@ def send_listing_created_email(email: str, vendor_name: str, machine_title: str,
     _send(email, f"Listing Submitted: {machine_title}", html)
 
 
-def send_listing_approved_email(email: str, vendor_name: str, machine_title: str, listing_url: str) -> None:
+def send_listing_approved_email(
+    email: str, vendor_name: str, machine_title: str, listing_url: str = ""
+) -> None:
+    if not listing_url:
+        listing_url = f"{_get_base_url()}/machines"
     html = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px; color: #1f2937;">
       <div style="text-align: center; margin-bottom: 32px;">

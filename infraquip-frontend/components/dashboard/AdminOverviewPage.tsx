@@ -7,13 +7,15 @@ import apiClient from "@/lib/api/client";
 import { formatINR } from "@/lib/utils";
 
 interface AdminStats {
-  total_machines: number;
+  total_machines?: number;
+  total_listings?: number;
   total_users: number;
   total_vendors: number;
-  pending_reviews: number;
+  pending_reviews?: number;
+  pending_review?: number;
   total_enquiries: number;
-  active_subscriptions: number;
-  monthly_revenue: number;
+  active_subscriptions?: number;
+  monthly_revenue?: number;
 }
 
 export function AdminOverviewPage() {
@@ -34,15 +36,17 @@ export function AdminOverviewPage() {
   }
 
   const stats = data;
+  const totalMachines = stats?.total_listings ?? stats?.total_machines ?? 0;
+  const pendingReviews = stats?.pending_review ?? stats?.pending_reviews ?? 0;
 
   const cards = [
-    { label: "Total Machines", value: stats?.total_machines ?? 0, icon: Package, color: "text-blue-500", href: "/admin/machines" },
+    { label: "Total Machines", value: totalMachines, icon: Package, color: "text-blue-500", href: "/admin/machines" },
     { label: "Total Users", value: stats?.total_users ?? 0, icon: Users, color: "text-emerald-500", href: "/admin/users" },
     { label: "Vendors", value: stats?.total_vendors ?? 0, icon: Building2, color: "text-amber-500", href: "/admin/vendors" },
-    { label: "Pending Reviews", value: stats?.pending_reviews ?? 0, icon: TrendingUp, color: "text-rose-500", href: "/admin/review-queue" },
+    { label: "Pending Reviews", value: pendingReviews, icon: TrendingUp, color: "text-rose-500", href: "/admin/review-queue" },
     { label: "Total Enquiries", value: stats?.total_enquiries ?? 0, icon: MessageSquare, color: "text-violet-500", href: "/admin/enquiries" },
     { label: "Active Subscriptions", value: stats?.active_subscriptions ?? 0, icon: Shield, color: "text-cyan-500", href: "/admin/analytics" },
-    { label: "Monthly Revenue", value: stats ? formatINR(stats.monthly_revenue) : "---", icon: DollarSign, color: "text-green-500", href: "/admin/analytics" },
+    { label: "Monthly Revenue", value: stats?.monthly_revenue ? formatINR(stats.monthly_revenue) : "---", icon: DollarSign, color: "text-green-500", href: "/admin/analytics" },
   ].map((c) => ({ ...c, icon: c.icon }));
 
   return (
@@ -82,11 +86,17 @@ export function AdminOverviewPage() {
               View Queue <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
           </div>
-          {stats && stats.pending_reviews > 0 ? (
+          {pendingReviews > 0 ? (
             <div className="mt-4">
               <p className="text-sm text-muted-foreground">
-                {stats.pending_reviews} machine{stats.pending_reviews > 1 ? "s" : ""} await{stats.pending_reviews === 1 ? "s" : ""} review.
+                {pendingReviews} machine{pendingReviews > 1 ? "s" : ""} await{pendingReviews === 1 ? "s" : ""} review.
               </p>
+              <Link
+                href="/admin/review-queue"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
+              >
+                Review Listings <ArrowUpRight className="h-3 w-3" />
+              </Link>
             </div>
           ) : (
             <p className="mt-4 text-sm text-muted-foreground">All machines reviewed.</p>

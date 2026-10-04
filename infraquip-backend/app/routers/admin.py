@@ -1,13 +1,14 @@
 import uuid
 import math
 import logging
-from typing import Optional
+import re
+from typing import Optional, List
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request, status
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
 from app.deps import AdminUser, DBSession
-from app.models.machine import Machine, MachineStatus
+from app.models.machine import Machine, MachineStatus, Category, SubCategory, EquipmentMasterCatalog
 from app.models.user import User, UserRole
 from app.models.enquiry import Enquiry
 from app.models.analytics import PlatformAnalytics
@@ -15,6 +16,10 @@ from app.models.subscription import Subscription
 from app.schemas.admin import (
     ReviewDecisionRequest, ReviewQueueResponse, ReviewQueueItem,
     AdminStatsResponse, AdminUserResponse, AdminUserListResponse,
+)
+from app.services.notification_service import (
+    notify_listing_approved,
+    notify_listing_rejected,
 )
 from app.services.email_service import (
     send_listing_approved_email,
@@ -100,40 +105,78 @@ async def review_listing(
     if not machine:
         raise HTTPException(status_code=404, detail="Listing not found")
 
-    from datetime import datetime
+    # Explicitly ensure vendor is loaded before committing/detaching session
+    vendor = machine.vendor
+    if not vendor and machine.vendor_id:
+        v_res = await db.execute(select(User).where(User.id == machine.vendor_id))
+        vendor = v_res.scalar_one_or_none()
+
+    vendor_email = vendor.email if vendor else None
+    vendor_name = (vendor.full_name if vendor and vendor.full_name else "Vendor")
+    machine_title = machine.title
+    machine_slug = machine.slug
+    vendor_id = machine.vendor_id
+
+    from datetime import datetime, timezone
 
     if payload.action == "approve":
         machine.status = MachineStatus.approved
-        machine.approved_at = datetime.utcnow()
+        machine.approved_at = datetime.now(timezone.utc)
         machine.rejection_reason = None
+
+        # In-app notification
+        if vendor_id:
+            try:
+                await notify_listing_approved(db, vendor_id, machine_title, machine_slug)
+            except Exception as e:
+                logger.error(f"Failed to create in-app notification for approved listing {listing_id}: {e}")
+
         await db.commit()
 
-        if machine.vendor:
+        if vendor_email:
+            base_origin = settings.ALLOWED_ORIGINS.split(",")[0].strip() if settings.ALLOWED_ORIGINS else "http://localhost:3000"
+            listing_url = f"{base_origin}/machines/{machine_slug}"
+            logger.info(f"Queuing listing approved email for {vendor_email} (Machine: '{machine_title}')")
             background_tasks.add_task(
                 send_listing_approved_email,
-                machine.vendor.email,
-                machine.vendor.full_name,
-                machine.title,
-                f"{settings.ALLOWED_ORIGINS.split(',')[0]}/machines/{machine.slug}",
+                vendor_email,
+                vendor_name,
+                machine_title,
+                listing_url,
             )
-        return {"message": f"Listing '{machine.title}' approved."}
+        else:
+            logger.warning(f"Listing {listing_id} approved but no vendor email was found (vendor_id={vendor_id})")
+
+        return {"message": f"Listing '{machine_title}' approved."}
 
     elif payload.action == "reject":
         if not payload.rejection_reason:
             raise HTTPException(status_code=400, detail="Rejection reason is required.")
         machine.status = MachineStatus.rejected
         machine.rejection_reason = payload.rejection_reason
+
+        # In-app notification
+        if vendor_id:
+            try:
+                await notify_listing_rejected(db, vendor_id, machine_title, payload.rejection_reason)
+            except Exception as e:
+                logger.error(f"Failed to create in-app notification for rejected listing {listing_id}: {e}")
+
         await db.commit()
 
-        if machine.vendor:
+        if vendor_email:
+            logger.info(f"Queuing listing rejected email for {vendor_email} (Machine: '{machine_title}')")
             background_tasks.add_task(
                 send_listing_rejected_email,
-                machine.vendor.email,
-                machine.vendor.full_name,
-                machine.title,
+                vendor_email,
+                vendor_name,
+                machine_title,
                 payload.rejection_reason,
             )
-        return {"message": f"Listing '{machine.title}' rejected."}
+        else:
+            logger.warning(f"Listing {listing_id} rejected but no vendor email was found (vendor_id={vendor_id})")
+
+        return {"message": f"Listing '{machine_title}' rejected."}
 
     raise HTTPException(status_code=400, detail="Action must be 'approve' or 'reject'.")
 
@@ -534,19 +577,22 @@ async def analytics_timeseries(
 
 # ── Equipment Master Catalog Admin APIs ──────────────────────────
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class MasterCatalogItemCreate(BaseModel):
-    category_name: str
-    make: str
-    model: str
-    capacity_specs: Optional[str] = None
+    category_name: str = Field(..., min_length=2, max_length=100)
+    make: str = Field(..., min_length=1, max_length=100)
+    model: str = Field(..., min_length=1, max_length=200)
+    capacity_specs: Optional[str] = Field(None, max_length=300)
+
+class BulkMasterCatalogItemCreate(BaseModel):
+    items: List[MasterCatalogItemCreate]
 
 class MasterCatalogItemUpdate(BaseModel):
-    category_name: Optional[str] = None
-    make: Optional[str] = None
-    model: Optional[str] = None
-    capacity_specs: Optional[str] = None
+    category_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    make: Optional[str] = Field(None, min_length=1, max_length=100)
+    model: Optional[str] = Field(None, min_length=1, max_length=200)
+    capacity_specs: Optional[str] = Field(None, max_length=300)
 
 class AddListingToMasterRequest(BaseModel):
     category_name: Optional[str] = None
@@ -554,6 +600,22 @@ class AddListingToMasterRequest(BaseModel):
     model: Optional[str] = None
     capacity_specs: Optional[str] = None
     add_type: str = "both"  # "make_only", "model_only", "both"
+
+class AdminCategoryCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100)
+    slug: Optional[str] = Field(None, max_length=120)
+    icon_url: Optional[str] = None
+    description: Optional[str] = None
+    sort_order: int = 0
+    is_active: bool = True
+
+class AdminCategoryUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=100)
+    slug: Optional[str] = Field(None, max_length=120)
+    icon_url: Optional[str] = None
+    description: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
 
 
 @router.get("/master-catalog")
@@ -788,4 +850,275 @@ async def add_listing_to_master(
         "capacity_specs": new_item.capacity_specs,
         "message": f"Added '{make} - {model}' under '{category_name}' to the master catalog.",
     }
+
+
+@router.post("/master-catalog/bulk")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def bulk_create_master_catalog_items(
+    request: Request,
+    payload: BulkMasterCatalogItemCreate,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """Bulk import equipment makes and models into the master catalog."""
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="No items provided in bulk payload.")
+
+    if len(payload.items) > 500:
+        raise HTTPException(status_code=400, detail="Maximum 500 items per bulk upload.")
+
+    added_count = 0
+    skipped_count = 0
+    seen_keys = set()
+
+    for item_data in payload.items:
+        cat = item_data.category_name.strip().upper()
+        mk = item_data.make.strip()
+        md = item_data.model.strip()
+        cap = item_data.capacity_specs.strip() if item_data.capacity_specs else None
+
+        if not cat or not mk or not md:
+            skipped_count += 1
+            continue
+
+        unique_key = (cat.lower(), mk.lower(), md.lower())
+        if unique_key in seen_keys:
+            skipped_count += 1
+            continue
+        seen_keys.add(unique_key)
+
+        # Check existing in DB
+        existing = await db.execute(
+            select(EquipmentMasterCatalog.id).where(
+                EquipmentMasterCatalog.category_name.ilike(cat),
+                EquipmentMasterCatalog.make.ilike(mk),
+                EquipmentMasterCatalog.model.ilike(md),
+            )
+        )
+        if existing.scalar_one_or_none():
+            skipped_count += 1
+            continue
+
+        db.add(EquipmentMasterCatalog(
+            category_name=cat,
+            make=mk,
+            model=md,
+            capacity_specs=cap,
+        ))
+        added_count += 1
+
+    if added_count > 0:
+        await db.commit()
+
+    return {
+        "added": added_count,
+        "skipped": skipped_count,
+        "message": f"Successfully added {added_count} items ({skipped_count} skipped/duplicates).",
+    }
+
+
+# ── Category Master Data Admin APIs ──────────────────────────────
+
+@router.get("/categories")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def get_admin_categories(
+    request: Request,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """List all categories with live listing counts for admin management."""
+    result = await db.execute(
+        select(
+            Category,
+            func.count(Machine.id).label("total_listings"),
+            func.count(func.nullif(Machine.status != MachineStatus.approved, True)).label("approved_listings"),
+        )
+        .outerjoin(Machine, Machine.category_id == Category.id)
+        .options(selectinload(Category.sub_categories))
+        .group_by(Category.id)
+        .order_by(Category.sort_order, Category.name)
+    )
+    rows = result.all()
+
+    return [
+        {
+            "id": str(row.Category.id),
+            "name": row.Category.name,
+            "slug": row.Category.slug,
+            "icon_url": row.Category.icon_url,
+            "description": row.Category.description,
+            "sort_order": row.Category.sort_order,
+            "is_active": row.Category.is_active,
+            "total_listings": row.total_listings,
+            "approved_listings": row.approved_listings,
+            "sub_categories": [
+                {
+                    "id": str(sc.id),
+                    "name": sc.name,
+                    "slug": sc.slug,
+                }
+                for sc in (row.Category.sub_categories or [])
+            ],
+        }
+        for row in rows
+    ]
+
+
+@router.post("/categories")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def create_admin_category(
+    request: Request,
+    payload: AdminCategoryCreate,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """Create a new platform category."""
+    name = payload.name.strip()
+    slug = payload.slug.strip().lower() if payload.slug else re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+
+    # Check for name/slug collisions
+    existing = await db.execute(
+        select(Category).where(
+            (Category.name.ilike(name)) | (Category.slug == slug)
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail=f"A category with name '{name}' or slug '{slug}' already exists.")
+
+    new_cat = Category(
+        name=name,
+        slug=slug,
+        icon_url=payload.icon_url.strip() if payload.icon_url else None,
+        description=payload.description.strip() if payload.description else None,
+        sort_order=payload.sort_order,
+        is_active=payload.is_active,
+    )
+    db.add(new_cat)
+    await db.commit()
+    await db.refresh(new_cat)
+
+    return {
+        "id": str(new_cat.id),
+        "name": new_cat.name,
+        "slug": new_cat.slug,
+        "icon_url": new_cat.icon_url,
+        "description": new_cat.description,
+        "sort_order": new_cat.sort_order,
+        "is_active": new_cat.is_active,
+        "message": f"Category '{new_cat.name}' created successfully.",
+    }
+
+
+@router.put("/categories/{category_id}")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def update_admin_category(
+    request: Request,
+    category_id: str,
+    payload: AdminCategoryUpdate,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """Update details of an existing category."""
+    result = await db.execute(select(Category).where(Category.id == uuid.UUID(category_id)))
+    cat = result.scalar_one_or_none()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found.")
+
+    if payload.name is not None:
+        new_name = payload.name.strip()
+        # Check duplicate name if changed
+        if new_name.lower() != cat.name.lower():
+            dup = await db.execute(select(Category).where(Category.name.ilike(new_name), Category.id != cat.id))
+            if dup.scalar_one_or_none():
+                raise HTTPException(status_code=409, detail=f"Category '{new_name}' already exists.")
+        cat.name = new_name
+
+    if payload.slug is not None:
+        new_slug = payload.slug.strip().lower()
+        if new_slug != cat.slug:
+            dup = await db.execute(select(Category).where(Category.slug == new_slug, Category.id != cat.id))
+            if dup.scalar_one_or_none():
+                raise HTTPException(status_code=409, detail=f"Category slug '{new_slug}' already exists.")
+        cat.slug = new_slug
+
+    if payload.icon_url is not None:
+        cat.icon_url = payload.icon_url.strip() if payload.icon_url else None
+    if payload.description is not None:
+        cat.description = payload.description.strip() if payload.description else None
+    if payload.sort_order is not None:
+        cat.sort_order = payload.sort_order
+    if payload.is_active is not None:
+        cat.is_active = payload.is_active
+
+    await db.commit()
+    await db.refresh(cat)
+
+    return {
+        "id": str(cat.id),
+        "name": cat.name,
+        "slug": cat.slug,
+        "icon_url": cat.icon_url,
+        "description": cat.description,
+        "sort_order": cat.sort_order,
+        "is_active": cat.is_active,
+        "message": "Category updated successfully.",
+    }
+
+
+@router.patch("/categories/{category_id}/toggle-status")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def toggle_admin_category_status(
+    request: Request,
+    category_id: str,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """Toggle active/inactive status of a category."""
+    result = await db.execute(select(Category).where(Category.id == uuid.UUID(category_id)))
+    cat = result.scalar_one_or_none()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found.")
+
+    cat.is_active = not cat.is_active
+    await db.commit()
+    await db.refresh(cat)
+
+    status_str = "activated" if cat.is_active else "deactivated"
+    return {
+        "id": str(cat.id),
+        "name": cat.name,
+        "is_active": cat.is_active,
+        "message": f"Category '{cat.name}' has been {status_str}.",
+    }
+
+
+@router.delete("/categories/{category_id}")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def delete_admin_category(
+    request: Request,
+    category_id: str,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """Delete a category if no machines are currently attached."""
+    result = await db.execute(select(Category).where(Category.id == uuid.UUID(category_id)))
+    cat = result.scalar_one_or_none()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found.")
+
+    # Check for linked machines
+    machine_count = (await db.execute(
+        select(func.count(Machine.id)).where(Machine.category_id == cat.id)
+    )).scalar() or 0
+
+    if machine_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete category '{cat.name}' because {machine_count} machine listing(s) are attached to it. Please deactivate the category or reassign listings first.",
+        )
+
+    await db.delete(cat)
+    await db.commit()
+
+    return {"message": f"Category '{cat.name}' has been deleted."}
 

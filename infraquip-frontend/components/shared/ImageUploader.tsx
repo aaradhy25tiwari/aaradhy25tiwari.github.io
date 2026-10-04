@@ -53,17 +53,24 @@ function dedupeImages(imgs?: UploadedImage[]): UploadedImage[] {
   });
 }
 
-export function ImageUploader({ machineId, existingImages = [], onImagesChange }: ImageUploaderProps) {
+export function ImageUploader({ machineId, existingImages, onImagesChange }: ImageUploaderProps) {
   const [images, setImages] = useState<UploadedImage[]>(() => dedupeImages(existingImages));
   const [previews, setPreviews] = useState<PreviewFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Safely sync with existingImages only if image IDs or count change
+  const existingImagesKey = existingImages?.map((img) => `${img.id}-${img.is_primary}`).join(",") || "";
   useEffect(() => {
     if (existingImages && Array.isArray(existingImages)) {
-      setImages(dedupeImages(existingImages));
+      const deduped = dedupeImages(existingImages);
+      setImages((prev) => {
+        const prevKey = prev.map((img) => `${img.id}-${img.is_primary}`).join(",");
+        const nextKey = deduped.map((img) => `${img.id}-${img.is_primary}`).join(",");
+        return prevKey === nextKey ? prev : deduped;
+      });
     }
-  }, [existingImages]);
+  }, [existingImagesKey]);
 
   const uploadFile = useCallback(async (file: File): Promise<UploadedImage | null> => {
     try {

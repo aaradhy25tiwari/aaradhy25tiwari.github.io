@@ -44,6 +44,8 @@ const schema = z.object({
   availability: z.boolean(),
   city: z.string().min(2, "City is required").max(40, "City cannot exceed 40 characters"),
   state: z.string().min(2, "State is required").max(40, "State cannot exceed 40 characters"),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
   rental_price_hourly: z.number().positive("Price must be positive").optional(),
   rental_price_daily: z.number().positive("Price must be positive").optional(),
   rental_price_weekly: z.number().positive("Price must be positive").optional(),
@@ -479,72 +481,132 @@ export function ListingForm({ machine }: ListingFormProps) {
     setPincodeStatus("error");
   }, [setValue]);
 
-  const fetchGpsLocation = useCallback(() => {
-    if (!navigator.geolocation) {
-      setGpsStatus("error");
-      return;
-    }
+  const fetchGpsLocation = useCallback(async () => {
     setGpsStatus("loading");
 
-    const applyLocation = (c: string, s: string) => {
-      const cleanCity = c.trim().slice(0, 40);
-      const cleanState = s.trim().slice(0, 40);
-      setValue("city", cleanCity, { shouldValidate: true });
-      setValue("state", cleanState, { shouldValidate: true });
+    const applyLocation = (districtName: string, stateName: string, pin?: string) => {
+      // Clean up District name (e.g. "Pune District" -> "Pune")
+      const cleanDistrict = districtName
+        .replace(/\s+district$/i, "")
+        .replace(/\s+zila$/i, "")
+        .trim()
+        .slice(0, 40);
+      const cleanState = stateName.trim().slice(0, 40);
+
+      setValue("city", cleanDistrict, { shouldValidate: true, shouldDirty: true });
+      setValue("state", cleanState, { shouldValidate: true, shouldDirty: true });
+      setValue("latitude", undefined, { shouldValidate: false });
+      setValue("longitude", undefined, { shouldValidate: false });
+      if (pin && /^\d{6}$/.test(pin.trim())) {
+        setPincode(pin.trim());
+      }
       setGpsStatus("ok");
     };
 
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-
-        // 1. Try BigDataCloud
-        try {
-          const res = await fetch(
-            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`,
-            { signal: AbortSignal.timeout(4000) }
-          );
-          if (res.ok) {
-            const data = await res.json();
-            const city = data.city || data.locality || data.principalSubdivision || "";
-            const state = data.principalSubdivision || "";
-            if (city || state) {
-              applyLocation(city || state, state);
-              return;
-            }
+    // Helper for IP-based geolocation fallback
+    const fallbackToIpLocation = async (): Promise<boolean> => {
+      // 1. Try internal Next.js API route (/api/detect-location)
+      try {
+        const res = await fetch("/api/detect-location", { signal: AbortSignal.timeout(5000) });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && (data.city || data.state)) {
+            applyLocation(data.city, data.state, data.pincode);
+            return true;
           }
-        } catch {
-          /* fallback */
         }
+      } catch {
+        /* fallback to client direct */
+      }
 
-        // 2. Fallback to Nominatim
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`,
-            { signal: AbortSignal.timeout(4000) }
-          );
-          if (res.ok) {
-            const data = await res.json();
-            const addr = data.address || {};
-            const city = addr.city || addr.town || addr.village || addr.county || addr.district || addr.state_district || "";
-            const state = addr.state || "";
-            if (city || state) {
-              applyLocation(city || state, state);
-              return;
-            }
+      // 2. Direct client fallback: ipwho.is
+      try {
+        const res = await fetch("https://ipwho.is/", { signal: AbortSignal.timeout(4000) });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success !== false && (data.city || data.region)) {
+            applyLocation(data.city || data.region, data.region || data.city, data.postal);
+            return true;
           }
-        } catch {
-          /* fail */
         }
+      } catch {
+        /* fallback */
+      }
 
-        setGpsStatus("error");
-      },
-      (err) => {
-        console.warn("Geolocation warning:", err);
-        setGpsStatus("error");
-      },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
-    );
+      // 3. Direct client fallback: ip-api.com
+      try {
+        const res = await fetch("https://ip-api.com/json/", { signal: AbortSignal.timeout(4000) });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === "success" && (data.city || data.regionName)) {
+            applyLocation(data.city || data.regionName, data.regionName || data.city, data.zip);
+            return true;
+          }
+        }
+      } catch {
+        /* fail */
+      }
+
+      return false;
+    };
+
+    // Try Browser Geolocation if supported
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const { latitude, longitude } = pos.coords;
+
+          // 1. Try internal API route with coordinates
+          try {
+            const res = await fetch(`/api/detect-location?lat=${latitude}&lon=${longitude}`, {
+              signal: AbortSignal.timeout(5000),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success && (data.city || data.state)) {
+                applyLocation(data.city, data.state, data.pincode);
+                return;
+              }
+            }
+          } catch {
+            /* try direct Nominatim */
+          }
+
+          // 2. Fallback to direct Nominatim reverse geocode
+          try {
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`,
+              { signal: AbortSignal.timeout(4000) }
+            );
+            if (res.ok) {
+              const data = await res.json();
+              const addr = data.address || {};
+              const rawDistrict = addr.state_district || addr.district || addr.county || addr.city || addr.town || "";
+              const state = addr.state || "";
+              if (rawDistrict || state) {
+                applyLocation(rawDistrict || state, state || rawDistrict, addr.postcode);
+                return;
+              }
+            }
+          } catch {
+            /* proceed to IP fallback */
+          }
+
+          const ipSuccess = await fallbackToIpLocation();
+          if (!ipSuccess) setGpsStatus("error");
+        },
+        async (err) => {
+          console.warn("Browser GPS unavailable, falling back to IP location:", err.message);
+          const ipSuccess = await fallbackToIpLocation();
+          if (!ipSuccess) setGpsStatus("error");
+        },
+        { enableHighAccuracy: false, timeout: 6000, maximumAge: 300000 }
+      );
+    } else {
+      // Browser doesn't support geolocation, use IP directly
+      const ipSuccess = await fallbackToIpLocation();
+      if (!ipSuccess) setGpsStatus("error");
+    }
   }, [setValue]);
 
   const listingType = watch("listing_type");
@@ -1409,10 +1471,10 @@ export function ListingForm({ machine }: ListingFormProps) {
                 ) : (
                   <LocateFixed className="h-4 w-4" />
                 )}
-                {gpsStatus === "loading" ? "Detecting location…" :
-                 gpsStatus === "ok" ? "Location detected ✓" :
-                 gpsStatus === "error" ? "Could not detect location — type manually" :
-                 "Use Current Location"}
+                {gpsStatus === "loading" ? "Detecting district…" :
+                 gpsStatus === "ok" ? "District detected ✓" :
+                 gpsStatus === "error" ? "Could not detect district — enter manually" :
+                 "Detect District (Current Location)"}
               </button>
 
               {/* ── Divider ── */}
@@ -1422,9 +1484,9 @@ export function ListingForm({ machine }: ListingFormProps) {
                 <div className="flex-1 h-px bg-border" />
               </div>
 
-              {/* ── City + State manual fields (Restricted to 40 chars) ── */}
+              {/* ── District + State manual fields (Restricted to 40 chars) ── */}
               <div className="grid gap-5 sm:grid-cols-2">
-                <Field label="City *" error={errors.city?.message} hint="Max 40 characters">
+                <Field label="District *" error={errors.city?.message} hint="District / Region name (Max 40 chars)">
                   <Input
                     placeholder="e.g. Pune"
                     maxLength={40}
@@ -1442,8 +1504,11 @@ export function ListingForm({ machine }: ListingFormProps) {
                 </Field>
               </div>
 
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-600 dark:text-amber-400">
-                📍 Only city and state are shown publicly — your exact address is never shared.
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-600 dark:text-amber-400 flex items-start gap-2.5">
+                <span className="text-base leading-none">📍</span>
+                <span>
+                  <strong>Privacy Protected:</strong> Only your <strong>district and state</strong> are shown on listings. Your exact street address and high-precision coordinates are never stored or exposed.
+                </span>
               </div>
             </div>
           )}

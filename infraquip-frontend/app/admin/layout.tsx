@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Package, Users, Building2, MessageSquare, Star,
-  Shield, Bell, TrendingUp, ChevronLeft, UserCheck, Menu, X, Database,
+  Shield, Bell, TrendingUp, ChevronLeft, UserCheck, Menu, X, Database, ClipboardCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -15,12 +15,13 @@ import apiClient from "@/lib/api/client";
 const navItems = [
   { label: "Overview",          href: "/admin",                  icon: LayoutDashboard },
   { label: "Account Requests",  href: "/admin/requests",         icon: UserCheck, badgeKey: "requests" },
+  { label: "Review Queue",      href: "/admin/review-queue",     icon: ClipboardCheck, badgeKey: "reviews_queue" },
   { label: "Machines",          href: "/admin/machines",         icon: Package },
   { label: "Master Catalog",    href: "/admin/master-data",      icon: Database },
   { label: "Users",             href: "/admin/users",            icon: Users },
   { label: "Vendors",           href: "/admin/vendors",          icon: Building2 },
   { label: "Enquiries",         href: "/admin/enquiries",        icon: MessageSquare },
-  { label: "Reviews",           href: "/admin/reviews",          icon: Star },
+  { label: "Customer Reviews",  href: "/admin/reviews",          icon: Star },
   { label: "Disputes",          href: "/admin/disputes",         icon: Shield },
   { label: "Analytics",         href: "/admin/analytics",        icon: TrendingUp },
   { label: "Notifications",     href: "/admin/notifications",    icon: Bell },
@@ -30,9 +31,9 @@ const navItems = [
 const mobileTabItems = [
   navItems[0], // Overview
   navItems[1], // Account Requests
-  navItems[2], // Machines
-  navItems[5], // Enquiries
-  navItems[8], // Analytics
+  navItems[2], // Review Queue
+  navItems[3], // Machines
+  navItems[6], // Enquiries
 ];
 
 export default function AdminDashboardLayout({ children }: { children: React.ReactNode }) {
@@ -61,13 +62,24 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
   });
   const pendingCount = reqStats?.pending ?? 0;
 
+  // Pending machine review count for badge
+  const { data: adminStats } = useQuery<{ pending_review?: number; pending_reviews?: number }>({
+    queryKey: ["admin-stats"],
+    queryFn: () => apiClient.get("/admin/stats").then(r => r.data),
+    refetchInterval: 60_000,
+    enabled: mounted,
+  });
+  const pendingReviewCount = adminStats?.pending_review ?? adminStats?.pending_reviews ?? 0;
+
   if (!mounted) return <div className="p-6 lg:p-8">{children}</div>;
 
   const isActive = (href: string) =>
     pathname === href || (href !== "/admin" && pathname.startsWith(href));
 
   const getBadge = (item: typeof navItems[0]) => {
-    if ((item as typeof navItems[0] & { badgeKey?: string }).badgeKey === "requests") return pendingCount;
+    const key = (item as typeof navItems[0] & { badgeKey?: string }).badgeKey;
+    if (key === "requests") return pendingCount;
+    if (key === "reviews_queue") return pendingReviewCount;
     return 0;
   };
 
