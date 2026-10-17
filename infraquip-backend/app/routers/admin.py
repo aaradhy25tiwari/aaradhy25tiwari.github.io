@@ -2,8 +2,10 @@ import uuid
 import math
 import logging
 import re
-from typing import Optional, List
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request, status
+import io
+import csv
+from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request, status, UploadFile, File
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
@@ -668,6 +670,9 @@ class MasterCatalogItemCreate(BaseModel):
 class BulkMasterCatalogItemCreate(BaseModel):
     items: List[MasterCatalogItemCreate]
 
+class BulkMasterCatalogAnalyzeRequest(BaseModel):
+    items: List[MasterCatalogItemCreate]
+
 class MasterCatalogItemUpdate(BaseModel):
     category_name: Optional[str] = Field(None, min_length=2, max_length=100)
     make: Optional[str] = Field(None, min_length=1, max_length=100)
@@ -932,6 +937,206 @@ async def add_listing_to_master(
     }
 
 
+def parse_tabular_or_csv_rows(content: bytes, filename: str) -> List[Dict[str, Optional[str]]]:
+    raw_rows = []
+    lower_fn = filename.lower() if filename else ""
+    if lower_fn.endswith(".xlsx") or lower_fn.endswith(".xls"):
+        import openpyxl
+        wb = openpyxl.load_workbook(filename=io.BytesIO(content), data_only=True)
+        sheet = wb.active
+        for row in sheet.iter_rows(values_only=True):
+            if any(cell is not None and str(cell).strip() != "" for cell in row):
+                raw_rows.append([str(cell).strip() if cell is not None else "" for cell in row])
+    else:
+        # CSV or text
+        try:
+            text_data = content.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text_data = content.decode("latin-1")
+        
+        sample = text_data[:2048]
+        delimiter = "\t" if "\t" in sample and sample.count("\t") > sample.count(",") else ","
+        reader = csv.reader(io.StringIO(text_data), delimiter=delimiter)
+        for row in reader:
+            if any(cell.strip() for cell in row):
+                raw_rows.append([cell.strip() for cell in row])
+
+    if not raw_rows:
+        return []
+
+    # Detect header row
+    header_indices = {"category": -1, "make": -1, "model": -1, "capacity": -1}
+    first_row = [str(c).lower().strip() for c in raw_rows[0]]
+    for idx, col in enumerate(first_row):
+        if any(k in col for k in ["category", "cat"]):
+            header_indices["category"] = idx
+        elif any(k in col for k in ["make", "brand", "manufacturer"]):
+            header_indices["make"] = idx
+        elif any(k in col for k in ["model", "model no", "model number"]):
+            header_indices["model"] = idx
+        elif any(k in col for k in ["spec", "capacity", "detail", "description"]):
+            header_indices["capacity"] = idx
+
+    has_header = (header_indices["category"] >= 0 or header_indices["make"] >= 0 or header_indices["model"] >= 0)
+    data_rows = raw_rows[1:] if has_header else raw_rows
+
+    cat_idx = header_indices["category"] if header_indices["category"] >= 0 else 0
+    mk_idx = header_indices["make"] if header_indices["make"] >= 0 else 1
+    md_idx = header_indices["model"] if header_indices["model"] >= 0 else 2
+    cap_idx = header_indices["capacity"] if header_indices["capacity"] >= 0 else (3 if len(raw_rows[0]) > 3 else -1)
+
+    parsed_items = []
+    for r in data_rows:
+        cat = r[cat_idx].strip() if len(r) > cat_idx else ""
+        mk = r[mk_idx].strip() if len(r) > mk_idx else ""
+        md = r[md_idx].strip() if len(r) > md_idx else ""
+        cap = r[cap_idx].strip() if cap_idx >= 0 and len(r) > cap_idx else None
+        
+        # Skip repeated header if present
+        if cat.lower() in ["category", "cat"] and mk.lower() in ["make", "brand"]:
+            continue
+            
+        parsed_items.append({
+            "category_name": cat,
+            "make": mk,
+            "model": md,
+            "capacity_specs": cap or None,
+        })
+        
+    return parsed_items
+
+
+def analyze_master_catalog_items(raw_items: List[Dict[str, Any]], existing_db_set: set) -> Dict[str, Any]:
+    new_items = []
+    existing_items = []
+    duplicate_in_file_items = []
+    invalid_items = []
+    seen_in_file = set()
+
+    for item in raw_items:
+        cat = (item.get("category_name") or "").strip().upper()
+        mk = (item.get("make") or "").strip()
+        md = (item.get("model") or "").strip()
+        cap = (item.get("capacity_specs") or "").strip() or None
+
+        if not cat or not mk or not md:
+            invalid_items.append({
+                "item": item,
+                "reason": "Missing required Category, Make, or Model",
+            })
+            continue
+
+        key = (cat.lower(), mk.lower(), md.lower())
+        item_obj = {
+            "category_name": cat,
+            "make": mk,
+            "model": md,
+            "capacity_specs": cap,
+        }
+
+        if key in seen_in_file:
+            duplicate_in_file_items.append(item_obj)
+            continue
+        seen_in_file.add(key)
+
+        if key in existing_db_set:
+            existing_items.append(item_obj)
+        else:
+            new_items.append(item_obj)
+
+    return {
+        "total_rows": len(raw_items),
+        "new_count": len(new_items),
+        "existing_count": len(existing_items),
+        "duplicate_in_file_count": len(duplicate_in_file_items),
+        "invalid_count": len(invalid_items),
+        "new_items": new_items,
+        "existing_items": existing_items,
+        "duplicate_in_file_items": duplicate_in_file_items,
+        "invalid_items": invalid_items,
+    }
+
+
+@router.post("/master-catalog/analyze")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def analyze_master_catalog_payload(
+    request: Request,
+    payload: BulkMasterCatalogAnalyzeRequest,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """Pre-upload analysis of master catalog items to detect new vs existing/duplicate machines."""
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="No items provided for analysis.")
+
+    existing_rows = await db.execute(
+        select(
+            func.lower(EquipmentMasterCatalog.category_name),
+            func.lower(EquipmentMasterCatalog.make),
+            func.lower(EquipmentMasterCatalog.model),
+        )
+    )
+    existing_db_set = set(existing_rows.all())
+
+    items_dicts = [item.model_dump() for item in payload.items]
+    return analyze_master_catalog_items(items_dicts, existing_db_set)
+
+
+@router.post("/master-catalog/upload-file")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def analyze_master_catalog_file(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: AdminUser = None,
+    db: DBSession = None,
+):
+    """Parse and analyze uploaded Excel/CSV file to preview new vs existing machines before confirmation."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file selected.")
+
+    allowed_exts = (".xlsx", ".xls", ".csv", ".tsv", ".txt")
+    if not any(file.filename.lower().endswith(ext) for ext in allowed_exts):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file format. Please upload an Excel (.xlsx, .xls) or CSV (.csv, .txt) file.",
+        )
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size exceeds 10MB limit.")
+
+    try:
+        parsed_items = parse_tabular_or_csv_rows(content, file.filename)
+    except Exception as e:
+        logger.error(f"Error parsing master catalog file: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to parse file: {str(e)}. Please check format.",
+        )
+
+    if not parsed_items:
+        raise HTTPException(
+            status_code=400,
+            detail="No valid machine rows could be extracted. Required columns: Category, Make, Model.",
+        )
+
+    existing_rows = await db.execute(
+        select(
+            func.lower(EquipmentMasterCatalog.category_name),
+            func.lower(EquipmentMasterCatalog.make),
+            func.lower(EquipmentMasterCatalog.model),
+        )
+    )
+    existing_db_set = set(existing_rows.all())
+
+    analysis = analyze_master_catalog_items(parsed_items, existing_db_set)
+    analysis["filename"] = file.filename
+    return analysis
+
+
 @router.post("/master-catalog/bulk")
 @limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
 async def bulk_create_master_catalog_items(
@@ -940,15 +1145,27 @@ async def bulk_create_master_catalog_items(
     current_user: AdminUser,
     db: DBSession,
 ):
-    """Bulk import equipment makes and models into the master catalog."""
+    """Bulk import equipment makes and models into the master catalog, ignoring existing machines."""
     if not payload.items:
         raise HTTPException(status_code=400, detail="No items provided in bulk payload.")
 
-    if len(payload.items) > 500:
-        raise HTTPException(status_code=400, detail="Maximum 500 items per bulk upload.")
+    if len(payload.items) > 5000:
+        raise HTTPException(status_code=400, detail="Maximum 5,000 items per bulk upload.")
+
+    # Fetch existing items from DB in one fast set query
+    existing_rows = await db.execute(
+        select(
+            func.lower(EquipmentMasterCatalog.category_name),
+            func.lower(EquipmentMasterCatalog.make),
+            func.lower(EquipmentMasterCatalog.model),
+        )
+    )
+    existing_db_set = set(existing_rows.all())
 
     added_count = 0
     skipped_count = 0
+    added_items = []
+    skipped_items = []
     seen_keys = set()
 
     for item_data in payload.items:
@@ -959,33 +1176,51 @@ async def bulk_create_master_catalog_items(
 
         if not cat or not mk or not md:
             skipped_count += 1
+            skipped_items.append({
+                "category_name": cat,
+                "make": mk,
+                "model": md,
+                "reason": "Missing Category, Make, or Model",
+            })
             continue
 
         unique_key = (cat.lower(), mk.lower(), md.lower())
         if unique_key in seen_keys:
             skipped_count += 1
+            skipped_items.append({
+                "category_name": cat,
+                "make": mk,
+                "model": md,
+                "reason": "Duplicate within uploaded list",
+            })
             continue
         seen_keys.add(unique_key)
 
-        # Check existing in DB
-        existing = await db.execute(
-            select(EquipmentMasterCatalog.id).where(
-                EquipmentMasterCatalog.category_name.ilike(cat),
-                EquipmentMasterCatalog.make.ilike(mk),
-                EquipmentMasterCatalog.model.ilike(md),
-            )
-        )
-        if existing.scalar_one_or_none():
+        if unique_key in existing_db_set:
             skipped_count += 1
+            skipped_items.append({
+                "category_name": cat,
+                "make": mk,
+                "model": md,
+                "reason": "Already exists in master catalog",
+            })
             continue
 
-        db.add(EquipmentMasterCatalog(
+        new_entry = EquipmentMasterCatalog(
             category_name=cat,
             make=mk,
             model=md,
             capacity_specs=cap,
-        ))
+        )
+        db.add(new_entry)
         added_count += 1
+        added_items.append({
+            "category_name": cat,
+            "make": mk,
+            "model": md,
+            "capacity_specs": cap,
+        })
+        existing_db_set.add(unique_key)
 
     if added_count > 0:
         await db.commit()
@@ -993,7 +1228,10 @@ async def bulk_create_master_catalog_items(
     return {
         "added": added_count,
         "skipped": skipped_count,
-        "message": f"Successfully added {added_count} items ({skipped_count} skipped/duplicates).",
+        "total_processed": len(payload.items),
+        "added_items": added_items,
+        "skipped_items": skipped_items,
+        "message": f"Successfully added {added_count} new machines. {skipped_count} existing/duplicate machines were ignored.",
     }
 
 

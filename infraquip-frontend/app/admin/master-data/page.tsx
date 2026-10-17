@@ -5,10 +5,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   Loader2, Plus, Edit2, Trash2, Search, Filter, Database, CheckCircle, 
   AlertCircle, Wrench, X, Upload, Download, Tag, Layers, Check, RefreshCw, 
-  ChevronLeft, ChevronRight, FileSpreadsheet, Power
+  ChevronLeft, ChevronRight, FileSpreadsheet, Power, FileUp, AlertTriangle,
+  ArrowRight, FileText, CheckCircle2, ArrowLeft
 } from "lucide-react";
 import apiClient from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +19,35 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+interface BulkItem {
+  category_name: string;
+  make: string;
+  model: string;
+  capacity_specs?: string | null;
+}
+
+interface BulkAnalysisResult {
+  total_rows: number;
+  new_count: number;
+  existing_count: number;
+  duplicate_in_file_count: number;
+  invalid_count: number;
+  new_items: BulkItem[];
+  existing_items: BulkItem[];
+  duplicate_in_file_items?: BulkItem[];
+  invalid_items?: Array<{ item: any; reason: string }>;
+  filename?: string;
+}
+
+interface BulkImportResult {
+  added: number;
+  skipped: number;
+  total_processed: number;
+  added_items: BulkItem[];
+  skipped_items: Array<{ category_name: string; make: string; model: string; reason: string }>;
+  message: string;
+}
 
 interface MasterCatalogItem {
   id: string;
@@ -64,9 +95,16 @@ export default function AdminMasterDataPage() {
   const [formCapacity, setFormCapacity] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Bulk Import Form
+  // Bulk Import Workflow States
+  const [bulkInputTab, setBulkInputTab] = useState<"file" | "paste">("file");
+  const [bulkStep, setBulkStep] = useState<"input" | "preview" | "summary">("input");
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
   const [bulkText, setBulkText] = useState("");
   const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkAnalysis, setBulkAnalysis] = useState<BulkAnalysisResult | null>(null);
+  const [bulkResult, setBulkResult] = useState<BulkImportResult | null>(null);
+  const [previewTab, setPreviewTab] = useState<"new" | "existing">("new");
+  const [isDragging, setIsDragging] = useState(false);
 
   // ── Categories State ───────────────────────────────────────────
   const [categorySearch, setCategorySearch] = useState("");
@@ -165,20 +203,56 @@ export default function AdminMasterDataPage() {
     },
   });
 
-  const bulkCreateMutation = useMutation({
-    mutationFn: async (payload: { items: Array<{ category_name: string; make: string; model: string; capacity_specs?: string }> }) => {
-      const { data } = await apiClient.post("/admin/master-catalog/bulk", payload);
+  const analyzeFileMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const { data } = await apiClient.post<BulkAnalysisResult>("/admin/master-catalog/upload-file", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-master-catalog"] });
-      queryClient.invalidateQueries({ queryKey: ["master-catalog"] });
-      setIsBulkOpen(false);
-      setBulkText("");
+    onSuccess: (data) => {
+      setBulkAnalysis(data);
+      setBulkStep("preview");
+      setPreviewTab(data.new_count > 0 ? "new" : "existing");
       setBulkError(null);
     },
     onError: (err: any) => {
-      setBulkError(err.response?.data?.detail || "Failed to bulk import items.");
+      setBulkError(err.response?.data?.detail || "Failed to analyze file. Please check format.");
+    },
+  });
+
+  const analyzeTextMutation = useMutation({
+    mutationFn: async (items: BulkItem[]) => {
+      const { data } = await apiClient.post<BulkAnalysisResult>("/admin/master-catalog/analyze", { items });
+      return data;
+    },
+    onSuccess: (data) => {
+      setBulkAnalysis(data);
+      setBulkStep("preview");
+      setPreviewTab(data.new_count > 0 ? "new" : "existing");
+      setBulkError(null);
+    },
+    onError: (err: any) => {
+      setBulkError(err.response?.data?.detail || "Failed to analyze text data. Please check format.");
+    },
+  });
+
+  const bulkCommitMutation = useMutation({
+    mutationFn: async (items: BulkItem[]) => {
+      const { data } = await apiClient.post<BulkImportResult>("/admin/master-catalog/bulk", { items });
+      return data;
+    },
+    onSuccess: (data) => {
+      setBulkResult(data);
+      setBulkStep("summary");
+      queryClient.invalidateQueries({ queryKey: ["admin-master-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["master-catalog"] });
+      setBulkError(null);
+    },
+    onError: (err: any) => {
+      setBulkError(err.response?.data?.detail || "Failed to import items into catalog.");
     },
   });
 
@@ -352,42 +426,79 @@ export default function AdminMasterDataPage() {
     });
   };
 
-  const handleBulkSubmit = (e: React.FormEvent) => {
+  const resetBulkState = () => {
+    setIsBulkOpen(false);
+    setBulkStep("input");
+    setBulkFile(null);
+    setBulkText("");
+    setBulkError(null);
+    setBulkAnalysis(null);
+    setBulkResult(null);
+    setPreviewTab("new");
+    setIsDragging(false);
+  };
+
+  const downloadSampleCSV = () => {
+    const content = "Category,Make,Model,Capacity Specs\nEXCAVATOR,CATERPILLAR,320D,Operating Weight: 20 MT\nBACKHOE LOADER,JCB,3DX,Engine: 76 HP\nCRANE,ACTION CONSTRUCTION,SX 150,15 Ton\nAIR COMPRESSOR,ATLAS COPCO,XA316,650 CFM";
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "master_catalog_sample.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleStartAnalysis = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bulkText.trim()) {
-      setBulkError("Please paste or enter CSV/tabular data.");
-      return;
-    }
+    setBulkError(null);
 
-    const lines = bulkText.split("\n").map(l => l.trim()).filter(Boolean);
-    const parsedItems: Array<{ category_name: string; make: string; model: string; capacity_specs?: string }> = [];
+    if (bulkInputTab === "file") {
+      if (!bulkFile) {
+        setBulkError("Please choose or drop an Excel (.xlsx, .xls) or CSV file.");
+        return;
+      }
+      analyzeFileMutation.mutate(bulkFile);
+    } else {
+      if (!bulkText.trim()) {
+        setBulkError("Please paste or enter CSV/tabular lines.");
+        return;
+      }
+      const lines = bulkText.split("\n").map(l => l.trim()).filter(Boolean);
+      const parsedItems: BulkItem[] = [];
 
-    for (const line of lines) {
-      // Support comma or tab separated
-      const parts = line.includes("\t") ? line.split("\t") : line.split(",");
-      if (parts.length >= 3) {
-        const cat = parts[0]?.trim();
-        const mk = parts[1]?.trim();
-        const md = parts[2]?.trim();
-        const cap = parts.slice(3).join(", ")?.trim();
+      for (const line of lines) {
+        const parts = line.includes("\t") ? line.split("\t") : line.split(",");
+        if (parts.length >= 3) {
+          const cat = parts[0]?.trim();
+          const mk = parts[1]?.trim();
+          const md = parts[2]?.trim();
+          const cap = parts.slice(3).join(", ")?.trim();
 
-        if (cat && mk && md && cat.toLowerCase() !== "category" && mk.toLowerCase() !== "make") {
-          parsedItems.push({
-            category_name: cat,
-            make: mk,
-            model: md,
-            capacity_specs: cap || undefined,
-          });
+          if (cat && mk && md && cat.toLowerCase() !== "category" && mk.toLowerCase() !== "make") {
+            parsedItems.push({
+              category_name: cat,
+              make: mk,
+              model: md,
+              capacity_specs: cap || undefined,
+            });
+          }
         }
       }
-    }
 
-    if (parsedItems.length === 0) {
-      setBulkError("Could not parse valid items. Format must be: Category, Make, Model, [Optional Specs]");
-      return;
-    }
+      if (parsedItems.length === 0) {
+        setBulkError("Could not parse valid items. Format must be: Category, Make, Model, [Optional Specs]");
+        return;
+      }
 
-    bulkCreateMutation.mutate({ items: parsedItems });
+      analyzeTextMutation.mutate(parsedItems);
+    }
+  };
+
+  const handleConfirmCommit = () => {
+    if (!bulkAnalysis || bulkAnalysis.new_items.length === 0) return;
+    bulkCommitMutation.mutate(bulkAnalysis.new_items);
   };
 
   const handleCategoryAddSubmit = (e: React.FormEvent) => {
@@ -893,63 +1004,433 @@ export default function AdminMasterDataPage() {
       </Dialog>
 
       {/* Bulk Import Master Models Modal */}
-      <Dialog open={isBulkOpen} onOpenChange={(o) => !o && setIsBulkOpen(false)}>
-        <DialogContent className="max-w-xl">
-          <form onSubmit={handleBulkSubmit}>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <FileSpreadsheet className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                Bulk Import Master Equipment
-              </DialogTitle>
-              <DialogDescription>
-                Paste comma-separated (CSV) or tab-separated lines from Excel. Format: <br />
-                <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-foreground font-semibold">
-                  Category, Make, Model, [Optional Specs]
-                </code>
-              </DialogDescription>
-            </DialogHeader>
+      <Dialog open={isBulkOpen} onOpenChange={(o) => !o && resetBulkState()}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          {/* ── STEP 1: INPUT STEP (File or Paste) ──────────────────── */}
+          {bulkStep === "input" && (
+            <form onSubmit={handleStartAnalysis}>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-xl">
+                  <FileSpreadsheet className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  Bulk Import Master Equipment
+                </DialogTitle>
+                <DialogDescription>
+                  Upload an Excel or CSV spreadsheet, or paste comma/tab-separated text. The system will compare it against your catalog and show you a preview before anything is added.
+                </DialogDescription>
+              </DialogHeader>
 
-            {bulkError && (
-              <div className="my-3 flex items-center gap-2 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{bulkError}</span>
+              {bulkError && (
+                <div className="my-3 flex items-center gap-2 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{bulkError}</span>
+                </div>
+              )}
+
+              {/* Mode switch pills */}
+              <div className="my-4 flex items-center justify-between gap-3 border-b border-border pb-3">
+                <div className="flex items-center gap-2 bg-muted/60 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => { setBulkInputTab("file"); setBulkError(null); }}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
+                      bulkInputTab === "file"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <FileUp className="h-3.5 w-3.5" /> Upload File (.xlsx, .csv)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setBulkInputTab("paste"); setBulkError(null); }}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
+                      bulkInputTab === "paste"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <FileText className="h-3.5 w-3.5" /> Paste Text
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={downloadSampleCSV}
+                  className="flex items-center gap-1 text-xs text-primary font-medium hover:underline cursor-pointer"
+                  title="Download a template CSV format"
+                >
+                  <Download className="h-3.5 w-3.5" /> Sample CSV
+                </button>
               </div>
-            )}
 
-            <div className="my-4">
-              <textarea
-                rows={8}
-                value={bulkText}
-                onChange={(e) => setBulkText(e.target.value)}
-                placeholder={`EXCAVATOR, CATERPILLAR, 320D, Operating Weight: 20 MT
-BACKHOE LOADER, JCB, 3DX, Engine: 76 HP
-AIR COMPRESSOR, ATLAS COPCO, XA316, 650 CFM`}
-                className="w-full rounded-xl border border-border bg-background p-3 font-mono text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                required
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Duplicates against existing records will automatically be skipped.
-              </p>
+              {/* File Upload Zone */}
+              {bulkInputTab === "file" && (
+                <div className="space-y-3">
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                        setBulkFile(e.dataTransfer.files[0]);
+                        setBulkError(null);
+                      }
+                    }}
+                    className={cn(
+                      "relative flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed transition-all text-center",
+                      isDragging
+                        ? "border-primary bg-primary/5 scale-[1.01]"
+                        : "border-border bg-card/60 hover:border-primary/40 hover:bg-muted/30"
+                    )}
+                  >
+                    <input
+                      type="file"
+                      id="bulk-file-upload"
+                      accept=".xlsx,.xls,.csv,.tsv,.txt"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          setBulkFile(e.target.files[0]);
+                          setBulkError(null);
+                        }
+                      }}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    />
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-3">
+                      <Upload className="h-6 w-6" />
+                    </div>
+                    {bulkFile ? (
+                      <div className="space-y-1">
+                        <p className="font-semibold text-sm text-foreground">{bulkFile.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(bulkFile.size / 1024).toFixed(1)} KB &middot; Click or drag to replace
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <p className="font-semibold text-sm text-foreground">
+                          Drop your Excel or CSV spreadsheet here, or <span className="text-primary hover:underline">browse</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Supports .xlsx, .xls, .csv, and tab-separated text (up to 10MB)
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+                    <p className="font-semibold text-foreground">Expected Column Structure:</p>
+                    <p>Column 1: <strong>Category</strong> (e.g. EXCAVATOR, CRANE)</p>
+                    <p>Column 2: <strong>Make</strong> (e.g. CATERPILLAR, JCB)</p>
+                    <p>Column 3: <strong>Model</strong> (e.g. 320D, 3DX)</p>
+                    <p>Column 4: <strong>Specifications</strong> (Optional summary, e.g. 20 MT)</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Paste Text Zone */}
+              {bulkInputTab === "paste" && (
+                <div className="space-y-2">
+                  <textarea
+                    rows={8}
+                    value={bulkText}
+                    onChange={(e) => setBulkText(e.target.value)}
+                    placeholder={`Category, Make, Model, Capacity Specs\nEXCAVATOR, CATERPILLAR, 320D, Operating Weight: 20 MT\nBACKHOE LOADER, JCB, 3DX, Engine: 76 HP\nAIR COMPRESSOR, ATLAS COPCO, XA316, 650 CFM`}
+                    className="w-full rounded-xl border border-border bg-background p-3 font-mono text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    required
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Paste lines separated by commas or tabs. If headers are present on the first row, they will be automatically detected.
+                  </p>
+                </div>
+              )}
+
+              <DialogFooter className="mt-5">
+                <button
+                  type="button"
+                  onClick={resetBulkState}
+                  className="rounded-xl px-4 py-2 text-sm font-medium hover:bg-muted cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={analyzeFileMutation.isPending || analyzeTextMutation.isPending}
+                  className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50 cursor-pointer"
+                >
+                  {(analyzeFileMutation.isPending || analyzeTextMutation.isPending) && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+                  Analyze & Preview Changes
+                </button>
+              </DialogFooter>
+            </form>
+          )}
+
+          {/* ── STEP 2: PREVIEW & CONFIRMATION STEP ──────────────────── */}
+          {bulkStep === "preview" && bulkAnalysis && (
+            <div className="space-y-4">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-xl">
+                  <Database className="h-5 w-5 text-primary" />
+                  Review & Confirm Catalog Update
+                </DialogTitle>
+                <DialogDescription>
+                  {bulkAnalysis.filename ? (
+                    <>Analysis for file <span className="font-semibold text-foreground">{bulkAnalysis.filename}</span>.</>
+                  ) : (
+                    "Analysis of pasted equipment data."
+                  )}{" "}
+                  Review new additions and ignored duplicates before confirming.
+                </DialogDescription>
+              </DialogHeader>
+
+              {bulkError && (
+                <div className="flex items-center gap-2 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{bulkError}</span>
+                </div>
+              )}
+
+              {/* Metrics Breakdown Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="rounded-2xl border border-border bg-card/60 p-3.5 space-y-1">
+                  <p className="text-xs uppercase font-medium text-muted-foreground tracking-wider">Total in File</p>
+                  <p className="text-2xl font-bold text-foreground">{bulkAnalysis.total_rows}</p>
+                  <p className="text-[11px] text-muted-foreground">Rows processed</p>
+                </div>
+
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3.5 space-y-1">
+                  <p className="text-xs uppercase font-medium text-emerald-700 dark:text-emerald-400 tracking-wider">New to Add</p>
+                  <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">+{bulkAnalysis.new_count}</p>
+                  <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80">Will be created in catalog</p>
+                </div>
+
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3.5 space-y-1 col-span-2 sm:col-span-1">
+                  <p className="text-xs uppercase font-medium text-amber-700 dark:text-amber-400 tracking-wider">Already in Catalog</p>
+                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{bulkAnalysis.existing_count}</p>
+                  <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80">Will be safely ignored</p>
+                </div>
+              </div>
+
+              {/* Status Note Banner */}
+              {bulkAnalysis.new_count > 0 ? (
+                <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-800 dark:text-emerald-300">
+                  <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold">Ready to update: </span>
+                    {bulkAnalysis.new_count} new machines will be added to the master list. {bulkAnalysis.existing_count > 0 && `${bulkAnalysis.existing_count} existing machines were found in your file and will be ignored.`}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold">All machines already exist: </span>
+                    Every machine listed in this file is already present in your master catalog. No new entries need to be added.
+                  </div>
+                </div>
+              )}
+
+              {/* Preview Subtabs */}
+              <div className="border border-border rounded-2xl overflow-hidden bg-card/60">
+                <div className="flex items-center border-b border-border bg-muted/40 p-1.5 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTab("new")}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer",
+                      previewTab === "new"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    New Machines ({bulkAnalysis.new_count})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTab("existing")}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer",
+                      previewTab === "existing"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <span className="h-2 w-2 rounded-full bg-amber-500" />
+                    Already Existing ({bulkAnalysis.existing_count})
+                  </button>
+                </div>
+
+                {/* Table View */}
+                <div className="max-h-56 overflow-y-auto p-2">
+                  {previewTab === "new" && (
+                    bulkAnalysis.new_items.length > 0 ? (
+                      <table className="w-full text-left text-xs">
+                        <thead className="text-[11px] uppercase text-muted-foreground sticky top-0 bg-card">
+                          <tr className="border-b border-border/50">
+                            <th className="py-1.5 px-2">Category</th>
+                            <th className="py-1.5 px-2">Make</th>
+                            <th className="py-1.5 px-2">Model</th>
+                            <th className="py-1.5 px-2">Specs</th>
+                            <th className="py-1.5 px-2 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/40">
+                          {bulkAnalysis.new_items.map((it, idx) => (
+                            <tr key={idx} className="hover:bg-muted/30">
+                              <td className="py-1.5 px-2 font-medium">{it.category_name}</td>
+                              <td className="py-1.5 px-2">{it.make}</td>
+                              <td className="py-1.5 px-2 font-semibold text-foreground">{it.model}</td>
+                              <td className="py-1.5 px-2 text-muted-foreground truncate max-w-[150px]">{it.capacity_specs || "—"}</td>
+                              <td className="py-1.5 px-2 text-right">
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                  Will Add
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <p className="py-6 text-center text-xs text-muted-foreground">
+                        No new machines to add. All rows in file already exist in the catalog.
+                      </p>
+                    )
+                  )}
+
+                  {previewTab === "existing" && (
+                    bulkAnalysis.existing_items.length > 0 ? (
+                      <table className="w-full text-left text-xs">
+                        <thead className="text-[11px] uppercase text-muted-foreground sticky top-0 bg-card">
+                          <tr className="border-b border-border/50">
+                            <th className="py-1.5 px-2">Category</th>
+                            <th className="py-1.5 px-2">Make</th>
+                            <th className="py-1.5 px-2">Model</th>
+                            <th className="py-1.5 px-2">Specs</th>
+                            <th className="py-1.5 px-2 text-right">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/40">
+                          {bulkAnalysis.existing_items.map((it, idx) => (
+                            <tr key={idx} className="hover:bg-muted/30 opacity-75">
+                              <td className="py-1.5 px-2">{it.category_name}</td>
+                              <td className="py-1.5 px-2">{it.make}</td>
+                              <td className="py-1.5 px-2 font-medium text-foreground">{it.model}</td>
+                              <td className="py-1.5 px-2 text-muted-foreground truncate max-w-[150px]">{it.capacity_specs || "—"}</td>
+                              <td className="py-1.5 px-2 text-right">
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                  Ignored / Duplicate
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <p className="py-6 text-center text-xs text-muted-foreground">
+                        None of the items in this file currently exist in the catalog. All items are brand new!
+                      </p>
+                    )
+                  )}
+                </div>
+              </div>
+
+              <DialogFooter className="mt-5 gap-2 sm:gap-0">
+                <button
+                  type="button"
+                  onClick={() => setBulkStep("input")}
+                  className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium hover:bg-muted cursor-pointer"
+                >
+                  <ArrowLeft className="h-4 w-4" /> Change File
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleConfirmCommit}
+                  disabled={bulkAnalysis.new_count === 0 || bulkCommitMutation.isPending}
+                  className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+                >
+                  {bulkCommitMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Confirm & Add {bulkAnalysis.new_count} New {bulkAnalysis.new_count === 1 ? "Machine" : "Machines"}
+                </button>
+              </DialogFooter>
             </div>
+          )}
 
-            <DialogFooter>
-              <button
-                type="button"
-                onClick={() => setIsBulkOpen(false)}
-                className="rounded-xl px-4 py-2 text-sm font-medium hover:bg-muted"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={bulkCreateMutation.isPending}
-                className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-              >
-                {bulkCreateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Import All Entries
-              </button>
-            </DialogFooter>
-          </form>
+          {/* ── STEP 3: POST-UPLOAD SUMMARY STEP ───────────────────── */}
+          {bulkStep === "summary" && bulkResult && (
+            <div className="space-y-5 text-center py-2">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-8 ring-emerald-500/5">
+                <CheckCircle2 className="h-8 w-8" />
+              </div>
+
+              <div>
+                <h3 className="text-xl font-bold text-foreground">Master Catalog Updated!</h3>
+                <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
+                  {bulkResult.message}
+                </p>
+              </div>
+
+              {/* Summary Scoreboard */}
+              <div className="grid grid-cols-2 gap-3 max-w-md mx-auto text-left">
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 space-y-1">
+                  <p className="text-[11px] uppercase tracking-wider text-emerald-700 dark:text-emerald-400 font-semibold">
+                    New Added
+                  </p>
+                  <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                    +{bulkResult.added}
+                  </p>
+                  <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80">
+                    Machines added to list
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 space-y-1">
+                  <p className="text-[11px] uppercase tracking-wider text-amber-700 dark:text-amber-400 font-semibold">
+                    Duplicates Ignored
+                  </p>
+                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                    {bulkResult.skipped}
+                  </p>
+                  <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80">
+                    Existing records preserved
+                  </p>
+                </div>
+              </div>
+
+              {/* Scrollable list of added items */}
+              {bulkResult.added_items && bulkResult.added_items.length > 0 && (
+                <div className="text-left rounded-xl border border-border bg-card/60 p-3 max-w-lg mx-auto">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Newly Added Machines ({bulkResult.added_items.length})
+                  </p>
+                  <div className="max-h-40 overflow-y-auto space-y-1 text-xs pr-1">
+                    {bulkResult.added_items.map((it, idx) => (
+                      <div key={idx} className="flex items-center justify-between py-1 border-b border-border/40 last:border-0">
+                        <span className="font-semibold text-foreground">{it.make} {it.model}</span>
+                        <span className="text-[11px] text-muted-foreground">{it.category_name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <DialogFooter className="pt-2 sm:justify-center">
+                <button
+                  type="button"
+                  onClick={resetBulkState}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 cursor-pointer"
+                >
+                  <Check className="h-4 w-4" /> Done & View Catalog
+                </button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
