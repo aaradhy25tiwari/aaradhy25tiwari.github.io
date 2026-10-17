@@ -70,14 +70,17 @@ async def search_machines(
 
     offset = (page - 1) * per_page
 
-    # Base query — only approved listings
+    # Base query — only approved listings that have not expired
     stmt = (
         select(Machine)
         .options(
             selectinload(Machine.images),
             selectinload(Machine.vendor).selectinload(User.vendor_profile),
         )
-        .where(Machine.status == MachineStatus.approved)
+        .where(
+            Machine.status == MachineStatus.approved,
+            or_(Machine.expires_at.is_(None), Machine.expires_at > func.now()),
+        )
     )
 
     # ── Full-text search via tsvector ───────────────────────────
@@ -239,7 +242,11 @@ async def search_machines(
                 hmr=m.hmr,
                 ownership_type=m.ownership_type,
                 listing_type=m.listing_type,
+                status=m.status,
                 availability=m.availability,
+                expires_at=m.expires_at,
+                is_expired=m.is_expired,
+                is_active=m.is_active,
                 city=m.city,
                 state=m.state,
                 rental_price_hourly=float(m.rental_price_hourly) if m.rental_price_hourly else None,
@@ -248,6 +255,7 @@ async def search_machines(
                 rental_price_monthly=float(m.rental_price_monthly) if m.rental_price_monthly else None,
                 purchase_price=float(m.purchase_price) if m.purchase_price else None,
                 contact_for_price=m.contact_for_price,
+                is_negotiable=getattr(m, "is_negotiable", False) or False,
                 views_count=m.views_count,
                 enquiries_count=m.enquiries_count,
                 primary_image=img_response,

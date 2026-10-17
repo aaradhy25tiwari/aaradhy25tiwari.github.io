@@ -123,6 +123,7 @@ class Machine(Base):
     rental_price_monthly = Column(Numeric(12, 2), nullable=True)
     purchase_price = Column(Numeric(14, 2), nullable=True)
     contact_for_price = Column(Boolean, default=False)
+    is_negotiable = Column(Boolean, default=False, nullable=False)
 
     # ── Location ──────────────────────────────────────────────
     city = Column(String(100), nullable=False)
@@ -146,6 +147,7 @@ class Machine(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
     approved_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
 
     # ── Relationships ─────────────────────────────────────────
     vendor = relationship("User", back_populates="machines", foreign_keys=[vendor_id])
@@ -164,11 +166,29 @@ class Machine(Base):
         Index("idx_machines_status", "status"),
         Index("idx_machines_listing_type", "listing_type"),
         Index("idx_machines_availability", "availability"),
+        Index("idx_machines_expires_at", "expires_at"),
         Index("idx_machines_city", "city"),
         Index("idx_machines_running_cond", "running_condition"),
         Index("idx_machines_ownership", "ownership_type"),
         Index("idx_machines_search_vector", "search_vector", postgresql_using="gin"),
     )
+
+    @property
+    def is_expired(self) -> bool:
+        if not self.expires_at:
+            return False
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        exp = self.expires_at if self.expires_at.tzinfo else self.expires_at.replace(tzinfo=timezone.utc)
+        return now > exp
+
+    @property
+    def is_active(self) -> bool:
+        return (
+            self.status == MachineStatus.approved
+            and bool(self.availability)
+            and not self.is_expired
+        )
 
     def __repr__(self) -> str:
         return f"<Machine {self.title} [{self.status}]>"

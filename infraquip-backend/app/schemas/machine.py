@@ -66,6 +66,7 @@ class MachineCreateRequest(BaseModel):
     rental_price_monthly: Optional[float] = Field(None, gt=0)
     purchase_price: Optional[float] = Field(None, gt=0)
     contact_for_price: bool = False
+    is_negotiable: bool = False
 
     # Location (reduced to 30-40 characters)
     city: str = Field(min_length=2, max_length=40)
@@ -114,6 +115,7 @@ class MachineUpdateRequest(BaseModel):
     rental_price_monthly: Optional[float] = Field(None, gt=0)
     purchase_price: Optional[float] = Field(None, gt=0)
     contact_for_price: Optional[bool] = None
+    is_negotiable: Optional[bool] = None
     city: Optional[str] = Field(None, min_length=2, max_length=40)
     state: Optional[str] = Field(None, min_length=2, max_length=40)
     address_line: Optional[str] = Field(None, max_length=40)
@@ -147,7 +149,11 @@ class MachineListItemResponse(BaseModel):
     running_condition: MachineRunningCondition
     hmr: Optional[int] = None
     ownership_type: MachineOwnershipType
+    status: MachineStatus = MachineStatus.approved
     availability: bool
+    expires_at: Optional[datetime] = None
+    is_expired: bool = False
+    is_active: bool = True
     city: str
     state: str
     rental_price_hourly: Optional[float] = None
@@ -156,6 +162,7 @@ class MachineListItemResponse(BaseModel):
     rental_price_monthly: Optional[float] = None
     purchase_price: Optional[float] = None
     contact_for_price: bool
+    is_negotiable: bool = False
     views_count: int
     enquiries_count: int
     primary_image: Optional[MachineImageResponse] = None
@@ -166,6 +173,7 @@ class MachineListItemResponse(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     is_wishlisted: Optional[bool] = None
+    created_at: Optional[datetime] = None
     model_config = {"from_attributes": True}
 
 
@@ -190,12 +198,16 @@ class MachineDetailResponse(BaseModel):
     min_rental_duration: Optional[str] = None
     availability: bool
     status: MachineStatus
+    expires_at: Optional[datetime] = None
+    is_expired: bool = False
+    is_active: bool = True
     rental_price_hourly: Optional[float] = None
     rental_price_daily: Optional[float] = None
     rental_price_weekly: Optional[float] = None
     rental_price_monthly: Optional[float] = None
     purchase_price: Optional[float] = None
     contact_for_price: bool
+    is_negotiable: bool = False
     city: str
     state: str
     address_line: Optional[str] = None

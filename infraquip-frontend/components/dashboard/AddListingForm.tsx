@@ -27,6 +27,7 @@ const schema = z.object({
   rental_price_daily: z.number().optional(),
   purchase_price: z.number().optional(),
   contact_for_price: z.boolean(),
+  is_negotiable: z.boolean(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -49,6 +50,7 @@ export function AddListingForm() {
       listing_type: "rent",
       min_rental_duration: "1_day",
       contact_for_price: false,
+      is_negotiable: false,
     },
   });
 
@@ -195,6 +197,14 @@ export function AddListingForm() {
           <label htmlFor="contact_for_price" className="text-sm font-medium">Contact for price</label>
           <span className="text-muted-foreground">Mark this if the price is available on request.</span>
         </div>
+
+        {!contactForPrice && (
+          <div className="flex items-center gap-3 rounded-3xl border border-border bg-muted/50 px-4 py-4 text-sm">
+            <input id="is_negotiable" type="checkbox" {...register("is_negotiable")} className="h-4 w-4 rounded border-border accent-primary" />
+            <label htmlFor="is_negotiable" className="text-sm font-medium">Price is Negotiable</label>
+            <span className="text-muted-foreground">Mark this if you are open to negotiating with buyers/hirers.</span>
+          </div>
+        )}
 
         {serverError && (
           <div className="rounded-3xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">{serverError}</div>

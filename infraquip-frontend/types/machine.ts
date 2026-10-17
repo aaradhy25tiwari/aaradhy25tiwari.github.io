@@ -66,6 +66,7 @@ export interface Machine {
   rental_price_monthly?: number;
   purchase_price?: number;
   contact_for_price: boolean;
+  is_negotiable?: boolean;
 
   // Location
   city: string;
@@ -83,6 +84,9 @@ export interface Machine {
   created_at: string;
   updated_at: string;
   approved_at?: string;
+  expires_at?: string;
+  is_expired?: boolean;
+  is_active?: boolean;
 
   // Expanded relations
   vendor?: VendorPublic;
@@ -109,6 +113,10 @@ export interface MachineListItem {
   listing_type: ListingType;
   status: MachineStatus;
   availability: boolean;
+  expires_at?: string;
+  is_expired?: boolean;
+  is_active?: boolean;
+  created_at?: string;
   city: string;
   state: string;
   rental_price_hourly?: number;
@@ -117,6 +125,7 @@ export interface MachineListItem {
   rental_price_monthly?: number;
   purchase_price?: number;
   contact_for_price: boolean;
+  is_negotiable?: boolean;
   primary_image?: MachineImage;
   vendor_name: string;
   vendor_city: string;

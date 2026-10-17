@@ -234,7 +234,14 @@ export function MachineDetailClient({ slug }: MachineDetailClientProps) {
               {/* Pricing card */}
               <div className="rounded-3xl border border-border bg-card p-6">
                 <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Price</p>
-                <p className="text-3xl font-bold text-primary mb-2">{priceLabel}</p>
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <p className="text-3xl font-bold text-primary">{priceLabel}</p>
+                  {data.is_negotiable && !data.contact_for_price && (
+                    <span className="text-xs font-semibold text-emerald-600 bg-emerald-500/10 dark:text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
+                      Negotiable
+                    </span>
+                  )}
+                </div>
                 
                 {/* Rate duration breakdown if multiple rates provided */}
                 {!data.contact_for_price && (data.rental_price_hourly || data.rental_price_daily || data.rental_price_weekly || data.rental_price_monthly) && (

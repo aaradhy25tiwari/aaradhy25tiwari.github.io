@@ -107,6 +107,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_HOURS: int = 24
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # ── Listing Validity / Expiry (days) ──────────────────────────
+    LISTING_VALIDITY_DAYS: int = 30
+
     # ── Cache TTL (seconds) ───────────────────────────────────────
     SEARCH_CACHE_TTL: int = 300
     DASHBOARD_CACHE_TTL: int = 86400

@@ -46,10 +46,21 @@ async def get_vendor_listings(
         .order_by(Machine.created_at.desc())
     )
     if status_filter:
-        try:
-            stmt = stmt.where(Machine.status == MachineStatus(status_filter))
-        except ValueError:
-            pass
+        if status_filter in ["inactive", "paused"]:
+            stmt = stmt.where(
+                (Machine.status == MachineStatus.paused)
+                | (Machine.availability == False)
+                | ((Machine.expires_at.is_not(None)) & (Machine.expires_at < func.now()))
+            )
+        elif status_filter == "expired":
+            stmt = stmt.where(
+                (Machine.expires_at.is_not(None)) & (Machine.expires_at < func.now())
+            )
+        else:
+            try:
+                stmt = stmt.where(Machine.status == MachineStatus(status_filter))
+            except ValueError:
+                pass
 
     total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
     result = await db.execute(stmt.offset(offset).limit(per_page))
@@ -69,13 +80,20 @@ async def get_vendor_listings(
             hmr=m.hmr,
             ownership_type=m.ownership_type.value if hasattr(m.ownership_type, "value") else m.ownership_type,
             listing_type=m.listing_type.value if hasattr(m.listing_type, "value") else m.listing_type,
-            availability=m.availability, city=m.city, state=m.state,
+            status=m.status.value if hasattr(m.status, "value") else m.status,
+            availability=m.availability,
+            expires_at=m.expires_at,
+            is_expired=m.is_expired,
+            is_active=m.is_active,
+            created_at=m.created_at,
+            city=m.city, state=m.state,
             rental_price_hourly=float(m.rental_price_hourly) if m.rental_price_hourly else None,
             rental_price_daily=float(m.rental_price_daily) if m.rental_price_daily else None,
             rental_price_weekly=float(m.rental_price_weekly) if m.rental_price_weekly else None,
             rental_price_monthly=float(m.rental_price_monthly) if m.rental_price_monthly else None,
             purchase_price=float(m.purchase_price) if m.purchase_price else None,
             contact_for_price=m.contact_for_price,
+            is_negotiable=getattr(m, "is_negotiable", False) or False,
             views_count=m.views_count, enquiries_count=m.enquiries_count,
             primary_image={
                 "id": str(primary_img.id), "storage_path": primary_img.storage_path,
@@ -158,6 +176,7 @@ async def create_listing(
         rental_price_monthly=payload.rental_price_monthly,
         purchase_price=payload.purchase_price,
         contact_for_price=payload.contact_for_price,
+        is_negotiable=payload.is_negotiable,
         city=payload.city,
         state=payload.state,
         address_line=payload.address_line,
@@ -264,7 +283,7 @@ async def toggle_listing_availability(
     current_user: VendorUser,
     db: DBSession,
 ):
-    """Toggle listing between paused and approved status."""
+    """Toggle listing between paused/inactive and approved status with availability."""
     result = await db.execute(
         select(Machine).where(
             Machine.id == uuid.UUID(listing_id),
@@ -275,15 +294,87 @@ async def toggle_listing_availability(
     if not machine:
         raise HTTPException(status_code=404, detail="Listing not found")
 
-    if machine.status == MachineStatus.approved:
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    validity_days = getattr(settings, "LISTING_VALIDITY_DAYS", 30)
+
+    # Check if currently fully active
+    is_currently_active = (
+        machine.status == MachineStatus.approved
+        and bool(machine.availability)
+        and not machine.is_expired
+    )
+
+    if is_currently_active:
+        # Pause / make inactive
         machine.status = MachineStatus.paused
-    elif machine.status == MachineStatus.paused:
+        machine.availability = False
+    elif machine.status in [MachineStatus.paused, MachineStatus.approved]:
+        # Reactivate
         machine.status = MachineStatus.approved
+        machine.availability = True
+        if machine.is_expired or not machine.expires_at:
+            machine.expires_at = now + timedelta(days=validity_days)
     else:
         raise HTTPException(status_code=400, detail="Can only toggle approved/paused listings.")
 
     await db.commit()
-    return {"status": machine.status.value if hasattr(machine.status, "value") else machine.status}
+    await db.refresh(machine)
+    return {
+        "status": machine.status.value if hasattr(machine.status, "value") else str(machine.status),
+        "availability": machine.availability,
+        "expires_at": machine.expires_at.isoformat() if machine.expires_at else None,
+        "is_expired": machine.is_expired,
+        "is_active": machine.is_active,
+    }
+
+
+# ── POST /vendor/listings/{listing_id}/reactivate ──────────────
+@router.post("/listings/{listing_id}/reactivate")
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def reactivate_vendor_listing(
+    request: Request,
+    listing_id: str,
+    current_user: VendorUser,
+    db: DBSession,
+):
+    """Explicitly reactivate an inactive, paused, unavailable, or expired listing."""
+    result = await db.execute(
+        select(Machine).where(
+            Machine.id == uuid.UUID(listing_id),
+            Machine.vendor_id == current_user.id,
+        )
+    )
+    machine = result.scalar_one_or_none()
+    if not machine:
+        raise HTTPException(status_code=404, detail="Listing not found or access denied")
+
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    validity_days = getattr(settings, "LISTING_VALIDITY_DAYS", 30)
+
+    # Reactivate listing
+    machine.availability = True
+    machine.expires_at = now + timedelta(days=validity_days)
+
+    if machine.status in [MachineStatus.paused, MachineStatus.approved]:
+        machine.status = MachineStatus.approved
+    elif machine.status == MachineStatus.rejected:
+        # Re-submit for review
+        machine.status = MachineStatus.pending
+        machine.rejection_reason = None
+
+    await db.commit()
+    await db.refresh(machine)
+
+    return {
+        "message": f"Listing '{machine.title}' has been successfully reactivated.",
+        "status": machine.status.value if hasattr(machine.status, "value") else str(machine.status),
+        "availability": machine.availability,
+        "expires_at": machine.expires_at.isoformat() if machine.expires_at else None,
+        "is_expired": False,
+        "is_active": machine.is_active,
+    }
 
 
 # ── POST /vendor/listings/{listing_id}/images ──────────────────

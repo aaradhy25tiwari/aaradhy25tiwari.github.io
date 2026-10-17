@@ -117,11 +117,13 @@ async def review_listing(
     machine_slug = machine.slug
     vendor_id = machine.vendor_id
 
-    from datetime import datetime, timezone
+    from datetime import datetime, timezone, timedelta
 
     if payload.action == "approve":
         machine.status = MachineStatus.approved
+        machine.availability = True
         machine.approved_at = datetime.now(timezone.utc)
+        machine.expires_at = datetime.now(timezone.utc) + timedelta(days=getattr(settings, "LISTING_VALIDITY_DAYS", 30))
         machine.rejection_reason = None
 
         # In-app notification
@@ -204,10 +206,21 @@ async def get_admin_machines(
         .order_by(Machine.created_at.desc())
     )
     if status and status != "all":
-        try:
-            stmt = stmt.where(Machine.status == MachineStatus(status))
-        except ValueError:
-            pass
+        if status in ["inactive", "paused"]:
+            stmt = stmt.where(
+                (Machine.status == MachineStatus.paused)
+                | (Machine.availability == False)
+                | ((Machine.expires_at.is_not(None)) & (Machine.expires_at < func.now()))
+            )
+        elif status == "expired":
+            stmt = stmt.where(
+                (Machine.expires_at.is_not(None)) & (Machine.expires_at < func.now())
+            )
+        else:
+            try:
+                stmt = stmt.where(Machine.status == MachineStatus(status))
+            except ValueError:
+                pass
 
     total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
     result = await db.execute(stmt.offset(offset).limit(per_page))
@@ -226,6 +239,10 @@ async def get_admin_machines(
             "model": m.model,
             "year_of_manufacture": m.year_of_manufacture,
             "status": m.status.value if hasattr(m.status, "value") else str(m.status),
+            "availability": m.availability,
+            "expires_at": m.expires_at.isoformat() if m.expires_at else None,
+            "is_expired": m.is_expired,
+            "is_active": m.is_active,
             "rejection_reason": m.rejection_reason,
             "vendor_name": m.vendor.full_name if m.vendor else "Unknown Vendor",
             "vendor_email": m.vendor.email if m.vendor else None,
@@ -236,6 +253,7 @@ async def get_admin_machines(
             "rental_price_hourly": float(m.rental_price_hourly) if m.rental_price_hourly else None,
             "rental_price_weekly": float(m.rental_price_weekly) if m.rental_price_weekly else None,
             "contact_for_price": m.contact_for_price,
+            "is_negotiable": getattr(m, "is_negotiable", False) or False,
             "created_at": m.created_at.isoformat() if m.created_at else None,
             "primary_image": primary_img.display_url if primary_img else None,
             "category_name": m.category.name if m.category else None,
@@ -246,6 +264,68 @@ async def get_admin_machines(
         "total": total,
         "page": page,
         "per_page": per_page,
+    }
+
+
+# ── POST /admin/machines/{listing_id}/reactivate ───────────────
+@router.post("/machines/{listing_id}/reactivate")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def reactivate_admin_machine(
+    request: Request,
+    listing_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """Admin reactivates an inactive, paused, unavailable, or expired listing."""
+    result = await db.execute(
+        select(Machine)
+        .options(selectinload(Machine.vendor))
+        .where(Machine.id == uuid.UUID(listing_id))
+    )
+    machine = result.scalar_one_or_none()
+    if not machine:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    validity_days = getattr(settings, "LISTING_VALIDITY_DAYS", 30)
+
+    machine.status = MachineStatus.approved
+    machine.availability = True
+    machine.rejection_reason = None
+    machine.approved_at = now
+    machine.expires_at = now + timedelta(days=validity_days)
+
+    # In-app notification
+    if machine.vendor_id:
+        try:
+            await notify_listing_approved(db, machine.vendor_id, machine.title, machine.slug)
+        except Exception as e:
+            logger.error(f"Failed to create notification for reactivated listing {listing_id}: {e}")
+
+    await db.commit()
+
+    # Email vendor
+    vendor = machine.vendor
+    if vendor and vendor.email:
+        base_origin = settings.ALLOWED_ORIGINS.split(",")[0].strip() if settings.ALLOWED_ORIGINS else "http://localhost:3000"
+        listing_url = f"{base_origin}/machines/{machine.slug}"
+        background_tasks.add_task(
+            send_listing_approved_email,
+            vendor.email,
+            vendor.full_name or "Vendor",
+            machine.title,
+            listing_url,
+        )
+
+    return {
+        "message": f"Listing '{machine.title}' has been successfully reactivated.",
+        "status": "approved",
+        "availability": True,
+        "expires_at": machine.expires_at.isoformat() if machine.expires_at else None,
+        "is_expired": False,
+        "is_active": True,
     }
 
 

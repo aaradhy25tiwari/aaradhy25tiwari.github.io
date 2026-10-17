@@ -52,6 +52,7 @@ const schema = z.object({
   rental_price_monthly: z.number().positive("Price must be positive").optional(),
   purchase_price: z.number().positive("Price must be positive").optional(),
   contact_for_price: z.boolean(),
+  is_negotiable: z.boolean(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -169,6 +170,7 @@ const EMPTY_FORM_VALUES: Partial<FormData> = {
   rental_price_monthly: undefined,
   purchase_price: undefined,
   contact_for_price: false,
+  is_negotiable: false,
 };
 
 // ── Component ─────────────────────────────────────────────────
@@ -226,6 +228,7 @@ export function ListingForm({ machine }: ListingFormProps) {
           rental_price_monthly: machine.rental_price_monthly ?? undefined,
           purchase_price: machine.purchase_price ?? undefined,
           contact_for_price: machine.contact_for_price ?? false,
+          is_negotiable: machine.is_negotiable ?? false,
         }
       : EMPTY_FORM_VALUES,
   });
@@ -275,6 +278,7 @@ export function ListingForm({ machine }: ListingFormProps) {
         rental_price_monthly: machine.rental_price_monthly ?? undefined,
         purchase_price: machine.purchase_price ?? undefined,
         contact_for_price: machine.contact_for_price ?? false,
+        is_negotiable: machine.is_negotiable ?? false,
       });
       if (machine.rental_price_hourly) setSelectedDuration("hourly");
       else if (machine.rental_price_daily) setSelectedDuration("daily");
@@ -613,6 +617,13 @@ export function ListingForm({ machine }: ListingFormProps) {
   const contactForPrice = watch("contact_for_price");
   const allValues = watch();
 
+  // Reset negotiable if vendor switches to Contact for Price
+  useEffect(() => {
+    if (contactForPrice) {
+      setValue("is_negotiable", false);
+    }
+  }, [contactForPrice, setValue]);
+
   // ── Draft detection (create-only, do not auto-fill so fields remain empty with background placeholders) ──
   useEffect(() => {
     if (isEditing) return;
@@ -810,11 +821,13 @@ export function ListingForm({ machine }: ListingFormProps) {
         if (selectedDuration !== "daily") cleanPayload.rental_price_daily = null;
         if (selectedDuration !== "weekly") cleanPayload.rental_price_weekly = null;
         if (selectedDuration !== "monthly") cleanPayload.rental_price_monthly = null;
+        cleanPayload.is_negotiable = Boolean(cleanPayload.is_negotiable);
       } else {
         cleanPayload.rental_price_hourly = null;
         cleanPayload.rental_price_daily = null;
         cleanPayload.rental_price_weekly = null;
         cleanPayload.rental_price_monthly = null;
+        cleanPayload.is_negotiable = false;
       }
       if (isEditing && machine) {
         await apiClient.put(`/vendor/listings/${machine.id}`, cleanPayload);
@@ -1345,6 +1358,26 @@ export function ListingForm({ machine }: ListingFormProps) {
                         />
                       </Field>
                     )}
+                    {/* Negotiable Checkbox when entering price */}
+                    <div className="mt-3 flex items-center gap-3 rounded-xl border border-border bg-background/80 px-4 py-3 transition-colors hover:border-primary/40">
+                      <input
+                        id="is_negotiable"
+                        type="checkbox"
+                        className="h-4 w-4 rounded accent-primary cursor-pointer"
+                        {...register("is_negotiable")}
+                      />
+                      <div className="flex-1">
+                        <label htmlFor="is_negotiable" className="text-sm font-semibold text-foreground cursor-pointer flex items-center gap-2">
+                          Price is Negotiable
+                          <span className="text-[11px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            Open to offers
+                          </span>
+                        </label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Check this if you have specified a price and are ready to negotiate with prospective clients.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

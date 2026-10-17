@@ -5,7 +5,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { 
   Loader2, Package, CheckCircle, XCircle, Eye, Search, Filter, 
-  AlertTriangle, Check, ExternalLink, MapPin, Calendar, IndianRupee, ShieldAlert
+  AlertTriangle, Check, ExternalLink, MapPin, Calendar, IndianRupee, ShieldAlert,
+  RotateCw, Clock
 } from "lucide-react";
 import apiClient from "@/lib/api/client";
 import { formatRelativeTime, formatINR, cn } from "@/lib/utils";
@@ -26,6 +27,10 @@ interface AdminMachineItem {
   model: string;
   year_of_manufacture: number;
   status: "pending" | "approved" | "rejected" | "paused";
+  availability?: boolean;
+  expires_at?: string | null;
+  is_expired?: boolean;
+  is_active?: boolean;
   rejection_reason?: string | null;
   vendor_name: string;
   vendor_email?: string | null;
@@ -36,6 +41,7 @@ interface AdminMachineItem {
   rental_price_hourly?: number | null;
   rental_price_weekly?: number | null;
   contact_for_price: boolean;
+  is_negotiable?: boolean;
   created_at: string;
   primary_image?: string | null;
   category_name?: string | null;
@@ -48,7 +54,7 @@ interface ApiResponse {
   per_page: number;
 }
 
-type TabStatus = "all" | "pending" | "approved" | "rejected" | "paused";
+type TabStatus = "all" | "pending" | "approved" | "inactive" | "paused" | "rejected";
 
 export default function AdminMachinesPage() {
   const queryClient = useQueryClient();
@@ -92,6 +98,19 @@ export default function AdminMachinesPage() {
   const approveMutation = useMutation({
     mutationFn: async (machineId: string) => {
       await apiClient.post(`/admin/review-queue/${machineId}`, { action: "approve" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-machines"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-review-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
+      setPreviewMachine(null);
+    },
+  });
+
+  const reactivateMutation = useMutation({
+    mutationFn: async (machineId: string) => {
+      const { data } = await apiClient.post(`/admin/machines/${machineId}/reactivate`);
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-machines"] });
@@ -151,8 +170,9 @@ export default function AdminMachinesPage() {
               { id: "all" as const, label: "All Listings", badge: undefined },
               { id: "pending" as const, label: "Pending Review", badge: pendingCount > 0 ? pendingCount : undefined },
               { id: "approved" as const, label: "Approved", badge: undefined },
-              { id: "rejected" as const, label: "Rejected", badge: undefined },
+              { id: "inactive" as const, label: "Inactive / Expired", badge: undefined },
               { id: "paused" as const, label: "Paused", badge: undefined },
+              { id: "rejected" as const, label: "Rejected", badge: undefined },
             ]
           ).map((tab) => (
             <button
@@ -239,17 +259,27 @@ export default function AdminMachinesPage() {
                     <span className="font-semibold text-sm sm:text-base text-foreground truncate">
                       {machine.title}
                     </span>
-                    <span
-                      className={cn(
-                        "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                        machine.status === "approved" && "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20",
-                        machine.status === "pending" && "bg-amber-500/10 text-amber-500 border border-amber-500/20",
-                        machine.status === "rejected" && "bg-destructive/10 text-destructive border border-destructive/20",
-                        machine.status === "paused" && "bg-muted text-muted-foreground border border-border"
-                      )}
-                    >
-                      {machine.status}
-                    </span>
+                    {machine.is_expired ? (
+                      <span className="rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                        Expired
+                      </span>
+                    ) : !machine.availability && machine.status === "approved" ? (
+                      <span className="rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                        Unavailable
+                      </span>
+                    ) : (
+                      <span
+                        className={cn(
+                          "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                          machine.status === "approved" && "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20",
+                          machine.status === "pending" && "bg-amber-500/10 text-amber-500 border border-amber-500/20",
+                          machine.status === "rejected" && "bg-destructive/10 text-destructive border border-destructive/20",
+                          machine.status === "paused" && "bg-muted text-muted-foreground border border-border"
+                        )}
+                      >
+                        {machine.status}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-muted-foreground">
@@ -262,12 +292,28 @@ export default function AdminMachinesPage() {
                     </span>
                     <span>&middot;</span>
                     <span className="text-primary font-semibold">{getPriceDisplay(machine)}</span>
+                    {machine.is_negotiable && !machine.contact_for_price && (
+                      <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 dark:text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+                        Negotiable
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-x-3 text-[11px] text-muted-foreground">
                     <span>Vendor: <strong className="text-foreground/90 font-medium">{machine.vendor_name}</strong></span>
                     <span>&middot;</span>
                     <span>Submitted {formatRelativeTime(machine.created_at)}</span>
+                    {machine.expires_at && (
+                      <>
+                        <span>&middot;</span>
+                        <span className={cn("flex items-center gap-1", machine.is_expired ? "text-rose-500 font-semibold" : "text-muted-foreground")}>
+                          <Clock className="h-3 w-3" />
+                          {machine.is_expired
+                            ? `Expired ${formatRelativeTime(machine.expires_at)}`
+                            : `Valid until ${new Date(machine.expires_at).toLocaleDateString()}`}
+                        </span>
+                      </>
+                    )}
                     {machine.rejection_reason && (
                       <span className="text-destructive font-medium">
                         &middot; Reason: {machine.rejection_reason}
@@ -279,6 +325,24 @@ export default function AdminMachinesPage() {
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 pt-2 lg:pt-0 border-t lg:border-t-0 border-border justify-end flex-wrap">
+                {/* Reactivate Button (if inactive, paused, unavailable, or expired) */}
+                {(!machine.availability || machine.status === "paused" || machine.is_expired) && (
+                  <button
+                    type="button"
+                    onClick={() => reactivateMutation.mutate(machine.id)}
+                    disabled={reactivateMutation.isPending || approveMutation.isPending}
+                    className="flex items-center gap-1.5 rounded-xl bg-emerald-500 text-white px-3 py-2 text-xs font-semibold hover:bg-emerald-600 transition-colors disabled:opacity-50 cursor-pointer shadow-sm"
+                    title="Reactivate this machine listing"
+                  >
+                    {reactivateMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RotateCw className="h-3.5 w-3.5" />
+                    )}
+                    Reactivate
+                  </button>
+                )}
+
                 {/* Preview */}
                 <button
                   type="button"
@@ -288,7 +352,7 @@ export default function AdminMachinesPage() {
                   <Eye className="h-3.5 w-3.5" /> Preview
                 </button>
 
-                {/* Approve Button (shown if not already approved) */}
+                {/* Approve Button (shown if not already approved or active) */}
                 {machine.status !== "approved" && (
                   <button
                     type="button"
@@ -411,16 +475,23 @@ export default function AdminMachinesPage() {
                       Submitted by <span className="font-semibold text-foreground">{previewMachine.vendor_name}</span> &middot; {formatRelativeTime(previewMachine.created_at)}
                     </DialogDescription>
                   </div>
-                  <span
-                    className={cn(
-                      "rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider",
-                      previewMachine.status === "approved" && "bg-emerald-500/10 text-emerald-500",
-                      previewMachine.status === "pending" && "bg-amber-500/10 text-amber-500",
-                      previewMachine.status === "rejected" && "bg-destructive/10 text-destructive"
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={cn(
+                        "rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider",
+                        previewMachine.status === "approved" && "bg-emerald-500/10 text-emerald-500",
+                        previewMachine.status === "pending" && "bg-amber-500/10 text-amber-500",
+                        previewMachine.status === "rejected" && "bg-destructive/10 text-destructive"
+                      )}
+                    >
+                      {previewMachine.status}
+                    </span>
+                    {(previewMachine.is_expired || previewMachine.is_active === false || !previewMachine.availability) && (
+                      <span className="rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                        {previewMachine.is_expired ? "Expired" : "Inactive"}
+                      </span>
                     )}
-                  >
-                    {previewMachine.status}
-                  </span>
+                  </div>
                 </div>
               </DialogHeader>
 
@@ -456,7 +527,26 @@ export default function AdminMachinesPage() {
                       <p className="text-muted-foreground">Location:</p>
                       <p className="font-semibold">{previewMachine.city}, {previewMachine.state}</p>
                       <p className="text-muted-foreground">Pricing:</p>
-                      <p className="font-semibold text-primary">{getPriceDisplay(previewMachine)}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-primary">{getPriceDisplay(previewMachine)}</span>
+                        {previewMachine.is_negotiable && !previewMachine.contact_for_price && (
+                          <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 dark:text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+                            Negotiable
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-muted-foreground">Availability:</p>
+                      <p className={cn("font-semibold", previewMachine.availability ? "text-emerald-500" : "text-amber-500")}>
+                        {previewMachine.availability ? "Available" : "Unavailable / Inactive"}
+                      </p>
+                      {previewMachine.expires_at && (
+                        <>
+                          <p className="text-muted-foreground">Listing Validity:</p>
+                          <p className={cn("font-semibold", previewMachine.is_expired ? "text-amber-500" : "text-emerald-500")}>
+                            {previewMachine.is_expired ? "Expired" : `Valid until ${formatRelativeTime(previewMachine.expires_at)}`}
+                          </p>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -476,7 +566,20 @@ export default function AdminMachinesPage() {
                 </div>
               </div>
 
-              <DialogFooter className="gap-2 sm:gap-0">
+              <DialogFooter className="gap-2 sm:gap-2 flex-wrap">
+                {(previewMachine.is_expired || !previewMachine.availability || previewMachine.is_active === false) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      reactivateMutation.mutate(previewMachine.id);
+                      setPreviewMachine(null);
+                    }}
+                    disabled={reactivateMutation.isPending}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+                  >
+                    <RotateCw className={cn("h-4 w-4", reactivateMutation.isPending && "animate-spin")} /> Reactivate Listing
+                  </button>
+                )}
                 {previewMachine.status !== "rejected" && (
                   <button
                     type="button"

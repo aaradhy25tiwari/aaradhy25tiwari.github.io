@@ -131,9 +131,16 @@ export function MachineCard({ machine, className, onToggleWishlist }: MachineCar
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-0.5">
               {isRent ? "Rental Rate" : "Asking Price"}
             </p>
-            <p className="font-bold text-lg text-primary leading-none">
-              {getPriceDisplay()}
-            </p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="font-bold text-lg text-primary leading-none">
+                {getPriceDisplay()}
+              </p>
+              {machine.is_negotiable && !machine.contact_for_price && (
+                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 dark:text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+                  Negotiable
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-1.5 max-w-[50%]">
             <div className="truncate text-right">
