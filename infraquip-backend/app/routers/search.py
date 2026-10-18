@@ -30,6 +30,8 @@ async def search_machines(
     current_user: OptionalUser,
     q: Optional[str] = Query(None, max_length=200),
     category: Optional[str] = Query(None),
+    make: Optional[str] = Query(None, max_length=100),
+    model: Optional[str] = Query(None, max_length=100),
     city: Optional[str] = Query(None, max_length=100),
     state: Optional[str] = Query(None, max_length=100),
     radius: Optional[int] = Query(None, ge=1, le=500),
@@ -47,17 +49,16 @@ async def search_machines(
     per_page: int = Query(24, ge=1, le=50),
 ):
     """
-    Search/filter machines with full-text search, category, location, price,
-    condition, and availability filters. Supports relevance-ranked FTS via
-    PostgreSQL tsvector, distance-based sorting via PostGIS, and radius
-    filtering. Popular queries are cached in Redis (5-minute TTL).
+    Search/filter machines with full-text search, category, brand/make, model,
+    location, price, condition, and availability filters.
     """
     # Check cache for unauthenticated, non-geo queries
     use_cache = current_user is None and lat is None and lng is None
     cache_key = None
     if use_cache:
         params = {
-            "q": q, "category": category, "city": city, "state": state,
+            "q": q, "category": category, "make": make, "model": model,
+            "city": city, "state": state,
             "listing_type": listing_type, "condition": condition,
             "running_condition": running_condition, "ownership_type": ownership_type,
             "min_price": min_price, "max_price": max_price,
@@ -89,15 +90,31 @@ async def search_machines(
             Machine.search_vector.op("@@")(func.plainto_tsquery("english", q))
         )
 
-    # ── Category filter (by slug) ──────────────────────────────
+    # ── Category filter (by slug or name) ──────────────────────
     if category:
         from app.models.machine import Category
+        clean_cat = category.strip().lower()
         cat_result = await db.execute(
-            select(Category.id).where(Category.slug == category)
+            select(Category.id).where(
+                or_(
+                    Category.slug == clean_cat,
+                    Category.slug == clean_cat.replace(" ", "-"),
+                    func.lower(Category.name) == clean_cat,
+                    Category.name.ilike(f"%{clean_cat}%"),
+                )
+            )
         )
-        cat_id = cat_result.scalar_one_or_none()
-        if cat_id:
-            stmt = stmt.where(Machine.category_id == cat_id)
+        cat_ids = cat_result.scalars().all()
+        if cat_ids:
+            stmt = stmt.where(Machine.category_id.in_(cat_ids))
+
+    # ── Brand / Make filter (Master Data) ───────────────────────
+    if make:
+        stmt = stmt.where(Machine.make.ilike(make.strip()))
+
+    # ── Model filter (Master Data) ──────────────────────────────
+    if model:
+        stmt = stmt.where(Machine.model.ilike(model.strip()))
 
     # ── Location filters ───────────────────────────────────────
     if city:

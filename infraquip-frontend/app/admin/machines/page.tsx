@@ -6,10 +6,11 @@ import Link from "next/link";
 import { 
   Loader2, Package, CheckCircle, XCircle, Eye, Search, Filter, 
   AlertTriangle, Check, ExternalLink, MapPin, Calendar, IndianRupee, ShieldAlert,
-  RotateCw, Clock
+  RotateCw, Clock, FileSpreadsheet
 } from "lucide-react";
 import apiClient from "@/lib/api/client";
 import { formatRelativeTime, formatINR, cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -158,6 +159,17 @@ export default function AdminMachinesPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Review, approve, or manage all equipment listings across the platform.
           </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Link href="/admin/master-data?bulk=true">
+            <Button
+              className="gap-2 text-xs h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm cursor-pointer"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Bulk Upload Machines
+            </Button>
+          </Link>
         </div>
       </div>
 

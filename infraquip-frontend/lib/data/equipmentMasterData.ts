@@ -44,17 +44,41 @@ export const ALL_MAKES: string[] = Array.from(
   )
 ).sort((a, b) => a.localeCompare(b));
 
+// Helper to match category names flexibly (e.g. Excavators vs EXCAVATOR, Cranes vs HYD TELE CRANE)
+export function matchesCategory(itemCatRaw?: string, targetCatRaw?: string): boolean {
+  if (!itemCatRaw || !targetCatRaw) return false;
+  const a = itemCatRaw.toLowerCase().trim();
+  const b = targetCatRaw.toLowerCase().trim();
+  if (a === b) return true;
+  if (b === "all" || b === "all equipment") return true;
+
+  const aSingular = a.endsWith("s") ? a.slice(0, -1) : a;
+  const bSingular = b.endsWith("s") ? b.slice(0, -1) : b;
+  if (aSingular === bSingular) return true;
+  if (a.includes(bSingular) || b.includes(aSingular)) return true;
+
+  // Domain mappings between platform categories and master data equipment types
+  if ((a.includes("dozer") || a.includes("bulldozer")) && (b.includes("dozer") || b.includes("bulldozer"))) return true;
+  if ((a.includes("roller") || a.includes("compactor")) && (b.includes("roller") || b.includes("compactor"))) return true;
+  if ((a.includes("crane") || a.includes("hydra")) && (b.includes("crane") || b.includes("hydra"))) return true;
+  if ((a.includes("concrete") || a.includes("pump")) && (b.includes("concrete") || b.includes("pump"))) return true;
+  if (a.includes("grader") && b.includes("grader")) return true;
+  if (a.includes("loader") && b.includes("loader")) return true;
+
+  return false;
+}
+
 // Get unique makes optionally filtered by equipment category
 export function getMakesForCategory(categoryName?: string, dynamicCatalog?: EquipmentMasterItem[]): string[] {
   const dataset = dynamicCatalog && dynamicCatalog.length > 0 ? dynamicCatalog : masterData;
-  if (!categoryName) {
+  if (!categoryName || categoryName.toLowerCase().trim() === "all" || categoryName.toLowerCase().trim() === "all equipment") {
     return Array.from(
       new Set(dataset.map((item) => (item.make || item["Equipment Make"] || "").trim()).filter(Boolean))
     ).sort((a, b) => a.localeCompare(b));
   }
   const filtered = dataset.filter((item) => {
-    const cat = (item.category_name || item["Equipment Type"] || "").toLowerCase().trim();
-    return cat === categoryName.toLowerCase().trim();
+    const cat = (item.category_name || item["Equipment Type"] || "").trim();
+    return matchesCategory(cat, categoryName);
   });
   if (filtered.length === 0) {
     return Array.from(
@@ -79,9 +103,9 @@ export function getModelsForMake(
   const filtered = dataset.filter((item) => {
     const itemMake = (item.make || item["Equipment Make"] || "").trim().toLowerCase();
     const matchesMake = itemMake === makeNormalized;
-    if (categoryName) {
-      const cat = (item.category_name || item["Equipment Type"] || "").toLowerCase().trim();
-      return matchesMake && cat === categoryName.toLowerCase().trim();
+    if (categoryName && categoryName.toLowerCase().trim() !== "all" && categoryName.toLowerCase().trim() !== "all equipment") {
+      const cat = (item.category_name || item["Equipment Type"] || "").trim();
+      return matchesMake && matchesCategory(cat, categoryName);
     }
     return matchesMake;
   });
@@ -117,9 +141,9 @@ export function getCapacityForModel(
     const itemMake = (item.make || item["Equipment Make"] || "").trim().toLowerCase();
     const itemModel = (item.model || item["Equipment Model"] || "").trim().toLowerCase();
     const matches = itemMake === makeNorm && itemModel === modelNorm;
-    if (categoryName) {
-      const cat = (item.category_name || item["Equipment Type"] || "").toLowerCase().trim();
-      return matches && cat === categoryName.toLowerCase().trim();
+    if (categoryName && categoryName.toLowerCase().trim() !== "all" && categoryName.toLowerCase().trim() !== "all equipment") {
+      const cat = (item.category_name || item["Equipment Type"] || "").trim();
+      return matches && matchesCategory(cat, categoryName);
     }
     return matches;
   });

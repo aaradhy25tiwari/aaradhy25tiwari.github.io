@@ -158,6 +158,8 @@ export interface VendorPublic {
 export interface SearchFilters {
   q?: string;
   category?: string;
+  make?: string;
+  model?: string;
   city?: string;
   radius?: 10 | 25 | 50 | 100;
   min_price?: number;

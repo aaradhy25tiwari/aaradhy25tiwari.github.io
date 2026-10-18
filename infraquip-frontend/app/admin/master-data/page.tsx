@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   Loader2, Plus, Edit2, Trash2, Search, Filter, Database, CheckCircle, 
@@ -73,7 +74,16 @@ interface AdminCategoryItem {
 
 export default function AdminMasterDataPage() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<"catalog" | "categories">("catalog");
+
+  // Auto-open bulk modal if query param is set
+  useEffect(() => {
+    if (searchParams.get("bulk") === "true" || searchParams.get("action") === "bulk") {
+      setActiveTab("catalog");
+      setIsBulkOpen(true);
+    }
+  }, [searchParams]);
 
   // ── Equipment Catalog State ─────────────────────────────────────
   const [search, setSearch] = useState("");
@@ -574,11 +584,14 @@ export default function AdminMasterDataPage() {
             <>
               <Button 
                 onClick={() => setIsBulkOpen(true)} 
-                variant="outline" 
-                className="gap-2 text-xs h-9 cursor-pointer"
+                className="gap-2 text-xs h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm cursor-pointer transition-all"
+                id="btn-bulk-upload-machines"
               >
-                <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> 
-                Bulk Import
+                <FileSpreadsheet className="h-4 w-4" /> 
+                Bulk Upload Machines
+              </Button>
+              <Button onClick={openAddCatalog} className="gap-2 text-xs h-9 shadow-sm cursor-pointer">
+                <Plus className="h-4 w-4" /> Add Single Model
               </Button>
               <Button 
                 onClick={exportCatalogToCSV} 
@@ -587,9 +600,6 @@ export default function AdminMasterDataPage() {
               >
                 <Download className="h-4 w-4 text-muted-foreground" /> 
                 Export CSV
-              </Button>
-              <Button onClick={openAddCatalog} className="gap-2 text-xs h-9 shadow-sm cursor-pointer">
-                <Plus className="h-4 w-4" /> Add Model
               </Button>
             </>
           ) : (
@@ -695,6 +705,16 @@ export default function AdminMasterDataPage() {
                   </option>
                 ))}
               </select>
+
+              <Button 
+                onClick={() => setIsBulkOpen(true)}
+                variant="outline"
+                className="gap-1.5 text-xs h-9 border-emerald-500/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 font-medium cursor-pointer"
+                title="Bulk upload machines from Excel/CSV"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Bulk Upload / Add
+              </Button>
             </div>
           </div>
 
@@ -708,7 +728,24 @@ export default function AdminMasterDataPage() {
               <div className="p-12 text-center">
                 <Wrench className="mx-auto h-10 w-10 text-muted-foreground/50 mb-3" />
                 <p className="font-semibold text-foreground">No equipment master entries found</p>
-                <p className="text-xs text-muted-foreground mt-1">Try adjusting your filters or click Add Model / Bulk Import.</p>
+                <p className="text-xs text-muted-foreground mt-1">Try adjusting your filters or use the bulk upload to add multiple machines at once.</p>
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <Button 
+                    onClick={() => setIsBulkOpen(true)} 
+                    className="gap-2 text-xs h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-medium cursor-pointer"
+                  >
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Bulk Upload Machines
+                  </Button>
+                  <Button 
+                    onClick={openAddCatalog} 
+                    variant="outline" 
+                    className="gap-2 text-xs h-9 cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Single Model
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -1012,7 +1049,7 @@ export default function AdminMasterDataPage() {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-xl">
                   <FileSpreadsheet className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                  Bulk Import Master Equipment
+                  Bulk Upload / Add Machines to Master Catalog
                 </DialogTitle>
                 <DialogDescription>
                   Upload an Excel or CSV spreadsheet, or paste comma/tab-separated text. The system will compare it against your catalog and show you a preview before anything is added.
