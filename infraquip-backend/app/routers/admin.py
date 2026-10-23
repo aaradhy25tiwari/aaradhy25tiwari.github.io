@@ -7,7 +7,7 @@ import csv
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request, status, UploadFile, File
 from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.deps import AdminUser, DBSession
 from app.models.machine import Machine, MachineStatus, Category, SubCategory, EquipmentMasterCatalog
@@ -50,7 +50,7 @@ async def get_review_queue(
     offset = (page - 1) * per_page
     result = await db.execute(
         select(Machine)
-        .options(selectinload(Machine.images), selectinload(Machine.vendor), selectinload(Machine.category))
+        .options(selectinload(Machine.images), joinedload(Machine.vendor), joinedload(Machine.category))
         .where(Machine.status == MachineStatus.pending)
         .order_by(Machine.created_at.asc())
         .offset(offset).limit(per_page)
@@ -100,7 +100,7 @@ async def review_listing(
     """Approve or reject a listing."""
     result = await db.execute(
         select(Machine)
-        .options(selectinload(Machine.vendor))
+        .options(joinedload(Machine.vendor))
         .where(Machine.id == uuid.UUID(listing_id))
     )
     machine = result.scalar_one_or_none()
@@ -202,8 +202,8 @@ async def get_admin_machines(
         select(Machine)
         .options(
             selectinload(Machine.images),
-            selectinload(Machine.vendor),
-            selectinload(Machine.category),
+            joinedload(Machine.vendor),
+            joinedload(Machine.category),
         )
         .order_by(Machine.created_at.desc())
     )
@@ -282,7 +282,7 @@ async def reactivate_admin_machine(
     """Admin reactivates an inactive, paused, unavailable, or expired listing."""
     result = await db.execute(
         select(Machine)
-        .options(selectinload(Machine.vendor))
+        .options(joinedload(Machine.vendor))
         .where(Machine.id == uuid.UUID(listing_id))
     )
     machine = result.scalar_one_or_none()
@@ -336,34 +336,34 @@ async def reactivate_admin_machine(
 @limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
 async def admin_stats(request: Request, current_user: AdminUser, db: DBSession):
     """Platform-wide statistics."""
-    total_users = (await db.execute(select(func.count(User.id)))).scalar() or 0
-    total_listings = (await db.execute(select(func.count(Machine.id)))).scalar() or 0
-    pending_review = (await db.execute(
-        select(func.count(Machine.id)).where(Machine.status == MachineStatus.pending)
-    )).scalar() or 0
-    approved_listings = (await db.execute(
-        select(func.count(Machine.id)).where(Machine.status == MachineStatus.approved)
-    )).scalar() or 0
-    total_vendors = (await db.execute(
-        select(func.count(User.id)).where(User.role == UserRole.vendor)
-    )).scalar() or 0
-    total_customers = (await db.execute(
-        select(func.count(User.id)).where(User.role == UserRole.customer)
-    )).scalar() or 0
-    total_brokers = (await db.execute(
-        select(func.count(User.id)).where(User.role == UserRole.broker)
-    )).scalar() or 0
-    total_enquiries = (await db.execute(select(func.count(Enquiry.id)))).scalar() or 0
+    user_counts = select(
+        func.count(User.id).label("total_users"),
+        func.count(User.id).filter(User.role == UserRole.vendor).label("total_vendors"),
+        func.count(User.id).filter(User.role == UserRole.customer).label("total_customers"),
+        func.count(User.id).filter(User.role == UserRole.broker).label("total_brokers"),
+    ).subquery()
+
+    machine_counts = select(
+        func.count(Machine.id).label("total_listings"),
+        func.count(Machine.id).filter(Machine.status == MachineStatus.pending).label("pending_review"),
+        func.count(Machine.id).filter(Machine.status == MachineStatus.approved).label("approved_listings"),
+    ).subquery()
+
+    enquiry_counts = select(
+        func.count(Enquiry.id).label("total_enquiries"),
+    ).subquery()
+
+    row = (await db.execute(select(user_counts, machine_counts, enquiry_counts))).one()
 
     return AdminStatsResponse(
-        total_users=total_users,
-        total_listings=total_listings,
-        pending_review=pending_review,
-        approved_listings=approved_listings,
-        total_vendors=total_vendors,
-        total_customers=total_customers,
-        total_brokers=total_brokers,
-        total_enquiries=total_enquiries,
+        total_users=row.total_users or 0,
+        total_listings=row.total_listings or 0,
+        pending_review=row.pending_review or 0,
+        approved_listings=row.approved_listings or 0,
+        total_vendors=row.total_vendors or 0,
+        total_customers=row.total_customers or 0,
+        total_brokers=row.total_brokers or 0,
+        total_enquiries=row.total_enquiries or 0,
     )
 
 
@@ -432,7 +432,7 @@ async def list_vendors(
     offset = (page - 1) * per_page
     stmt = (
         select(User)
-        .options(selectinload(User.vendor_profile))
+        .options(joinedload(User.vendor_profile))
         .where(User.role == UserRole.vendor)
         .order_by(User.created_at.desc())
     )
@@ -632,27 +632,37 @@ async def analytics_timeseries(
             "total_revenue": float(pa.total_revenue) if pa and pa.total_revenue else 0,
         })
 
-    # Active subscriptions count
-    active_subs = (await db.execute(
-        select(func.count()).select_from(Subscription)
-        .where(Subscription.status == "active")
-    )).scalar() or 0
+    user_sub = select(
+        func.count(User.id).label("total_users"),
+        func.count(User.id).filter(User.role == UserRole.vendor).label("total_vendors"),
+    ).subquery()
+
+    machine_sub = select(
+        func.count(Machine.id).label("total_listings"),
+        func.count(Machine.id).filter(Machine.status == MachineStatus.approved).label("approved_listings"),
+    ).subquery()
+
+    enquiry_sub = select(
+        func.count(Enquiry.id).label("total_enquiries"),
+    ).subquery()
+
+    sub_counts = select(
+        func.count(Subscription.id).filter(Subscription.status == "active").label("active_subscriptions"),
+        func.coalesce(func.sum(Subscription.amount_paid).filter(Subscription.status == "active"), 0).label("total_revenue"),
+    ).subquery()
+
+    row = (await db.execute(select(user_sub, machine_sub, enquiry_sub, sub_counts))).one()
 
     return {
         "timeseries": timeseries,
         "totals": {
-            "total_users": (await db.execute(select(func.count(User.id)))).scalar() or 0,
-            "total_vendors": (await db.execute(select(func.count(User.id)).where(User.role == UserRole.vendor))).scalar() or 0,
-            "total_listings": (await db.execute(select(func.count(Machine.id)))).scalar() or 0,
-            "approved_listings": (await db.execute(select(func.count(Machine.id)).where(Machine.status == MachineStatus.approved))).scalar() or 0,
-            "total_enquiries": (await db.execute(select(func.count(Enquiry.id)))).scalar() or 0,
-            "active_subscriptions": active_subs,
-            "total_revenue": float(
-                (await db.execute(
-                    select(func.coalesce(func.sum(Subscription.amount_paid), 0))
-                    .where(Subscription.status == "active")
-                )).scalar() or 0
-            ),
+            "total_users": row.total_users or 0,
+            "total_vendors": row.total_vendors or 0,
+            "total_listings": row.total_listings or 0,
+            "approved_listings": row.approved_listings or 0,
+            "total_enquiries": row.total_enquiries or 0,
+            "active_subscriptions": row.active_subscriptions or 0,
+            "total_revenue": float(row.total_revenue or 0),
         },
     }
 
@@ -890,7 +900,7 @@ async def add_listing_to_master(
     # Fetch listing
     result = await db.execute(
         select(Machine)
-        .options(selectinload(Machine.category))
+        .options(joinedload(Machine.category))
         .where(Machine.id == uuid.UUID(listing_id))
     )
     machine = result.scalar_one_or_none()

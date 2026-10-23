@@ -5,7 +5,7 @@ from datetime import datetime, date
 from typing import List, Optional
 from fastapi import APIRouter, Request
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.deps import DBSession
 from app.models.enquiry import Enquiry
@@ -38,8 +38,8 @@ async def get_live_leads(request: Request, db: DBSession):
     stmt = (
         select(Enquiry)
         .options(
-            selectinload(Enquiry.machine),
-            selectinload(Enquiry.customer)
+            joinedload(Enquiry.machine),
+            joinedload(Enquiry.customer)
         )
         .order_by(Enquiry.created_at.desc())
         .limit(20)

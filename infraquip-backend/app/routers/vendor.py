@@ -8,7 +8,7 @@ import math
 from typing import Optional
 from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Query, Request
 from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.deps import VendorUser, DBSession
 from app.models.machine import Machine, MachineStatus, MachineImage, Category
@@ -41,7 +41,7 @@ async def get_vendor_listings(
     offset = (page - 1) * per_page
     stmt = (
         select(Machine)
-        .options(selectinload(Machine.images), selectinload(Machine.category))
+        .options(selectinload(Machine.images), joinedload(Machine.category))
         .where(Machine.vendor_id == current_user.id)
         .order_by(Machine.created_at.desc())
     )
@@ -123,7 +123,7 @@ async def create_listing(
     # Check subscription limit
     sub_result = await db.execute(
         select(Subscription)
-        .options(selectinload(Subscription.plan))
+        .options(joinedload(Subscription.plan))
         .where(Subscription.user_id == current_user.id, Subscription.status == "active")
         .order_by(Subscription.created_at.desc())
     )
@@ -205,8 +205,8 @@ async def create_listing(
         select(Machine)
         .options(
             selectinload(Machine.images),
-            selectinload(Machine.category),
-            selectinload(Machine.vendor),
+            joinedload(Machine.category),
+            joinedload(Machine.vendor),
         )
         .where(Machine.id == machine.id)
     )
@@ -227,7 +227,7 @@ async def get_vendor_listing(
         select(Machine)
         .options(
             selectinload(Machine.images),
-            selectinload(Machine.category),
+            joinedload(Machine.category),
         )
         .where(
             Machine.id == uuid.UUID(listing_id),
@@ -565,7 +565,7 @@ async def get_vendor_enquiries(
     offset = (page - 1) * per_page
     stmt = (
         select(Enquiry)
-        .options(selectinload(Enquiry.machine), selectinload(Enquiry.customer))
+        .options(joinedload(Enquiry.machine), joinedload(Enquiry.customer))
         .where(Enquiry.vendor_id == current_user.id)
         .order_by(Enquiry.created_at.desc())
     )
@@ -605,37 +605,37 @@ async def get_vendor_enquiries(
 async def get_vendor_stats(request: Request, current_user: VendorUser, db: DBSession):
     """Aggregated stats for vendor dashboard."""
     try:
-        listings_by_status = await db.execute(
-            select(Machine.status, func.count(Machine.id))
-            .where(Machine.vendor_id == current_user.id)
-            .group_by(Machine.status)
-        )
-
-        total_views = await db.execute(
-            select(func.sum(Machine.views_count)).where(Machine.vendor_id == current_user.id)
-        )
-
-        total_enquiries = await db.execute(
-            select(func.count(Enquiry.id)).where(Enquiry.vendor_id == current_user.id)
-        )
-
-        unread_enquiries = await db.execute(
-            select(func.count(Enquiry.id)).where(
-                Enquiry.vendor_id == current_user.id,
-                Enquiry.is_read_by_vendor == False,
+        m_sub = (
+            select(
+                func.count(Machine.id).label("total_listings"),
+                func.count(Machine.id).filter(Machine.status == MachineStatus.approved).label("approved_listings"),
+                func.count(Machine.id).filter(Machine.status == MachineStatus.pending).label("pending_listings"),
+                func.count(Machine.id).filter(Machine.status == MachineStatus.paused).label("paused_listings"),
+                func.coalesce(func.sum(Machine.views_count), 0).label("total_views"),
             )
+            .where(Machine.vendor_id == current_user.id)
+            .subquery()
         )
 
-        status_map = {row[0]: row[1] for row in listings_by_status.all()}
+        e_sub = (
+            select(
+                func.count(Enquiry.id).label("total_enquiries"),
+                func.count(Enquiry.id).filter(Enquiry.is_read_by_vendor == False).label("unread_enquiries"),
+            )
+            .where(Enquiry.vendor_id == current_user.id)
+            .subquery()
+        )
+
+        row = (await db.execute(select(m_sub, e_sub))).one()
 
         return {
-            "total_listings": sum(status_map.values()),
-            "approved_listings": status_map.get(MachineStatus.approved, 0),
-            "pending_listings": status_map.get(MachineStatus.pending, 0),
-            "paused_listings": status_map.get(MachineStatus.paused, 0),
-            "total_views": total_views.scalar() or 0,
-            "total_enquiries": total_enquiries.scalar() or 0,
-            "unread_enquiries": unread_enquiries.scalar() or 0,
+            "total_listings": row.total_listings or 0,
+            "approved_listings": row.approved_listings or 0,
+            "pending_listings": row.pending_listings or 0,
+            "paused_listings": row.paused_listings or 0,
+            "total_views": row.total_views or 0,
+            "total_enquiries": row.total_enquiries or 0,
+            "unread_enquiries": row.unread_enquiries or 0,
         }
     except Exception as e:
         import logging
@@ -659,9 +659,9 @@ async def get_vendor_enquiry_thread(
     result = await db.execute(
         select(Enquiry)
         .options(
-            selectinload(Enquiry.machine),
-            selectinload(Enquiry.customer),
-            selectinload(Enquiry.messages).selectinload("sender")
+            joinedload(Enquiry.machine),
+            joinedload(Enquiry.customer),
+            selectinload(Enquiry.messages).joinedload("sender")
         )
         .where(
             Enquiry.id == uuid.UUID(enquiry_id),

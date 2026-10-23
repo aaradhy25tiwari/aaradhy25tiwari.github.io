@@ -7,7 +7,6 @@ import logging
 from typing import Dict, Set
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.enquiry import Enquiry, EnquiryMessage, EnquiryStatus

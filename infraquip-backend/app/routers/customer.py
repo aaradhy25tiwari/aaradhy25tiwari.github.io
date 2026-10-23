@@ -4,7 +4,7 @@ Customer Dashboard Router — Wishlists, enquiry history, preferences
 import uuid
 from fastapi import APIRouter, HTTPException, status, Request
 from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.deps import CustomerOrBrokerUser, DBSession
 from app.models.analytics import Wishlist
@@ -24,7 +24,7 @@ router = APIRouter()
 async def get_wishlist(request: Request, current_user: CustomerOrBrokerUser, db: DBSession):
     result = await db.execute(
         select(Wishlist)
-        .options(selectinload(Wishlist.machine).selectinload(Machine.images))
+        .options(joinedload(Wishlist.machine).selectinload(Machine.images))
         .where(Wishlist.user_id == current_user.id)
         .order_by(Wishlist.created_at.desc())
     )
@@ -107,7 +107,7 @@ async def remove_from_wishlist(request: Request, machine_id: str, current_user: 
 async def get_customer_enquiries(request: Request, current_user: CustomerOrBrokerUser, db: DBSession):
     result = await db.execute(
         select(Enquiry)
-        .options(selectinload(Enquiry.machine))
+        .options(joinedload(Enquiry.machine))
         .where(Enquiry.customer_id == current_user.id)
         .order_by(Enquiry.created_at.desc())
     )
@@ -130,13 +130,8 @@ async def get_customer_enquiries(request: Request, current_user: CustomerOrBroke
 @router.get("/stats")
 @limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
 async def get_customer_stats(request: Request, current_user: CustomerOrBrokerUser, db: DBSession):
-    wishlist_count = (await db.execute(
-        select(func.count(Wishlist.id)).where(Wishlist.user_id == current_user.id)
-    )).scalar() or 0
-
-    enquiry_count = (await db.execute(
-        select(func.count(Enquiry.id)).where(Enquiry.customer_id == current_user.id)
-    )).scalar() or 0
-
-    return {"wishlist_count": wishlist_count, "total_enquiries": enquiry_count}
+    wishlist_subq = select(func.count(Wishlist.id)).where(Wishlist.user_id == current_user.id).scalar_subquery()
+    enquiry_subq = select(func.count(Enquiry.id)).where(Enquiry.customer_id == current_user.id).scalar_subquery()
+    row = (await db.execute(select(wishlist_subq, enquiry_subq))).one()
+    return {"wishlist_count": row[0] or 0, "total_enquiries": row[1] or 0}
 

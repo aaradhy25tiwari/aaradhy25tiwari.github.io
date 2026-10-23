@@ -5,11 +5,12 @@ Full CRUD lives in vendor.py; this router exposes public endpoints.
 import uuid
 from fastapi import APIRouter, HTTPException, status, Request
 from sqlalchemy import select, update
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.deps import OptionalUser, DBSession
 from app.models.machine import Machine, MachineStatus, MachineImage
 from app.models.user import User, VendorProfile
+from app.models.analytics import Wishlist
 from app.schemas.machine import MachineDetailResponse
 from app.core.rate_limiter import limiter
 from app.config import settings
@@ -29,16 +30,29 @@ async def get_machine_detail(
     Get a single machine listing by slug.
     Increments view count. Returns is_wishlisted for authenticated users.
     """
-    result = await db.execute(
+    stmt = (
         select(Machine)
         .options(
             selectinload(Machine.images),
-            selectinload(Machine.vendor).selectinload(User.vendor_profile),
-            selectinload(Machine.category),
+            joinedload(Machine.vendor).joinedload(User.vendor_profile),
+            joinedload(Machine.category),
         )
         .where(Machine.slug == slug)
     )
-    machine = result.scalar_one_or_none()
+
+    is_wishlisted = None
+    if current_user:
+        stmt = stmt.outerjoin(
+            Wishlist,
+            (Wishlist.machine_id == Machine.id) & (Wishlist.user_id == current_user.id)
+        ).add_columns(Wishlist.id.is_not(None).label("is_wishlisted"))
+        row = (await db.execute(stmt)).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Listing not found.")
+        machine, is_wishlisted = row[0], row[1]
+    else:
+        result = await db.execute(stmt)
+        machine = result.scalar_one_or_none()
 
     if not machine:
         raise HTTPException(status_code=404, detail="Listing not found.")
@@ -63,18 +77,6 @@ async def get_machine_detail(
     primary_image = next((img for img in machine.images if img.is_primary), None)
     if not primary_image and machine.images:
         primary_image = machine.images[0]
-
-    # Check wishlist status
-    is_wishlisted = None
-    if current_user:
-        from app.models.analytics import Wishlist
-        wl_result = await db.execute(
-            select(Wishlist).where(
-                Wishlist.user_id == current_user.id,
-                Wishlist.machine_id == machine.id,
-            )
-        )
-        is_wishlisted = wl_result.scalar_one_or_none() is not None
 
     # Build the response dict manually to handle computed fields
     response = MachineDetailResponse(

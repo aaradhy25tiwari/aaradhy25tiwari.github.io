@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, status, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload
 
 from app.deps import AdminUser, DBSession
 from app.models.account_request import AccountRequest, AccountRequestStatus

@@ -370,14 +370,14 @@ async def verify_reactivation_otp(
 
 
 async def _fetch_full_user(user_id, db: DBSession) -> User:
-    from sqlalchemy.orm import selectinload
+    from sqlalchemy.orm import selectinload, joinedload
     result = await db.execute(
         select(User)
         .options(
-            selectinload(User.vendor_profile),
-            selectinload(User.customer_profile),
-            selectinload(User.broker_profile),
-            selectinload(User.subscriptions).selectinload(Subscription.plan),
+            joinedload(User.vendor_profile),
+            joinedload(User.customer_profile),
+            joinedload(User.broker_profile),
+            selectinload(User.subscriptions).joinedload(Subscription.plan),
         )
         .where(User.id == user_id)
     )

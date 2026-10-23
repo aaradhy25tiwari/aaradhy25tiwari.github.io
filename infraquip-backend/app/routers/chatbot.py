@@ -118,12 +118,7 @@ async def search_equipment(db, params: dict) -> List[dict]:
 
     if params.get("category"):
         from app.models.machine import Category
-        cat_result = await db.execute(
-            select(Category).where(Category.slug == params["category"])
-        )
-        cat = cat_result.scalar_one_or_none()
-        if cat:
-            stmt = stmt.where(Machine.category_id == cat.id)
+        stmt = stmt.join(Machine.category).where(Category.slug == params["category"])
 
     if params.get("city"):
         stmt = stmt.where(Machine.city.ilike(f"%{params['city']}%"))

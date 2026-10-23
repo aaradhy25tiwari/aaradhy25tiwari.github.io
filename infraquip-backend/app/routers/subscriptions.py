@@ -6,7 +6,7 @@ import hmac
 import hashlib
 from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.deps import CurrentUser, DBSession
 from app.models.subscription import SubscriptionPlan, Subscription, SubscriptionStatus
@@ -76,7 +76,7 @@ async def get_my_subscription(request: Request, current_user: CurrentUser, db: D
     """Return the current user's active subscription."""
     result = await db.execute(
         select(Subscription)
-        .options(selectinload(Subscription.plan))
+        .options(joinedload(Subscription.plan))
         .where(
             Subscription.user_id == current_user.id,
             Subscription.status == SubscriptionStatus.active,

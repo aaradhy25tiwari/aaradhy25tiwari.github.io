@@ -6,7 +6,7 @@ from typing import Optional, List
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy import select, update
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 from pydantic import BaseModel, Field
 
 from app.deps import CurrentUser, DBSession
@@ -64,10 +64,9 @@ async def create_enquiry(
     # Check monthly enquiry limit from subscription
     from app.models.subscription import Subscription
     from sqlalchemy import func
-    from sqlalchemy.orm import selectinload
     sub_result = await db.execute(
         select(Subscription)
-        .options(selectinload(Subscription.plan))
+        .options(joinedload(Subscription.plan))
         .where(Subscription.user_id == current_user.id, Subscription.status == "active")
         .order_by(Subscription.created_at.desc())
     )
@@ -136,7 +135,7 @@ async def create_enquiry(
 async def get_enquiry(request: Request, enquiry_id: str, current_user: CurrentUser, db: DBSession):
     result = await db.execute(
         select(Enquiry)
-        .options(selectinload(Enquiry.messages), selectinload(Enquiry.machine))
+        .options(selectinload(Enquiry.messages), joinedload(Enquiry.machine))
         .where(Enquiry.id == uuid.UUID(enquiry_id))
     )
     enquiry = result.scalar_one_or_none()

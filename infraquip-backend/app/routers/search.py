@@ -5,7 +5,7 @@ import math
 from typing import Optional, List
 from fastapi import APIRouter, Query, Request
 from sqlalchemy import select, func, or_
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.deps import OptionalUser, DBSession
 from app.models.machine import (
@@ -76,7 +76,7 @@ async def search_machines(
         select(Machine)
         .options(
             selectinload(Machine.images),
-            selectinload(Machine.vendor).selectinload(User.vendor_profile),
+            joinedload(Machine.vendor).joinedload(User.vendor_profile),
         )
         .where(
             Machine.status == MachineStatus.approved,
@@ -92,21 +92,15 @@ async def search_machines(
 
     # ── Category filter (by slug or name) ──────────────────────
     if category:
-        from app.models.machine import Category
         clean_cat = category.strip().lower()
-        cat_result = await db.execute(
-            select(Category.id).where(
-                or_(
-                    Category.slug == clean_cat,
-                    Category.slug == clean_cat.replace(" ", "-"),
-                    func.lower(Category.name) == clean_cat,
-                    Category.name.ilike(f"%{clean_cat}%"),
-                )
+        stmt = stmt.join(Machine.category).where(
+            or_(
+                Category.slug == clean_cat,
+                Category.slug == clean_cat.replace(" ", "-"),
+                func.lower(Category.name) == clean_cat,
+                Category.name.ilike(f"%{clean_cat}%"),
             )
         )
-        cat_ids = cat_result.scalars().all()
-        if cat_ids:
-            stmt = stmt.where(Machine.category_id.in_(cat_ids))
 
     # ── Brand / Make filter (Master Data) ───────────────────────
     if make:
@@ -194,27 +188,49 @@ async def search_machines(
         else:
             stmt = stmt.order_by(Machine.views_count.desc())
 
+    # ── PostGIS distance expression ────────────────────────────
+    dist_expr = None
+    if lat is not None and lng is not None:
+        user_point = func.ST_SetSRID(func.ST_MakePoint(lng, lat), 4326)
+        dist_expr = func.ST_Distance(Machine.location, user_point).label("distance_meters")
+
+    # ── Wishlist join for current user ─────────────────────────
+    is_wishlisted_expr = None
+    if current_user:
+        stmt = stmt.outerjoin(
+            Wishlist,
+            (Wishlist.machine_id == Machine.id) & (Wishlist.user_id == current_user.id),
+        )
+        is_wishlisted_expr = Wishlist.id.is_not(None).label("is_wishlisted")
+
     # ── Count total ────────────────────────────────────────────
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = (await db.execute(count_stmt)).scalar() or 0
 
-    # ── Paginate ───────────────────────────────────────────────
-    stmt = stmt.offset(offset).limit(per_page)
-    result = await db.execute(stmt)
-    machines = result.scalars().all()
+    # ── Paginate and execute in a single joined query ──────────
+    cols = []
+    if dist_expr is not None:
+        cols.append(dist_expr)
+    if is_wishlisted_expr is not None:
+        cols.append(is_wishlisted_expr)
 
-    # ── Build wishlist map for current user ────────────────────
-    wishlist_set: set = set()
-    if current_user:
-        from app.models.analytics import Wishlist
-        wl_result = await db.execute(
-            select(Wishlist.machine_id).where(Wishlist.user_id == current_user.id)
-        )
-        wishlist_set = {str(row) for row in wl_result.scalars().all()}
+    if cols:
+        paginated_stmt = stmt.add_columns(*cols).offset(offset).limit(per_page)
+        result = await db.execute(paginated_stmt)
+        if dist_expr is not None and is_wishlisted_expr is not None:
+            machine_rows = [(row[0], row[1], row[2]) for row in result.all()]
+        elif dist_expr is not None:
+            machine_rows = [(row[0], row[1], None) for row in result.all()]
+        else:
+            machine_rows = [(row[0], None, row[1]) for row in result.all()]
+    else:
+        paginated_stmt = stmt.offset(offset).limit(per_page)
+        result = await db.execute(paginated_stmt)
+        machine_rows = [(m, None, None) for m in result.scalars().all()]
 
     # ── Build response items ───────────────────────────────────
     items: List[MachineListItemResponse] = []
-    for m in machines:
+    for m, raw_dist, is_w in machine_rows:
         vp: Optional[VendorProfile] = m.vendor.vendor_profile if m.vendor else None
         primary_img = next((img for img in m.images if img.is_primary), None)
         if not primary_img and m.images:
@@ -231,20 +247,7 @@ async def search_machines(
                 "is_primary": primary_img.is_primary,
             }
 
-        # Calculate distance if lat/lng provided
-        distance_km = None
-        if lat is not None and lng is not None and m.location is not None:
-            dist_result = await db.execute(
-                select(
-                    func.ST_Distance(
-                        m.location,
-                        func.ST_SetSRID(func.ST_MakePoint(lng, lat), 4326),
-                    )
-                )
-            )
-            raw = dist_result.scalar()
-            if raw is not None:
-                distance_km = round(raw / 1000, 1)
+        distance_km = round(raw_dist / 1000, 1) if raw_dist is not None else None
 
         items.append(
             MachineListItemResponse(
@@ -282,7 +285,7 @@ async def search_machines(
                 distance_km=distance_km,
                 latitude=m.latitude,
                 longitude=m.longitude,
-                is_wishlisted=str(m.id) in wishlist_set if current_user else None,
+                is_wishlisted=is_w if current_user else None,
             )
         )
 
