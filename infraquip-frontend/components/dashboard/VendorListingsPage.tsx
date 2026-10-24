@@ -25,9 +25,8 @@ export function VendorListingsPage() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (urlStatus) {
-      setStatusFilter(urlStatus);
-    }
+    setStatusFilter(urlStatus || null);
+    setPage(1);
   }, [urlStatus]);
 
   const { data, isLoading, error } = useQuery<{ results: MachineListItem[]; total: number; total_pages: number }>({

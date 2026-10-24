@@ -115,7 +115,7 @@ export function VendorDashboard() {
       value: stats.unread_enquiries,
       icon: Activity,
       color: "text-rose-500",
-      href: "/dashboard/vendor/enquiries?status=pending",
+      href: "/dashboard/vendor/enquiries?status=unread",
     },
   ];
 

@@ -558,6 +558,7 @@ async def get_vendor_enquiries(
     current_user: VendorUser,
     db: DBSession,
     status_filter: Optional[str] = Query(None),
+    is_read: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=50),
 ):
@@ -569,11 +570,19 @@ async def get_vendor_enquiries(
         .where(Enquiry.vendor_id == current_user.id)
         .order_by(Enquiry.created_at.desc())
     )
+    if is_read is not None:
+        stmt = stmt.where(Enquiry.is_read_by_vendor == is_read)
+
     if status_filter:
-        try:
-            stmt = stmt.where(Enquiry.status == EnquiryStatus(status_filter))
-        except ValueError:
-            pass
+        if status_filter == "unread":
+            stmt = stmt.where(Enquiry.is_read_by_vendor == False)
+        elif status_filter == "read":
+            stmt = stmt.where(Enquiry.is_read_by_vendor == True)
+        else:
+            try:
+                stmt = stmt.where(Enquiry.status == EnquiryStatus(status_filter))
+            except ValueError:
+                pass
 
     total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
     result = await db.execute(stmt.offset(offset).limit(per_page))

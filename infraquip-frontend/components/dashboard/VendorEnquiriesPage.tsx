@@ -31,9 +31,8 @@ export function VendorEnquiriesPage() {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    if (urlStatus) {
-      setStatusFilter(urlStatus);
-    }
+    setStatusFilter(urlStatus || null);
+    setPage(1);
   }, [urlStatus]);
 
   const { data, isLoading, error } = useQuery<{ results: EnquiryItem[]; total: number; total_pages: number }>({
@@ -48,7 +47,8 @@ export function VendorEnquiriesPage() {
 
   const filters = [
     { label: "All", value: null },
-    { label: "Unread", value: "pending" },
+    { label: "Unread", value: "unread" },
+    { label: "Pending", value: "pending" },
     { label: "Replied", value: "replied" },
     { label: "Closed", value: "closed" },
   ];
