@@ -10,7 +10,7 @@ import {
   Tag, Layers, Wrench, Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn, formatINR, getConditionColor, getListingTypeLabel, scrollToTop } from "@/lib/utils";
+import { cn, formatINR, getConditionColor, scrollToTop } from "@/lib/utils";
 import apiClient from "@/lib/api/client";
 import type { MachineListItem, SearchFilters } from "@/types/machine";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -59,7 +59,6 @@ function FilterSidebar({
   onReset: () => void;
 }) {
   const CONDITIONS = ["new", "excellent", "good", "fair"];
-  const LISTING_TYPES = ["rent", "sale", "both"];
   const RUNNING_CONDITIONS = ["running", "not_running"];
   const OWNERSHIP_TYPES = ["owner", "dealer"];
 
@@ -258,25 +257,6 @@ function FilterSidebar({
             onChange={(e) => onChange("city", e.target.value || undefined)}
             className="w-full rounded-lg border border-border bg-background pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
           />
-        </div>
-      </div>
-
-      {/* ── Listing Type ─────────────────────────────────────── */}
-      <div>
-        <label className="text-xs font-semibold text-foreground mb-2 block">Listing Type</label>
-        <div className="flex flex-wrap gap-2">
-          {LISTING_TYPES.map((type) => (
-            <button
-              key={type}
-              onClick={() => onChange("listing_type", filters.listing_type === type ? undefined : type)}
-              className={cn(
-                "filter-pill text-xs capitalize",
-                filters.listing_type === type && "border-primary/50 bg-primary/10 text-primary font-medium"
-              )}
-            >
-              {getListingTypeLabel(type)}
-            </button>
-          ))}
         </div>
       </div>
 
@@ -673,18 +653,6 @@ export function MachinesClientPage() {
                     City: {filters.city}
                     <button
                       onClick={() => updateFilter("city", undefined)}
-                      className="hover:text-primary p-0.5 rounded-full hover:bg-background transition-colors"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-
-                {filters.listing_type && (
-                  <span className="inline-flex items-center gap-1 text-xs bg-muted text-foreground border border-border px-2.5 py-1 rounded-full capitalize">
-                    {getListingTypeLabel(filters.listing_type)}
-                    <button
-                      onClick={() => updateFilter("listing_type", undefined)}
                       className="hover:text-primary p-0.5 rounded-full hover:bg-background transition-colors"
                     >
                       <X className="h-3 w-3" />

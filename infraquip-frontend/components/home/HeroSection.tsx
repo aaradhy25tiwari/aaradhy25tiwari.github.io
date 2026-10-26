@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, MapPin, ChevronDown, LayoutDashboard } from "lucide-react";
+import { Search, MapPin, ChevronDown, LayoutDashboard, ArrowRight, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { useAuth } from "@/hooks/useAuth";
@@ -31,9 +31,12 @@ export function HeroSection() {
     if (query) params.set("q", query);
     if (city) params.set("city", city);
     if (category !== "All Equipment") params.set("category", category.toLowerCase());
-    if (listingType === "sale") params.set("listing_type", "sale");
-    else params.set("listing_type", "rent");
-    router.push(`/machines?${params.toString()}`);
+    
+    if (listingType === "sale") {
+      router.push(`/buy?${params.toString()}`);
+    } else {
+      router.push(`/machines?${params.toString()}`);
+    }
   };
 
   return (
@@ -129,7 +132,11 @@ export function HeroSection() {
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                     <input
                       type="text"
-                      placeholder="Search equipment (e.g. Excavator 20 Ton)"
+                      placeholder={
+                        listingType === "sale"
+                          ? "Machinery to buy (e.g. Excavator, JCB 3DX, Crane)"
+                          : "Search rental equipment (e.g. Excavator 20 Ton)"
+                      }
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       className="w-full rounded-xl pl-12 pr-4 h-14 py-0 text-base focus:outline-none focus:ring-2 focus:ring-amber-500/50
@@ -163,7 +170,7 @@ export function HeroSection() {
                     <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                     <input
                       type="text"
-                      placeholder="Location"
+                      placeholder={listingType === "sale" ? "Delivery City" : "Location"}
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
                       className="w-full rounded-xl pl-12 pr-4 h-14 py-0 text-base focus:outline-none focus:ring-2 focus:ring-amber-500/50
@@ -177,12 +184,37 @@ export function HeroSection() {
                   <Button
                     type="submit"
                     size="lg"
-                    className="w-full sm:w-auto rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 px-8 h-14 py-0 gap-2 font-bold text-base shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all"
+                    className="w-full sm:w-auto rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 px-8 h-14 py-0 gap-2 font-bold text-base shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all shrink-0"
                   >
-                    Search
-                    <Search className="h-5 w-5" />
+                    {listingType === "sale" ? (
+                      <>
+                        Find Machinery
+                        <ArrowRight className="h-5 w-5" />
+                      </>
+                    ) : (
+                      <>
+                        Search
+                        <Search className="h-5 w-5" />
+                      </>
+                    )}
                   </Button>
                 </div>
+
+                {listingType === "sale" && (
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-300">
+                    <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
+                      <ShieldCheck className="h-4 w-4" />
+                      Certified Pre-Owned &amp; New Machinery Sourcing · 100+ Point Inspection · Financing up to 80%
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => router.push("/buy")}
+                      className="font-semibold text-primary underline underline-offset-4 hover:text-primary/80 transition-colors"
+                    >
+                      Open Full Procurement RFQ Desk →
+                    </button>
+                  </div>
+                )}
               </form>
             </div>
           )}

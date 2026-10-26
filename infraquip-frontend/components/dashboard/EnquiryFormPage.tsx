@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -118,10 +119,19 @@ export function EnquiryFormPage({ machineId }: { machineId: string }) {
         )}
 
         <div className="rounded-2xl border border-border bg-card p-8">
-          <h1 className="text-2xl font-semibold">Send Enquiry</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Fill in the details below and the vendor will get back to you.</p>
+          <h1 className="text-2xl font-semibold">Send Rental Enquiry</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Fill in the details below to check availability and request rental terms from the vendor.
+          </p>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-6">
+          <div className="mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-500 flex items-center justify-between">
+            <span>Looking to buy heavy machinery instead of renting?</span>
+            <Link href="/buy" className="font-semibold underline underline-offset-2 hover:text-amber-400">
+              Go to Buying Desk →
+            </Link>
+          </div>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-6">
             <div className="space-y-2">
               <label className="text-sm font-medium">I want to</label>
               <div className="flex gap-2">

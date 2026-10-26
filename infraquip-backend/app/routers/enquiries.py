@@ -9,10 +9,10 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload, joinedload
 from pydantic import BaseModel, Field
 
-from app.deps import CurrentUser, DBSession
+from app.deps import CurrentUser, OptionalUser, DBSession
 from app.models.user import UserRole
 from app.models.machine import Machine, MachineStatus
-from app.models.enquiry import Enquiry, EnquiryMessage, EnquiryStatus
+from app.models.enquiry import Enquiry, EnquiryMessage, EnquiryStatus, RequirementType
 from app.services.email_service import send_enquiry_received_email
 from app.core.rate_limiter import limiter, get_authenticated_user_key
 from app.config import settings
@@ -22,13 +22,33 @@ router = APIRouter()
 
 class EnquiryCreateRequest(BaseModel):
     machine_id: Optional[str] = None  # None for general (no machine) enquiry
-    vendor_id: str
+    vendor_id: Optional[str] = None
     requirement_type: str = "rent"  # rent | buy
     customer_company: Optional[str] = Field(None, max_length=300)
     required_from: Optional[str] = None  # ISO date string
     required_duration_days: Optional[int] = Field(None, ge=1)
     location_of_use: Optional[str] = Field(None, max_length=200)
     message: Optional[str] = Field(None, max_length=2000)
+
+
+class BuyRequestCreate(BaseModel):
+    category: str = Field(..., min_length=2, max_length=100)
+    make: Optional[str] = Field(None, max_length=100)
+    model: Optional[str] = Field(None, max_length=100)
+    condition_preference: Optional[str] = Field("any", max_length=50)  # new | used | any
+    year_min: Optional[int] = None
+    budget_range: Optional[str] = Field(None, max_length=100)
+    delivery_city: str = Field(..., min_length=2, max_length=100)
+    delivery_state: Optional[str] = Field(None, max_length=100)
+    timeline: Optional[str] = Field(None, max_length=100)
+    financing_needed: bool = False
+    inspection_needed: bool = True
+    transport_needed: bool = False
+    full_name: str = Field(..., min_length=2, max_length=200)
+    phone: str = Field(..., min_length=10, max_length=20)
+    email: str = Field(..., max_length=255)
+    company_name: Optional[str] = Field(None, max_length=300)
+    additional_notes: Optional[str] = Field(None, max_length=2000)
 
 
 class MessageCreateRequest(BaseModel):
@@ -87,10 +107,20 @@ async def create_enquiry(
                 detail=f"You've reached your monthly enquiry limit ({sub.plan.enquiry_limit_monthly}). Upgrade your plan.",
             )
 
+    # Assign vendor id (use admin as fallback if vendor_id is omitted)
+    vendor_uuid = None
+    if payload.vendor_id:
+        vendor_uuid = uuid.UUID(payload.vendor_id)
+    else:
+        from app.models.user import User
+        admin_res = await db.execute(select(User).where(User.role == UserRole.admin).order_by(User.created_at.asc()).limit(1))
+        admin = admin_res.scalar_one_or_none()
+        vendor_uuid = admin.id if admin else current_user.id
+
     enquiry = Enquiry(
         id=uuid.uuid4(),
         customer_id=current_user.id,
-        vendor_id=uuid.UUID(payload.vendor_id),
+        vendor_id=vendor_uuid,
         machine_id=uuid.UUID(payload.machine_id) if payload.machine_id else None,
         requirement_type=payload.requirement_type,
         customer_company=payload.customer_company,
@@ -113,7 +143,7 @@ async def create_enquiry(
 
     # Send email notification to vendor in background
     from app.models.user import User
-    vendor_result = await db.execute(select(User).where(User.id == uuid.UUID(payload.vendor_id)))
+    vendor_result = await db.execute(select(User).where(User.id == vendor_uuid))
     vendor = vendor_result.scalar_one_or_none()
     if vendor:
         machine_title = machine.title if payload.machine_id else "General Enquiry"
@@ -127,6 +157,129 @@ async def create_enquiry(
         )
 
     return {"id": str(enquiry.id), "message": "Enquiry sent successfully. The vendor will respond shortly."}
+
+
+# ── POST /enquiries/buy-request ─────────────────────────────────
+@router.post("/buy-request", status_code=status.HTTP_201_CREATED)
+async def submit_buy_request(
+    request: Request,
+    payload: BuyRequestCreate,
+    db: DBSession,
+    background_tasks: BackgroundTasks,
+    optional_user: OptionalUser,
+):
+    """
+    Submit a dedicated equipment buying / procurement request (RFQ).
+    Open to both registered customers and guest buyers.
+    """
+    from app.models.user import User, UserRole
+    from app.services.notification_service import create_notification, NotificationType
+
+    # 1. Determine customer ID
+    customer_id = None
+    if optional_user and optional_user.role != UserRole.vendor:
+        customer_id = optional_user.id
+    else:
+        # Check if user with email exists
+        user_result = await db.execute(select(User).where(User.email == payload.email))
+        existing_user = user_result.scalar_one_or_none()
+        if existing_user:
+            customer_id = existing_user.id
+        else:
+            # Create guest customer record
+            guest_customer = User(
+                id=uuid.uuid4(),
+                email=payload.email,
+                full_name=payload.full_name,
+                phone=payload.phone,
+                role=UserRole.customer,
+                is_verified=False,
+            )
+            db.add(guest_customer)
+            await db.flush()
+            customer_id = guest_customer.id
+
+    # 2. Assign vendor (Admin / Procurement Desk)
+    admin_result = await db.execute(
+        select(User).where(User.role == UserRole.admin).order_by(User.created_at.asc()).limit(1)
+    )
+    admin_user = admin_result.scalar_one_or_none()
+    vendor_id = admin_user.id if admin_user else customer_id
+
+    # 3. Format message with all procurement details
+    services = []
+    if payload.financing_needed:
+        services.append("Asset Financing / Equipment Loan Assistance")
+    if payload.inspection_needed:
+        services.append("100+ Point Certified Physical Inspection Report")
+    if payload.transport_needed:
+        services.append("Pan-India Transport & Logistics to Site")
+
+    details = [
+        "HEAVY EQUIPMENT BUYING SPECIFICATIONS:",
+        f"• Category: {payload.category}",
+        f"• Preferred Make: {payload.make or 'Any Verified Brand'}",
+        f"• Model / Capacity: {payload.model or 'Open to recommendations'}",
+        f"• Condition: {payload.condition_preference.title() if payload.condition_preference else 'Any'}",
+        f"• Target Year: {payload.year_min or 'Any'}",
+        f"• Budget Range: {payload.budget_range or 'Open for quotation'}",
+        f"• Delivery Location: {payload.delivery_city}{', ' + payload.delivery_state if payload.delivery_state else ''}",
+        f"• Purchase Timeline: {payload.timeline or 'Immediate'}",
+        f"• Requested Services: {', '.join(services) if services else 'Standard Machinery Sourcing'}",
+        f"• Buyer Name: {payload.full_name}",
+        f"• Contact Phone: {payload.phone}",
+        f"• Contact Email: {payload.email}",
+        f"• Company: {payload.company_name or 'Individual / Contractor'}",
+    ]
+    if payload.additional_notes:
+        details.append(f"• Special Requirements: {payload.additional_notes}")
+
+    enquiry_id = uuid.uuid4()
+    enquiry = Enquiry(
+        id=enquiry_id,
+        customer_id=customer_id,
+        vendor_id=vendor_id,
+        machine_id=None,
+        requirement_type=RequirementType.buy,
+        customer_company=payload.company_name,
+        location_of_use=f"{payload.delivery_city}{', ' + payload.delivery_state if payload.delivery_state else ''}",
+        message="\n".join(details),
+        status=EnquiryStatus.pending,
+    )
+    db.add(enquiry)
+
+    # 4. Notify admin in-app if admin user exists
+    if admin_user:
+        await create_notification(
+            db,
+            user_id=admin_user.id,
+            type=NotificationType.enquiry,
+            title="New Equipment Buying Request",
+            body=f"{payload.full_name} wants to buy {payload.category} ({payload.make or ''}) in {payload.delivery_city}",
+            link="/admin/enquiries",
+        )
+
+    await db.commit()
+
+    reference_id = f"IQ-BUY-{str(enquiry_id).replace('-', '')[:6].upper()}"
+
+    # 5. Background email notification to admin
+    if admin_user:
+        background_tasks.add_task(
+            send_enquiry_received_email,
+            admin_user.email,
+            admin_user.full_name,
+            payload.full_name,
+            f"Buying Request: {payload.category} ({payload.delivery_city})",
+            f"{settings.ALLOWED_ORIGINS.split(',')[0]}/admin",
+        )
+
+    return {
+        "success": True,
+        "reference_id": reference_id,
+        "enquiry_id": str(enquiry_id),
+        "message": "Equipment procurement request submitted successfully. Our sourcing team will contact you within 2 hours.",
+    }
 
 
 # ── GET /enquiries/{enquiry_id} ────────────────────────────────

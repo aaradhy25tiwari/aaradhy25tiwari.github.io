@@ -32,7 +32,8 @@ import { NotificationBell } from "@/components/shared/NotificationBell";
 import { useAuth } from "@/hooks/useAuth";
 
 const NAV_LINKS = [
-  { href: "/machines", label: "Browse Equipment" },
+  { href: "/machines", label: "Rent Equipment" },
+  { href: "/buy", label: "Buy Equipment" },
   { href: "/machines/excavators", label: "Excavators" },
   { href: "/machines/cranes", label: "Cranes" },
   { href: "/pricing", label: "Pricing" },

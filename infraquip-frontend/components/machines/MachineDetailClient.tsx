@@ -8,7 +8,7 @@ import {
   MessageSquare, Heart, Calendar, Award, Clock, BadgeCheck
 } from "lucide-react";
 import apiClient from "@/lib/api/client";
-import { formatINR, formatDate, getListingTypeLabel, getConditionColor, cn } from "@/lib/utils";
+import { formatINR, formatDate, getConditionColor, cn } from "@/lib/utils";
 import type { Machine } from "@/types/machine";
 import { PhotoCarousel } from "@/components/machines/PhotoCarousel";
 import { RelatedListings } from "@/components/machines/RelatedListings";
@@ -148,9 +148,6 @@ export function MachineDetailClient({ slug }: MachineDetailClientProps) {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="inline-flex items-center gap-1 rounded-full border border-border/80 bg-muted px-3 py-1 text-xs font-medium">
-                    {getListingTypeLabel(data.listing_type)}
-                  </span>
                   <span className={cn("inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium", getConditionColor(data.condition))}>
                     {data.condition.charAt(0).toUpperCase() + data.condition.slice(1)}
                   </span>

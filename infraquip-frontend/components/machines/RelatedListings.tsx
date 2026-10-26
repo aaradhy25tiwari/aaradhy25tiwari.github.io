@@ -6,7 +6,7 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import { MapPin, ArrowRight } from "lucide-react";
 import apiClient from "@/lib/api/client";
-import { formatINR, getListingTypeLabel, getConditionColor, cn } from "@/lib/utils";
+import { formatINR, getConditionColor, cn } from "@/lib/utils";
 import type { MachineListItem } from "@/types/machine";
 
 interface RelatedListingsProps {
@@ -107,11 +107,6 @@ export function RelatedListings({ currentSlug, categoryId, city }: RelatedListin
                       No image
                     </div>
                   )}
-                  <div className="absolute top-2 left-2">
-                    <span className="rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-white">
-                      {getListingTypeLabel(machine.listing_type)}
-                    </span>
-                  </div>
                 </div>
 
                 {/* Info */}

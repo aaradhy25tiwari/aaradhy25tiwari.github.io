@@ -16,7 +16,8 @@ const FOOTER_LINKS = {
   platform: {
     title: "Platform",
     links: [
-      { label: "Browse All Machinery", href: "/machines" },
+      { label: "Rent Machinery", href: "/machines" },
+      { label: "Buy Heavy Equipment", href: "/buy" },
       { label: "List Your Machine", href: "/register?role=vendor" },
       { label: "Subscription Pricing", href: "/pricing" },
       { label: "Live Equipment Leads", href: "/live-leads" },

@@ -5,7 +5,7 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import { MapPin, Eye, ArrowRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { formatINR, getConditionColor, getListingTypeLabel, cn } from "@/lib/utils";
+import { formatINR, getConditionColor, cn } from "@/lib/utils";
 import type { MachineListItem } from "@/types/machine";
 import apiClient from "@/lib/api/client";
 
@@ -56,9 +56,6 @@ function MachineCard({ machine }: { machine: MachineListItem }) {
         )}
         {/* Badges */}
         <div className="absolute top-2 left-2 flex flex-col gap-1">
-          <span className="inline-flex items-center rounded-full bg-black/60 backdrop-blur-sm px-2 py-0.5 text-[10px] sm:text-xs font-medium text-white w-fit">
-            {getListingTypeLabel(machine.listing_type)}
-          </span>
           <span className="inline-flex items-center rounded-full bg-blue-600/90 backdrop-blur-sm px-2 py-0.5 text-[8px] sm:text-[10px] font-medium text-white w-fit capitalize">
             {machine.ownership_type}
           </span>

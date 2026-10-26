@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from uuid import UUID
 class EnquiryCreateRequest(BaseModel):
     machine_id: Optional[UUID] = None
-    vendor_id: UUID
+    vendor_id: Optional[UUID] = None
     requirement_type: str = "rent"
     customer_company: Optional[str] = Field(None, max_length=300)
     required_from: Optional[str] = None

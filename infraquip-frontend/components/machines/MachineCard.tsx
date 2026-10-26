@@ -69,10 +69,6 @@ export function MachineCard({ machine, className, onToggleWishlist }: MachineCar
               Busy
             </span>
           )}
-          
-          <span className="bg-primary text-primary-foreground text-[10px] font-bold px-2 py-1 rounded-md tracking-wider uppercase shadow-sm">
-            {machine.listing_type === "both" ? "Rent / Sale" : machine.listing_type}
-          </span>
         </div>
 
         {/* Wishlist Button */}
