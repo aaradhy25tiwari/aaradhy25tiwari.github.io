@@ -8,7 +8,7 @@ Log in on the frontend with these email + password combos:
     broker@infraquip.test  / Test@1234
     admin@infraquip.test   / Test@1234
 
-Idempotent: existing emails are left untouched.
+Idempotent: updates passwords and accounts to deterministic state.
 """
 import asyncio
 import uuid
@@ -77,7 +77,20 @@ async def create_test_user(db, supabase, cfg):
 
     exists = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
     if exists:
-        print(f"  skip  {email} (already exists)")
+        if exists.auth_uid:
+            try:
+                supabase.auth.admin.update_user_by_id(
+                    str(exists.auth_uid),
+                    {"password": TEST_PASSWORD, "email_confirm": True, "ban_duration": "none"}
+                )
+            except Exception as e:
+                print(f"  warn: failed to sync password for {email}: {e}")
+        exists.must_change_password = False
+        exists.failed_login_attempts = 0
+        exists.is_banned = False
+        exists.is_verified = True
+        await db.commit()
+        print(f"  reset {email} (password reset to {TEST_PASSWORD})")
         return
 
     # Reuse an existing Supabase auth account if present, else create one
@@ -98,6 +111,15 @@ async def create_test_user(db, supabase, cfg):
             "user_metadata": {"full_name": cfg["full_name"], "role": cfg["role"].value},
         })
         auth_uid = uuid.UUID(resp.user.id)
+    else:
+        # Ensure password matches TEST_PASSWORD
+        try:
+            supabase.auth.admin.update_user_by_id(
+                str(auth_uid),
+                {"password": TEST_PASSWORD, "email_confirm": True, "ban_duration": "none"}
+            )
+        except Exception:
+            pass
 
     user = User(
         auth_uid=auth_uid,
@@ -141,8 +163,8 @@ async def create_test_user(db, supabase, cfg):
 
 async def seed_test_users():
     supabase = get_supabase()
-    async with AsyncSessionLocal() as db:
-        for data in TEST_USERS:
+    for data in TEST_USERS:
+        async with AsyncSessionLocal() as db:
             await create_test_user(db, supabase, data)
 
 
