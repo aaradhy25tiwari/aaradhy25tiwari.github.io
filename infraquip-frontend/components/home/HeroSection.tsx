@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, MapPin, ChevronDown, LayoutDashboard, ArrowRight, ShieldCheck } from "lucide-react";
+import { Search, MapPin, ChevronDown, LayoutDashboard, ArrowRight, ShieldCheck, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { useAuth } from "@/hooks/useAuth";
@@ -115,6 +115,21 @@ export function HeroSection() {
                   }`}
                 >
                   BUY EQUIPMENT
+                </Button>
+                <Button 
+                  type="button"
+                  onClick={() => {
+                    if (user?.role === "vendor") {
+                      router.push("/dashboard/vendor/listings/new");
+                    } else {
+                      router.push("/login?role=vendor");
+                    }
+                  }}
+                  size="sm" 
+                  className="font-bold rounded-t-lg rounded-b-none px-4 sm:px-6 h-10 bg-slate-900/70 hover:bg-amber-500 hover:text-slate-950 text-amber-400 hover:text-slate-950 border border-b-0 border-white/10 transition-all flex items-center gap-1.5"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  LIST MACHINES
                 </Button>
               </div>
               

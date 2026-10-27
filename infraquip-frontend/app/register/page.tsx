@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AccountRequestForm } from "@/components/auth/AccountRequestForm";
 import Link from "next/link";
 import { Wrench } from "lucide-react";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "Request Access — InfraQuip",
@@ -29,7 +30,9 @@ export default function RequestAccessPage() {
           </p>
         </div>
 
-        <AccountRequestForm />
+        <Suspense fallback={<div className="skeleton h-[500px] w-full rounded-2xl" />}>
+          <AccountRequestForm />
+        </Suspense>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
           By requesting access, you agree to our{" "}

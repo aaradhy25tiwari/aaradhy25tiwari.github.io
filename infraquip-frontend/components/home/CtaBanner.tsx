@@ -48,7 +48,7 @@ export function CtaBanner() {
               </p>
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button size="lg" className="btn-amber-glow gap-2 w-full sm:w-auto" asChild>
-                  <Link href="/register?role=vendor">
+                  <Link href="/login?role=vendor">
                     List Your Machine Free
                     <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" />
                   </Link>

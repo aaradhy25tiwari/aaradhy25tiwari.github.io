@@ -69,7 +69,7 @@ export function CategoryGrid() {
         <div className="flex flex-col sm:flex-row justify-between items-end mb-10 border-b border-slate-200 dark:border-slate-800 pb-4">
           <div>
             <h2 id="categories-heading" className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight uppercase">
-              SHOP BY <span className="text-amber-500">CATEGORY</span>
+              SEARCH BY <span className="text-amber-500">CATEGORY</span>
             </h2>
           </div>
           <Link

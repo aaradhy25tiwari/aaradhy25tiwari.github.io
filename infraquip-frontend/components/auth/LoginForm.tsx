@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, EyeOff, Loader2, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Eye, EyeOff, Loader2, AlertTriangle, ShieldAlert, HardHat, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import Link from "next/link";
@@ -19,6 +19,10 @@ type FormData = z.infer<typeof schema>;
 
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isVendorRole = searchParams.get("role") === "vendor";
+  const redirectParam = searchParams.get("redirect");
+
   const supabase = getSupabaseClient();
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -29,6 +33,7 @@ export function LoginForm() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({ resolver: zodResolver(schema) });
 
@@ -135,7 +140,8 @@ export function LoginForm() {
         console.warn("login-success hook warning", loginErr);
       }
 
-      router.push("/dashboard");
+      const targetUrl = redirectParam || (isVendorRole ? "/dashboard/vendor/listings/new" : "/dashboard");
+      router.push(targetUrl);
     } catch (err: any) {
       console.error("Login fetch error:", err);
       setServerError("Network error: Unable to connect to the server. Please check your internet connection and try again.");
@@ -143,7 +149,38 @@ export function LoginForm() {
   };
 
   return (
-    <div className="card-surface p-8">
+    <div className="card-surface p-6 sm:p-8">
+      {/* Vendor Portal Tab Switcher */}
+      {isVendorRole && (
+        <div className="mb-6 space-y-3">
+          <div className="flex rounded-xl bg-muted p-1 border border-border">
+            <div className="flex-1 py-2 text-center text-xs font-bold rounded-lg bg-background text-foreground shadow-sm flex items-center justify-center gap-1.5">
+              <HardHat className="h-3.5 w-3.5 text-amber-500" />
+              Vendor Log In
+            </div>
+            <Link
+              href="/register?role=vendor"
+              className="flex-1 py-2 text-center text-xs font-semibold rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Register as Vendor
+            </Link>
+          </div>
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/25 p-3 text-xs flex items-center justify-between gap-2 text-amber-600 dark:text-amber-400">
+            <span>🚜 Sign in to list and manage your equipment fleet.</span>
+            <button
+              type="button"
+              onClick={() => {
+                setValue("emailOrPhone", "vendor@infraquip.test");
+                setValue("password", "Test@1234");
+              }}
+              className="text-[11px] font-bold underline hover:text-foreground shrink-0"
+            >
+              Autofill test vendor ⚡
+            </button>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
 
         {/* Email or Phone */}
@@ -287,6 +324,22 @@ export function LoginForm() {
           Continue with Google
         </Button>
       </form>
+
+      {isVendorRole ? (
+        <p className="text-center text-xs text-muted-foreground pt-4 border-t border-border mt-5">
+          Want to list machinery but don&apos;t have an account?{" "}
+          <Link href="/register?role=vendor" className="text-primary hover:underline font-semibold block sm:inline mt-1 sm:mt-0">
+            Request Vendor Access & List Free →
+          </Link>
+        </p>
+      ) : (
+        <p className="text-center text-xs text-muted-foreground pt-4 border-t border-border mt-5">
+          Own heavy equipment?{" "}
+          <Link href="/login?role=vendor" className="text-primary hover:underline font-semibold">
+            Vendor Sign In / Register to List Machines →
+          </Link>
+        </p>
+      )}
     </div>
   );
 }

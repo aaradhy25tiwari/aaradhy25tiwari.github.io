@@ -34,6 +34,7 @@ import { useAuth } from "@/hooks/useAuth";
 const NAV_LINKS = [
   { href: "/machines", label: "Rent Equipment" },
   { href: "/buy", label: "Buy Equipment" },
+  { href: "/login?role=vendor", label: "List Machines", guestOnly: true },
   { href: "/machines/excavators", label: "Excavators" },
   { href: "/machines/cranes", label: "Cranes" },
   { href: "/pricing", label: "Pricing" },
@@ -102,6 +103,9 @@ export function Navbar() {
           {/* ── Desktop Nav Links ─────────────────────────────── */}
           <div className="hidden lg:flex items-center gap-1">
             {NAV_LINKS.filter((link) => {
+              if (link.guestOnly && user) {
+                return false;
+              }
               if (user?.role === "vendor" && link.href.startsWith("/machines")) {
                 return false;
               }
@@ -207,6 +211,17 @@ export function Navbar() {
                   </>
                 ) : (
                   <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-amber-500/40 text-amber-500 hover:bg-amber-500/10 hover:text-amber-400 gap-1.5"
+                      asChild
+                    >
+                      <Link href="/login?role=vendor">
+                        <Plus className="h-3.5 w-3.5" />
+                        List Machines
+                      </Link>
+                    </Button>
                     <Button variant="ghost" size="sm" asChild>
                       <Link href="/login">Log in</Link>
                     </Button>
@@ -262,6 +277,9 @@ export function Navbar() {
           >
             <div className="section-container py-4 space-y-1">
               {NAV_LINKS.filter((link) => {
+                if (link.guestOnly && user) {
+                  return false;
+                }
                 if (user?.role === "vendor" && link.href.startsWith("/machines")) {
                   return false;
                 }
@@ -311,6 +329,16 @@ export function Navbar() {
                     </>
                   ) : (
                     <div className="flex flex-col gap-2 pt-1">
+                      <Button
+                        variant="outline"
+                        className="w-full border-amber-500/40 text-amber-500 hover:bg-amber-500/10 hover:text-amber-400 gap-2"
+                        asChild
+                      >
+                        <Link href="/login?role=vendor">
+                          <Plus className="h-4 w-4" />
+                          List Machines (Vendor)
+                        </Link>
+                      </Button>
                       <Button variant="outline" asChild className="w-full">
                         <Link href="/login">Log in</Link>
                       </Button>

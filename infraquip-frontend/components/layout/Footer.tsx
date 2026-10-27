@@ -18,7 +18,7 @@ const FOOTER_LINKS = {
     links: [
       { label: "Rent Machinery", href: "/machines" },
       { label: "Buy Heavy Equipment", href: "/buy" },
-      { label: "List Your Machine", href: "/register?role=vendor" },
+      { label: "List Machines (Vendor)", href: "/login?role=vendor" },
       { label: "Subscription Pricing", href: "/pricing" },
       { label: "Live Equipment Leads", href: "/live-leads" },
       { label: "How It Works", href: "/#how-it-works" },

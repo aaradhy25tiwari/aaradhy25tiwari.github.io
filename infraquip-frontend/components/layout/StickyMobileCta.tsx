@@ -38,11 +38,11 @@ export function StickyMobileCta() {
 
         {/* Primary CTA (List Equipment / Add Machine) */}
         <Link
-          href={isVendor ? "/dashboard/vendor/add-machine" : "/register?role=vendor"}
+          href={isVendor ? "/dashboard/vendor/add-machine" : "/login?role=vendor"}
           className="flex-[1.2] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 transition-all"
         >
           <PlusCircle className="h-4 w-4" />
-          <span>{isVendor ? "Add Machine" : "List Machine"}</span>
+          <span>{isVendor ? "Add Machine" : "List Machines"}</span>
         </Link>
 
         {/* Quick Phone Connect */}

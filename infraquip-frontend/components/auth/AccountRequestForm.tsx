@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -53,7 +55,10 @@ const inputCls = (err?: string) =>
 
 // ── Component ─────────────────────────────────────────────────
 export function AccountRequestForm() {
-  const [role, setRole] = useState<Role>("vendor");
+  const searchParams = useSearchParams();
+  const paramRole = (searchParams.get("role") as Role) || "vendor";
+  const [role, setRole] = useState<Role>(paramRole);
+  const isVendorContext = searchParams.get("role") === "vendor" || role === "vendor";
   const [submitted, setSubmitted] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -109,7 +114,31 @@ export function AccountRequestForm() {
   }
 
   return (
-    <div className="card-surface p-8">
+    <div className="card-surface p-6 sm:p-8">
+      {/* Vendor Portal Tab Switcher */}
+      {isVendorContext && (
+        <div className="mb-6 space-y-3">
+          <div className="flex rounded-xl bg-muted p-1 border border-border">
+            <Link
+              href="/login?role=vendor"
+              className="flex-1 py-2 text-center text-xs font-semibold rounded-lg text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center gap-1.5"
+            >
+              <HardHat className="h-3.5 w-3.5 text-amber-500" />
+              Vendor Log In
+            </Link>
+            <div className="flex-1 py-2 text-center text-xs font-bold rounded-lg bg-background text-foreground shadow-sm">
+              Register as Vendor
+            </div>
+          </div>
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/25 p-3 text-xs flex items-center justify-between gap-2 text-amber-600 dark:text-amber-400">
+            <span>🚜 Apply for Vendor Access to list your machinery across India.</span>
+            <Link href="/login?role=vendor" className="font-bold underline hover:text-foreground shrink-0">
+              Already registered? Log in →
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Role selector */}
       <div className="mb-10">
         <p className="mb-6 text-sm font-semibold text-foreground text-center">
@@ -338,9 +367,12 @@ export function AccountRequestForm() {
 
         <p className="text-center text-xs text-muted-foreground pt-1">
           Already have an account?{" "}
-          <a href="/login" className="text-primary hover:underline font-medium">
+          <Link
+            href={role === "vendor" ? "/login?role=vendor" : "/login"}
+            className="text-primary hover:underline font-medium"
+          >
             Log in
-          </a>
+          </Link>
         </p>
       </form>
     </div>
