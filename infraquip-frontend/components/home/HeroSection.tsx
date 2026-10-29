@@ -55,7 +55,7 @@ export function HeroSection() {
     if (city) params.set("city", city);
     if (category !== "All Equipment") {
       const matched = apiCategories.find((c) => c.name.toLowerCase() === category.toLowerCase());
-      params.set("category", matched?.slug || category.toLowerCase());
+      params.set("category", matched?.name || category.toLowerCase());
     }
     
     if (listingType === "sale") {

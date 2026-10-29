@@ -1042,9 +1042,11 @@ export function ListingForm({ machine }: ListingFormProps) {
                       error={!!errors.make && !customMake}
                     >
                       <option value="" disabled>Select Make / Brand...</option>
-                      {availableMakes.map((m) => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
+                      {availableMakes
+                        .filter((m) => m.toLowerCase().trim() !== "other" && m !== OTHER_OPTION)
+                        .map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
                       <option value={OTHER_OPTION}>Other (Not in list)</option>
                     </Select>
                     {selectedMake === OTHER_OPTION && (
@@ -1079,11 +1081,13 @@ export function ListingForm({ machine }: ListingFormProps) {
                       ) : (
                         <>
                           <option value="" disabled>Select Model...</option>
-                          {availableModels.map((item) => (
-                            <option key={item.model} value={item.model}>
-                              {item.model} {item.capacity ? `(${item.capacity})` : ""}
-                            </option>
-                          ))}
+                          {availableModels
+                            .filter((item) => item.model.toLowerCase().trim() !== "other" && item.model !== OTHER_OPTION)
+                            .map((item) => (
+                              <option key={item.model} value={item.model}>
+                                {item.model} {item.capacity ? `(${item.capacity})` : ""}
+                              </option>
+                            ))}
                           <option value={OTHER_OPTION}>Other (Not in list)</option>
                         </>
                       )}

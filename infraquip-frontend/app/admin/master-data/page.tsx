@@ -177,7 +177,8 @@ export default function AdminMasterDataPage() {
   }, [categoriesData, catalogItems]);
 
   const uniqueMakes = useMemo(() => {
-    return Array.from(new Set(catalogItems.map(i => i.make))).filter(Boolean).sort();
+    const raw = Array.from(new Set(catalogItems.map(i => i.make))).filter(Boolean);
+    return sortCategoriesAlphabetical(raw);
   }, [catalogItems]);
 
   // Filtered catalog items on client for make

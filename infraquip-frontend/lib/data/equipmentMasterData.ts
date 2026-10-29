@@ -1,4 +1,5 @@
 import masterDataRaw from "./master_data.json";
+import { sortCategoriesAlphabetical } from "@/lib/utils";
 
 export interface EquipmentMasterItem {
   id?: string;
@@ -35,68 +36,82 @@ export const masterData: EquipmentMasterItem[] = (masterDataRaw as any[]).map((i
   };
 });
 
-// List of all unique makes sorted alphabetically
-export const ALL_MAKES: string[] = Array.from(
-  new Set(
-    masterData
-      .map((item) => item.make?.trim())
-      .filter((m): m is string => Boolean(m))
+// List of all unique makes sorted alphabetically with 'Other' last
+export const ALL_MAKES: string[] = sortCategoriesAlphabetical(
+  Array.from(
+    new Set(
+      masterData
+        .map((item) => item.make?.trim())
+        .filter((m): m is string => Boolean(m))
+    )
   )
-).sort((a, b) => a.localeCompare(b));
+);
+
+export function normalizeCategoryString(cat?: string): string {
+  if (!cat) return "";
+  return cat
+    .toLowerCase()
+    .trim()
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ");
+}
 
 // Helper to match category names flexibly (e.g. Excavators vs EXCAVATOR, Cranes vs HYD TELE CRANE)
 export function matchesCategory(itemCatRaw?: string, targetCatRaw?: string): boolean {
   if (!itemCatRaw || !targetCatRaw) return false;
-  const a = itemCatRaw.toLowerCase().trim();
-  const b = targetCatRaw.toLowerCase().trim();
+  const a = normalizeCategoryString(itemCatRaw);
+  const b = normalizeCategoryString(targetCatRaw);
   if (a === b) return true;
   if (b === "all" || b === "all equipment") return true;
 
   const aSingular = a.endsWith("s") ? a.slice(0, -1) : a;
   const bSingular = b.endsWith("s") ? b.slice(0, -1) : b;
   if (aSingular === bSingular) return true;
-  if (a.includes(bSingular) || b.includes(aSingular)) return true;
 
-  // Domain mappings between platform categories and master data equipment types
-  if ((a.includes("dozer") || a.includes("bulldozer")) && (b.includes("dozer") || b.includes("bulldozer"))) return true;
-  if ((a.includes("roller") || a.includes("compactor")) && (b.includes("roller") || b.includes("compactor"))) return true;
-  if ((a.includes("crane") || a.includes("hydra")) && (b.includes("crane") || b.includes("hydra"))) return true;
-  if ((a.includes("concrete") || a.includes("pump")) && (b.includes("concrete") || b.includes("pump"))) return true;
-  if (a.includes("grader") && b.includes("grader")) return true;
-  if (a.includes("loader") && b.includes("loader")) return true;
+  // Exact word-boundary matching for multi-word equipment types
+  if (a.includes(bSingular) && bSingular.length >= 4) return true;
+  if (b.includes(aSingular) && aSingular.length >= 4) return true;
+
+  // Domain mappings for generic platform categories in legacy views:
+  if ((b === "bulldozer" || b === "bulldozers" || b === "dozer" || b === "dozers") && a.includes("dozer")) return true;
+  if ((b === "compactor" || b === "compactors") && (a.includes("roller") || a.includes("compactor"))) return true;
+  if ((b === "crane" || b === "cranes") && (a.includes("crane") || a.includes("hydra"))) return true;
+  if (b === "concrete" && (a.includes("concrete") || a.includes("pump"))) return true;
+  if ((b === "grader" || b === "graders") && a.includes("grader")) return true;
+  if ((b === "loader" || b === "loaders") && a.includes("loader")) return true;
 
   return false;
 }
 
-// Get unique makes optionally filtered by equipment category
+// Get unique makes optionally filtered by equipment category, sorted ascending with 'Other' last
 export function getMakesForCategory(categoryName?: string, dynamicCatalog?: EquipmentMasterItem[]): string[] {
   const dataset = dynamicCatalog && dynamicCatalog.length > 0 ? dynamicCatalog : masterData;
   if (!categoryName || categoryName.toLowerCase().trim() === "all" || categoryName.toLowerCase().trim() === "all equipment") {
-    return Array.from(
+    const all = Array.from(
       new Set(dataset.map((item) => (item.make || item["Equipment Make"] || "").trim()).filter(Boolean))
-    ).sort((a, b) => a.localeCompare(b));
+    );
+    return sortCategoriesAlphabetical(all);
   }
+
   const filtered = dataset.filter((item) => {
     const cat = (item.category_name || item["Equipment Type"] || "").trim();
     return matchesCategory(cat, categoryName);
   });
-  if (filtered.length === 0) {
-    return Array.from(
-      new Set(dataset.map((item) => (item.make || item["Equipment Make"] || "").trim()).filter(Boolean))
-    ).sort((a, b) => a.localeCompare(b));
-  }
-  return Array.from(new Set(filtered.map((item) => (item.make || item["Equipment Make"] || "").trim()).filter(Boolean))).sort(
-    (a, b) => a.localeCompare(b)
+
+  const makes = Array.from(
+    new Set(filtered.map((item) => (item.make || item["Equipment Make"] || "").trim()).filter(Boolean))
   );
+
+  return sortCategoriesAlphabetical(makes);
 }
 
-// Get models for a selected make
+// Get models for a selected make, sorted ascending with 'Other' last
 export function getModelsForMake(
   make?: string,
   categoryName?: string,
   dynamicCatalog?: EquipmentMasterItem[]
 ): { model: string; capacity: string }[] {
-  if (!make) return [];
+  if (!make || make === "Other" || make === "other" || make === "__other__") return [];
   const dataset = dynamicCatalog && dynamicCatalog.length > 0 ? dynamicCatalog : masterData;
   const makeNormalized = make.trim().toLowerCase();
 
@@ -122,7 +137,13 @@ export function getModelsForMake(
     }
   }
 
-  return result.sort((a, b) => a.model.localeCompare(b.model));
+  return result.sort((a, b) => {
+    const isOtherA = a.model.toLowerCase().trim().startsWith("other");
+    const isOtherB = b.model.toLowerCase().trim().startsWith("other");
+    if (isOtherA && !isOtherB) return 1;
+    if (!isOtherA && isOtherB) return -1;
+    return a.model.localeCompare(b.model, undefined, { numeric: true, sensitivity: "base" });
+  });
 }
 
 // Get capacity text for a specific make and model

@@ -730,9 +730,12 @@ async def get_admin_master_catalog(
 
     offset = (page - 1) * per_page
     stmt = select(EquipmentMasterCatalog).order_by(
-        EquipmentMasterCatalog.category_name,
-        EquipmentMasterCatalog.make,
-        EquipmentMasterCatalog.model,
+        case((func.lower(EquipmentMasterCatalog.category_name).like("other%"), 1), else_=0),
+        func.lower(EquipmentMasterCatalog.category_name).asc(),
+        case((func.lower(EquipmentMasterCatalog.make).like("other%"), 1), else_=0),
+        func.lower(EquipmentMasterCatalog.make).asc(),
+        case((func.lower(EquipmentMasterCatalog.model).like("other%"), 1), else_=0),
+        func.lower(EquipmentMasterCatalog.model).asc(),
     )
 
     if search:

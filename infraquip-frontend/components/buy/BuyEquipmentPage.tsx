@@ -30,6 +30,11 @@ import apiClient from "@/lib/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { cn, scrollToTop, sortCategoriesAlphabetical } from "@/lib/utils";
+import {
+  getMakesForCategory,
+  getModelsForMake,
+  type EquipmentMasterItem,
+} from "@/lib/data/equipmentMasterData";
 
 const POPULAR_CATEGORIES = [
   "Excavators",
@@ -43,22 +48,6 @@ const POPULAR_CATEGORIES = [
   "Forklifts & Reach Trucks",
   "Tipper Trucks",
   "Piling Rigs",
-];
-
-const POPULAR_MAKES = [
-  "JCB",
-  "Tata Hitachi",
-  "Caterpillar (CAT)",
-  "Komatsu",
-  "Kobelco",
-  "Sany",
-  "Hyundai",
-  "Volvo",
-  "L&T",
-  "Escorts",
-  "Mahindra",
-  "Bobcat",
-  "Other / Open to Suggestions",
 ];
 
 const BUDGET_RANGES = [
@@ -113,11 +102,18 @@ export function BuyEquipmentPage() {
   const initialCityParam = searchParams.get("city") || "";
 
   const [dynamicCategories, setDynamicCategories] = useState<string[]>([]);
+  const [dynamicCatalog, setDynamicCatalog] = useState<EquipmentMasterItem[]>([]);
 
   useEffect(() => {
     apiClient.get<Array<{ name: string }>>("/categories").then((res) => {
       if (res.data && res.data.length > 0) {
         setDynamicCategories(res.data.map((c) => c.name));
+      }
+    }).catch(() => {});
+
+    apiClient.get<EquipmentMasterItem[]>("/categories/master-catalog").then((res) => {
+      if (res.data && res.data.length > 0) {
+        setDynamicCatalog(res.data);
       }
     }).catch(() => {});
   }, []);
@@ -140,7 +136,7 @@ export function BuyEquipmentPage() {
     watch,
     setValue,
     reset,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, dirtyFields },
   } = useForm<BuyFormData>({
     resolver: zodResolver(buySchema),
     defaultValues: {
@@ -183,6 +179,34 @@ export function BuyEquipmentPage() {
   const watchedFinancing = watch("financing_needed");
   const watchedInspection = watch("inspection_needed");
   const watchedTransport = watch("transport_needed");
+
+  // When categoryOptions loads asynchronously and contains initialCategoryParam,
+  // apply the matching category unless the buyer has manually changed it.
+  useEffect(() => {
+    if (!initialCategoryParam) return;
+    if (dirtyFields.category) return;
+    const found = categoryOptions.find(
+      (c) =>
+        c.toLowerCase() === initialCategoryParam.toLowerCase() ||
+        c.toLowerCase().replace(/[^a-z0-9]+/g, "-") === initialCategoryParam.toLowerCase()
+    );
+    if (found && watchedCategory !== found) {
+      setValue("category", found);
+    }
+  }, [initialCategoryParam, categoryOptions, dirtyFields.category, watchedCategory, setValue]);
+
+  // Dynamic Makes & Models from Master Data, sorted A-Z with 'Other' last
+  const availableMakes = useMemo(() => {
+    const makes = getMakesForCategory(watchedCategory, dynamicCatalog);
+    if (makes.length === 0) {
+      return getMakesForCategory(undefined, dynamicCatalog);
+    }
+    return makes;
+  }, [watchedCategory, dynamicCatalog]);
+
+  const availableModels = useMemo(() => {
+    return getModelsForMake(watchedMake, watchedCategory, dynamicCatalog);
+  }, [watchedMake, watchedCategory, dynamicCatalog]);
 
   const onSubmit = async (data: BuyFormData) => {
     try {
@@ -415,11 +439,16 @@ export function BuyEquipmentPage() {
                           className="w-full appearance-none rounded-xl bg-slate-950 border border-white/10 px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                         >
                           <option value="">Any Verified Brand</option>
-                          {POPULAR_MAKES.map((brand) => (
-                            <option key={brand} value={brand} className="bg-slate-900 text-white">
-                              {brand}
-                            </option>
-                          ))}
+                          {availableMakes
+                            .filter((brand) => !brand.toLowerCase().trim().startsWith("other"))
+                            .map((brand) => (
+                              <option key={brand} value={brand} className="bg-slate-900 text-white">
+                                {brand}
+                              </option>
+                            ))}
+                          <option value="Other" className="bg-slate-900 text-white">
+                            Other / Open to Suggestions
+                          </option>
                         </select>
                         <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                       </div>
@@ -431,10 +460,24 @@ export function BuyEquipmentPage() {
                       </label>
                       <input
                         type="text"
+                        list="model-suggestions"
                         placeholder="e.g. 20-22 Ton, 3DX, 50 Ton Crane"
                         {...register("model")}
                         className="w-full rounded-xl bg-slate-950 border border-white/10 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                       />
+                      <datalist id="model-suggestions">
+                        {availableModels
+                          .filter((item) => !item.model.toLowerCase().trim().startsWith("other"))
+                          .map((item) => (
+                            <option
+                              key={item.model}
+                              value={item.model}
+                            >
+                              {item.capacity ? `${item.model} (${item.capacity})` : item.model}
+                            </option>
+                          ))}
+                        <option value="Other">Other (Custom Model)</option>
+                      </datalist>
                     </div>
                   </div>
 

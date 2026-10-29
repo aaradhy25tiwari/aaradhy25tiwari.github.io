@@ -8,6 +8,7 @@ import uuid
 import logging
 from typing import List, Optional, Set
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.machine import Category, EquipmentMasterCatalog
 
@@ -113,43 +114,48 @@ async def ensure_categories_synced_for_names(
         if matched:
             continue
 
-        # Format display name
-        display_name = format_category_name(cat_name)
-
-        # Make sure display_name is not already taken
-        final_name = display_name
-        name_counter = 1
-        while final_name.lower() in existing_names_lower:
-            final_name = f"{display_name} ({name_counter})"
-            name_counter += 1
-        existing_names_lower.add(final_name.lower())
-
-        # Generate unique slug
+        # Format display name & base slug to enforce database uniqueness
+        final_name = format_category_name(cat_name)
         base_slug = generate_slug(final_name)
-        slug = base_slug
-        counter = 1
-        while slug in existing_slugs:
-            slug = f"{base_slug}-{counter}"
-            counter += 1
-        existing_slugs.add(slug)
+
+        # Enforce uniqueness against already loaded categories; reuse existing instead of duplicating
+        if final_name.lower() in existing_names_lower or base_slug in existing_slugs:
+            continue
 
         max_sort_order += 1
         new_cat = Category(
             id=uuid.uuid4(),
             name=final_name,
-            slug=slug,
+            slug=base_slug,
             icon_url=None,
             description=f"Heavy equipment listings, rentals, and specifications for {final_name}.",
             sort_order=max_sort_order,
             is_active=True,
         )
-        db.add(new_cat)
-        new_categories.append(new_cat)
-        existing_categories.append(new_cat)
-        logger.info(f"Auto-synced new category '{final_name}' ({slug}) from master data.")
-
-    if new_categories:
-        await db.flush()
+        try:
+            async with db.begin_nested():
+                db.add(new_cat)
+                await db.flush()
+            new_categories.append(new_cat)
+            existing_categories.append(new_cat)
+            existing_names_lower.add(final_name.lower())
+            existing_slugs.add(base_slug)
+            logger.info(f"Auto-synced new category '{final_name}' ({base_slug}) from master data.")
+        except IntegrityError:
+            # Handle conflicting insert by retrieving and reusing the category committed by the concurrent request
+            conflict_res = await db.execute(
+                select(Category).where(
+                    (func.lower(Category.name) == final_name.lower()) |
+                    (func.lower(Category.slug) == base_slug.lower())
+                )
+            )
+            reused_cat = conflict_res.scalars().first()
+            if reused_cat:
+                if not any(c.id == reused_cat.id for c in existing_categories):
+                    existing_categories.append(reused_cat)
+                    existing_names_lower.add(reused_cat.name.strip().lower())
+                    existing_slugs.add(reused_cat.slug.strip().lower())
+                logger.info(f"Reused concurrently committed category '{reused_cat.name}' ({reused_cat.slug}).")
 
     return new_categories
 
@@ -166,16 +172,17 @@ async def sync_all_categories_from_master(db: AsyncSession) -> dict:
     )
     master_cat_names = set(r[0] for r in master_result.all() if r[0] and str(r[0]).strip())
 
-    # 2. Check if EquipmentMasterData also has records
+    # 2. Check if optional EquipmentMasterData also has records (isolated in savepoint if table is omitted)
     try:
         from app.models.master_data import EquipmentMasterData
-        emd_result = await db.execute(
-            select(func.distinct(EquipmentMasterData.equipment_type))
-            .where(EquipmentMasterData.equipment_type.isnot(None))
-        )
-        for r in emd_result.all():
-            if r[0] and str(r[0]).strip():
-                master_cat_names.add(str(r[0]).strip())
+        async with db.begin_nested():
+            emd_result = await db.execute(
+                select(func.distinct(EquipmentMasterData.equipment_type))
+                .where(EquipmentMasterData.equipment_type.isnot(None))
+            )
+            for r in emd_result.all():
+                if r[0] and str(r[0]).strip():
+                    master_cat_names.add(str(r[0]).strip())
     except Exception as e:
         logger.debug(f"EquipmentMasterData check skipped: {e}")
 
