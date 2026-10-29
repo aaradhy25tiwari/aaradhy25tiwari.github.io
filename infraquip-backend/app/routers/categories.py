@@ -2,7 +2,7 @@
 Categories Router — Public endpoint for category list with counts.
 """
 from fastapi import APIRouter, Request
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 
 from app.deps import DBSession
 from app.models.machine import Category, Machine, MachineStatus
@@ -16,7 +16,10 @@ router = APIRouter()
 @router.get("", response_model=list[CategoryResponse])
 @limiter.limit(settings.RATE_LIMIT_PUBLIC)
 async def list_categories(request: Request, db: DBSession):
-    """List all active categories with their live listing counts."""
+    """List all active categories with their live listing counts, auto-synced with master data."""
+    from app.services.category_sync import sync_all_categories_from_master
+    await sync_all_categories_from_master(db)
+
     result = await db.execute(
         select(
             Category,
@@ -28,7 +31,10 @@ async def list_categories(request: Request, db: DBSession):
         )
         .where(Category.is_active == True)
         .group_by(Category.id)
-        .order_by(Category.sort_order)
+        .order_by(
+            case((func.lower(Category.name).like("other%"), 1), else_=0),
+            func.lower(Category.name).asc(),
+        )
     )
     rows = result.all()
     return [

@@ -29,7 +29,7 @@ import {
 import apiClient from "@/lib/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { cn, scrollToTop } from "@/lib/utils";
+import { cn, scrollToTop, sortCategoriesAlphabetical } from "@/lib/utils";
 
 const POPULAR_CATEGORIES = [
   "Excavators",
@@ -112,13 +112,27 @@ export function BuyEquipmentPage() {
   const initialQueryParam = searchParams.get("q") || "";
   const initialCityParam = searchParams.get("city") || "";
 
+  const [dynamicCategories, setDynamicCategories] = useState<string[]>([]);
+
+  useEffect(() => {
+    apiClient.get<Array<{ name: string }>>("/categories").then((res) => {
+      if (res.data && res.data.length > 0) {
+        setDynamicCategories(res.data.map((c) => c.name));
+      }
+    }).catch(() => {});
+  }, []);
+
+  const categoryOptions = sortCategoriesAlphabetical(
+    dynamicCategories.length > 0 ? dynamicCategories : POPULAR_CATEGORIES
+  );
+
   const defaultCategory = useMemo(() => {
     if (!initialCategoryParam) return "Excavators";
-    const found = POPULAR_CATEGORIES.find(
+    const found = categoryOptions.find(
       (c) => c.toLowerCase() === initialCategoryParam.toLowerCase()
     );
     return found || "Excavators";
-  }, [initialCategoryParam]);
+  }, [initialCategoryParam, categoryOptions]);
 
   const {
     register,
@@ -376,7 +390,7 @@ export function BuyEquipmentPage() {
                         {...register("category")}
                         className="w-full appearance-none rounded-xl bg-slate-950 border border-white/10 px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                       >
-                        {POPULAR_CATEGORIES.map((cat) => (
+                        {categoryOptions.map((cat) => (
                           <option key={cat} value={cat} className="bg-slate-900 text-white">
                             {cat}
                           </option>

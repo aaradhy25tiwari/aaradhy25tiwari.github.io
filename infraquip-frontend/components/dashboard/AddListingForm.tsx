@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, CheckCircle } from "lucide-react";
 import apiClient from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, sortCategoriesAlphabetical } from "@/lib/utils";
 import type { Category } from "@/types/machine";
 
 const schema = z.object({
@@ -58,7 +58,7 @@ export function AddListingForm() {
 
   useEffect(() => {
     apiClient.get<Category[]>("/categories").then((response) => {
-      setCategories(response.data);
+      setCategories(sortCategoriesAlphabetical(response.data));
     });
   }, []);
 
@@ -101,7 +101,7 @@ export function AddListingForm() {
             <label className="text-sm font-medium">Category</label>
             <select {...register("category_id")} className={cn("w-full rounded-2xl border bg-background px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary", errors.category_id ? "border-destructive" : "border-border")}> 
               <option value="">Select category</option>
-              {categories.map((category) => (
+              {sortCategoriesAlphabetical(categories).map((category) => (
                 <option key={category.id} value={category.id}>{category.name}</option>
               ))}
             </select>

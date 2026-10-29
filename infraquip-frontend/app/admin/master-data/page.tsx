@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import apiClient from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, sortCategoriesAlphabetical } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -130,6 +130,7 @@ export default function AdminMasterDataPage() {
   const [catSortOrder, setCatSortOrder] = useState(0);
   const [catIsActive, setCatIsActive] = useState(true);
   const [catFormError, setCatFormError] = useState<string | null>(null);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
   // ── Queries ───────────────────────────────────────────────────
 
@@ -171,7 +172,8 @@ export default function AdminMasterDataPage() {
   const uniqueCategories = useMemo(() => {
     const fromCat = categoriesData.map(c => c.name.toUpperCase());
     const fromItems = catalogItems.map(i => i.category_name.toUpperCase());
-    return Array.from(new Set([...fromCat, ...fromItems])).filter(Boolean).sort();
+    const unique = Array.from(new Set([...fromCat, ...fromItems])).filter(Boolean);
+    return sortCategoriesAlphabetical(unique);
   }, [categoriesData, catalogItems]);
 
   const uniqueMakes = useMemo(() => {
@@ -186,13 +188,15 @@ export default function AdminMasterDataPage() {
 
   // Filtered categories
   const filteredCategories = useMemo(() => {
-    if (!categorySearch.trim()) return categoriesData;
-    const q = categorySearch.toLowerCase();
-    return categoriesData.filter(c => 
-      c.name.toLowerCase().includes(q) || 
-      c.slug.toLowerCase().includes(q) || 
-      (c.description && c.description.toLowerCase().includes(q))
-    );
+    const q = categorySearch.trim().toLowerCase();
+    const base = !q
+      ? categoriesData
+      : categoriesData.filter(c => 
+          c.name.toLowerCase().includes(q) || 
+          c.slug.toLowerCase().includes(q) || 
+          (c.description && c.description.toLowerCase().includes(q))
+        );
+    return sortCategoriesAlphabetical(base);
   }, [categoriesData, categorySearch]);
 
   // ── Master Catalog Mutations ────────────────────────────────────
@@ -205,6 +209,8 @@ export default function AdminMasterDataPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-master-catalog"] });
       queryClient.invalidateQueries({ queryKey: ["master-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
       setIsAddOpen(false);
       resetCatalogForm();
     },
@@ -259,6 +265,8 @@ export default function AdminMasterDataPage() {
       setBulkStep("summary");
       queryClient.invalidateQueries({ queryKey: ["admin-master-catalog"] });
       queryClient.invalidateQueries({ queryKey: ["master-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
       setBulkError(null);
     },
     onError: (err: any) => {
@@ -274,6 +282,8 @@ export default function AdminMasterDataPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-master-catalog"] });
       queryClient.invalidateQueries({ queryKey: ["master-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
       setEditItem(null);
       resetCatalogForm();
     },
@@ -291,6 +301,29 @@ export default function AdminMasterDataPage() {
       queryClient.invalidateQueries({ queryKey: ["admin-master-catalog"] });
       queryClient.invalidateQueries({ queryKey: ["master-catalog"] });
       setDeleteItem(null);
+    },
+  });
+
+  const syncFromMasterMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await apiClient.post("/admin/categories/sync-master");
+      return data;
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-master-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["master-catalog"] });
+      if (data.new_categories_created > 0) {
+        setSyncFeedback(`Successfully synced ${data.new_categories_created} new categories from Master Data! (${data.created_category_names?.join(", ")})`);
+      } else {
+        setSyncFeedback("Categories are already fully in sync with Master Data.");
+      }
+      setTimeout(() => setSyncFeedback(null), 6000);
+    },
+    onError: (err: any) => {
+      setSyncFeedback(err.response?.data?.detail || "Failed to sync categories with master data.");
+      setTimeout(() => setSyncFeedback(null), 6000);
     },
   });
 
@@ -603,9 +636,21 @@ export default function AdminMasterDataPage() {
               </Button>
             </>
           ) : (
-            <Button onClick={openAddCategory} className="gap-2 text-xs h-9 shadow-sm cursor-pointer">
-              <Plus className="h-4 w-4" /> Add Category
-            </Button>
+            <>
+              <Button
+                onClick={() => syncFromMasterMutation.mutate()}
+                disabled={syncFromMasterMutation.isPending}
+                variant="outline"
+                className="gap-2 text-xs h-9 cursor-pointer"
+                title="Synchronize equipment categories from master catalog"
+              >
+                <RefreshCw className={cn("h-4 w-4 text-primary", syncFromMasterMutation.isPending && "animate-spin")} />
+                {syncFromMasterMutation.isPending ? "Syncing..." : "Sync from Master Data"}
+              </Button>
+              <Button onClick={openAddCategory} className="gap-2 text-xs h-9 shadow-sm cursor-pointer">
+                <Plus className="h-4 w-4" /> Add Category
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -631,6 +676,16 @@ export default function AdminMasterDataPage() {
           </p>
         </div>
       </div>
+
+      {syncFeedback && (
+        <div className="flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/10 p-3.5 text-sm text-primary">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          <span className="flex-1 font-medium">{syncFeedback}</span>
+          <button onClick={() => setSyncFeedback(null)} className="text-primary hover:text-primary/70">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Tab Navigation */}
       <div className="flex border-b border-border gap-6 text-sm font-semibold">
@@ -972,15 +1027,27 @@ export default function AdminMasterDataPage() {
 
             <div className="my-4 space-y-4">
               <div>
-                <label className="text-xs font-semibold text-foreground">Category / Equipment Type *</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground">Category / Equipment Type *</label>
+                  <span className="text-[10px] text-muted-foreground font-normal">Auto-syncs to category list</span>
+                </div>
                 <input
                   type="text"
                   placeholder="e.g. EXCAVATOR, BACKHOE LOADER, CRANE"
                   value={formCategory}
                   onChange={(e) => setFormCategory(e.target.value.toUpperCase())}
+                  list="available-categories-list"
                   required
                   className="mt-1.5 w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
+                <datalist id="available-categories-list">
+                  {uniqueCategories.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Select existing or type a new category. Any new category will automatically appear in the category list.
+                </p>
               </div>
 
               <div>
@@ -1491,14 +1558,21 @@ export default function AdminMasterDataPage() {
 
             <div className="my-4 space-y-4">
               <div>
-                <label className="text-xs font-semibold text-foreground">Category / Equipment Type *</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground">Category / Equipment Type *</label>
+                  <span className="text-[10px] text-muted-foreground font-normal">Auto-syncs to category list</span>
+                </div>
                 <input
                   type="text"
                   value={formCategory}
                   onChange={(e) => setFormCategory(e.target.value.toUpperCase())}
+                  list="available-categories-list"
                   required
                   className="mt-1.5 w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Select existing or type a new category. Any new category will automatically appear in the category list.
+                </p>
               </div>
 
               <div>

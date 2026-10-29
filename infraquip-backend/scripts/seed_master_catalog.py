@@ -75,5 +75,12 @@ async def seed():
         else:
             print("Table already has data, skipping initial seed.")
 
+    # Sync categories into categories table
+    from app.database import AsyncSessionLocal
+    from app.services.category_sync import sync_all_categories_from_master
+    async with AsyncSessionLocal() as session:
+        sync_res = await sync_all_categories_from_master(session)
+        print("Categories synced with master data:", sync_res)
+
 if __name__ == "__main__":
     asyncio.run(seed())

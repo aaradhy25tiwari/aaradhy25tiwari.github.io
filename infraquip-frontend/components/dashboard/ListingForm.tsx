@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import apiClient from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
-import { cn, scrollToTop } from "@/lib/utils";
+import { cn, scrollToTop, sortCategoriesAlphabetical } from "@/lib/utils";
 import type { Category, Machine } from "@/types/machine";
 import { ImageUploader } from "@/components/shared/ImageUploader";
 import { 
@@ -314,6 +314,7 @@ export function ListingForm({ machine }: ListingFormProps) {
     staleTime: 60_000,
   });
 
+  const sortedCategories = useMemo(() => sortCategoriesAlphabetical(categories), [categories]);
   const selectedCategoryId = watch("category_id");
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
   const availableMakes = getMakesForCategory(selectedCategory?.name, dynamicCatalog);
@@ -730,7 +731,7 @@ export function ListingForm({ machine }: ListingFormProps) {
 
   // Load categories
   useEffect(() => {
-    apiClient.get<Category[]>("/categories").then((r) => setCategories(r.data));
+    apiClient.get<Category[]>("/categories").then((r) => setCategories(sortCategoriesAlphabetical(r.data)));
   }, []);
 
   // Step validation fields map
@@ -1022,7 +1023,7 @@ export function ListingForm({ machine }: ListingFormProps) {
                 <Field label="Category *" error={errors.category_id?.message}>
                   <Select error={!!errors.category_id} {...register("category_id")} defaultValue="">
                     <option value="" disabled>Select category...</option>
-                    {categories.map((c) => (
+                    {sortedCategories.map((c) => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </Select>

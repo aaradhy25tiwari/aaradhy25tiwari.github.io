@@ -10,7 +10,7 @@ import {
   Tag, Layers, Wrench, Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn, formatINR, getConditionColor, scrollToTop } from "@/lib/utils";
+import { cn, formatINR, getConditionColor, scrollToTop, sortCategoriesAlphabetical } from "@/lib/utils";
 import apiClient from "@/lib/api/client";
 import type { MachineListItem, SearchFilters } from "@/types/machine";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -136,7 +136,7 @@ function FilterSidebar({
             )}
           >
             <option value="">All Categories</option>
-            {categories.map((cat) => (
+            {sortCategoriesAlphabetical(categories).map((cat) => (
               <option key={cat.id} value={cat.slug}>
                 {cat.name} {cat.listing_count !== undefined ? `(${cat.listing_count})` : ""}
               </option>

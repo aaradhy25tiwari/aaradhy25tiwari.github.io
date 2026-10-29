@@ -6,7 +6,7 @@ import io
 import csv
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request, status, UploadFile, File
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 from sqlalchemy.orm import selectinload, joinedload
 
 from app.deps import AdminUser, DBSession
@@ -31,6 +31,7 @@ from app.services.email_service import (
 from app.core.rate_limiter import limiter, get_authenticated_user_key
 from app.config import settings
 from app.routers.account_requests import _gen_temp_password
+from app.services.category_sync import ensure_categories_synced_for_names, sync_all_categories_from_master
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -805,6 +806,8 @@ async def create_master_catalog_item(
         capacity_specs=capacity_specs,
     )
     db.add(new_item)
+    # Ensure category is synchronized into Category table
+    await ensure_categories_synced_for_names(db, [category_name])
     await db.commit()
     await db.refresh(new_item)
 
@@ -839,6 +842,7 @@ async def update_master_catalog_item(
 
     if payload.category_name is not None:
         item.category_name = payload.category_name.strip().upper()
+        await ensure_categories_synced_for_names(db, [item.category_name])
     if payload.make is not None:
         item.make = payload.make.strip()
     if payload.model is not None:
@@ -933,6 +937,8 @@ async def add_listing_to_master(
         capacity_specs=capacity_specs,
     )
     db.add(new_item)
+    # Ensure category is synchronized into Category table
+    await ensure_categories_synced_for_names(db, [category_name])
     await db.commit()
     await db.refresh(new_item)
 
@@ -1233,6 +1239,9 @@ async def bulk_create_master_catalog_items(
         existing_db_set.add(unique_key)
 
     if added_count > 0:
+        # Sync all unique categories in the bulk payload with the categories table
+        bulk_cat_names = [item_data.category_name for item_data in payload.items]
+        await ensure_categories_synced_for_names(db, bulk_cat_names)
         await db.commit()
 
     return {
@@ -1247,6 +1256,19 @@ async def bulk_create_master_catalog_items(
 
 # ── Category Master Data Admin APIs ──────────────────────────────
 
+@router.post("/categories/sync-master")
+@router.post("/categories/sync")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def sync_categories_with_master(
+    request: Request,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """Explicitly trigger synchronization between equipment master catalog and category registry."""
+    result = await sync_all_categories_from_master(db)
+    return result
+
+
 @router.get("/categories")
 @limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
 async def get_admin_categories(
@@ -1254,7 +1276,10 @@ async def get_admin_categories(
     current_user: AdminUser,
     db: DBSession,
 ):
-    """List all categories with live listing counts for admin management."""
+    """List all categories with live listing counts for admin management, auto-synced with master data."""
+    # Ensure categories are synced from master data
+    await sync_all_categories_from_master(db)
+
     result = await db.execute(
         select(
             Category,
@@ -1264,7 +1289,10 @@ async def get_admin_categories(
         .outerjoin(Machine, Machine.category_id == Category.id)
         .options(selectinload(Category.sub_categories))
         .group_by(Category.id)
-        .order_by(Category.sort_order, Category.name)
+        .order_by(
+            case((func.lower(Category.name).like("other%"), 1), else_=0),
+            func.lower(Category.name).asc(),
+        )
     )
     rows = result.all()
 

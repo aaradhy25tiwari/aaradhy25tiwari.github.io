@@ -33,7 +33,6 @@ export function LoginForm() {
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({ resolver: zodResolver(schema) });
 
@@ -165,18 +164,8 @@ export function LoginForm() {
               Register as Vendor
             </Link>
           </div>
-          <div className="rounded-xl bg-amber-500/10 border border-amber-500/25 p-3 text-xs flex items-center justify-between gap-2 text-amber-600 dark:text-amber-400">
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/25 p-3 text-xs flex items-center gap-2 text-amber-600 dark:text-amber-400">
             <span>🚜 Sign in to list and manage your equipment fleet.</span>
-            <button
-              type="button"
-              onClick={() => {
-                setValue("emailOrPhone", "vendor@infraquip.test");
-                setValue("password", "Test@1234");
-              }}
-              className="text-[11px] font-bold underline hover:text-foreground shrink-0"
-            >
-              Autofill test vendor ⚡
-            </button>
           </div>
         </div>
       )}

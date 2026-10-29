@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { Search, MapPin, ChevronDown, LayoutDashboard, ArrowRight, ShieldCheck, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { useAuth } from "@/hooks/useAuth";
+import apiClient from "@/lib/api/client";
+import { sortCategoriesAlphabetical } from "@/lib/utils";
 
-const CATEGORIES = [
+const DEFAULT_CATEGORIES = [
   "All Equipment",
   "Excavators",
   "Cranes",
@@ -25,12 +28,35 @@ export function HeroSection() {
   const [listingType, setListingType] = useState<"rent" | "sale">("rent");
   const { user, loading } = useAuth();
 
+  const { data: apiCategories = [] } = useQuery<{ id: string; name: string; slug: string }[]>({
+    queryKey: ["categories"],
+    queryFn: async () => {
+      try {
+        const res = await apiClient.get<{ id: string; name: string; slug: string }[]>("/categories");
+        return res.data;
+      } catch {
+        return [];
+      }
+    },
+    staleTime: 60_000,
+  });
+
+  const categoryOptions = [
+    "All Equipment",
+    ...sortCategoriesAlphabetical(
+      apiCategories.length > 0 ? apiCategories.map((c) => c.name) : DEFAULT_CATEGORIES.slice(1)
+    ),
+  ];
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const params = new URLSearchParams();
     if (query) params.set("q", query);
     if (city) params.set("city", city);
-    if (category !== "All Equipment") params.set("category", category.toLowerCase());
+    if (category !== "All Equipment") {
+      const matched = apiCategories.find((c) => c.name.toLowerCase() === category.toLowerCase());
+      params.set("category", matched?.slug || category.toLowerCase());
+    }
     
     if (listingType === "sale") {
       router.push(`/buy?${params.toString()}`);
@@ -171,7 +197,7 @@ export function HeroSection() {
                                  dark:bg-slate-800 dark:border-slate-700 dark:text-white transition-all font-medium"
                       aria-label="Equipment category"
                     >
-                      {CATEGORIES.map((cat) => (
+                      {categoryOptions.map((cat) => (
                         <option key={cat} value={cat} className="bg-white text-slate-900 dark:bg-slate-800 dark:text-white">
                           {cat}
                         </option>

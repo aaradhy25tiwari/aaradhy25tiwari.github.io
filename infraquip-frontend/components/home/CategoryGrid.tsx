@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import {
   Shovel,
   Construction,
@@ -10,9 +11,22 @@ import {
   Hammer,
   Wind,
   ArrowRight,
+  Wrench,
+  Layers,
 } from "lucide-react";
+import apiClient from "@/lib/api/client";
+import { sortCategoriesAlphabetical } from "@/lib/utils";
 
-const CATEGORIES = [
+interface CategoryItem {
+  id: string;
+  name: string;
+  slug: string;
+  icon_url?: string | null;
+  description?: string | null;
+  listing_count?: number;
+}
+
+const DEFAULT_CATEGORIES = [
   {
     name: "EXCAVATORS",
     slug: "excavators",
@@ -51,6 +65,17 @@ const CATEGORIES = [
   },
 ];
 
+function getCategoryIcon(name: string, slug: string) {
+  const s = `${name} ${slug}`.toLowerCase();
+  if (s.includes("excavat") || s.includes("digger") || s.includes("shovel")) return Shovel;
+  if (s.includes("crane") || s.includes("hydra") || s.includes("lift") || s.includes("aerial")) return Construction;
+  if (s.includes("forklift") || s.includes("reach truck") || s.includes("warehouse")) return Forklift;
+  if (s.includes("dozer") || s.includes("crawler") || s.includes("truck") || s.includes("tipper")) return Truck;
+  if (s.includes("loader") || s.includes("backhoe") || s.includes("grader")) return Hammer;
+  if (s.includes("compactor") || s.includes("roller") || s.includes("compressor")) return Wind;
+  return Wrench;
+}
+
 const containerVariants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.05 } },
@@ -62,6 +87,27 @@ const itemVariants = {
 };
 
 export function CategoryGrid() {
+  const { data: apiCategories } = useQuery<CategoryItem[]>({
+    queryKey: ["categories"],
+    queryFn: async () => {
+      const res = await apiClient.get<CategoryItem[]>("/categories");
+      return res.data;
+    },
+    staleTime: 60_000,
+  });
+
+  const categories = sortCategoriesAlphabetical(
+    (apiCategories && apiCategories.length > 0)
+      ? apiCategories.map((c) => ({
+          name: c.name.toUpperCase(),
+          slug: c.slug,
+          icon: getCategoryIcon(c.name, c.slug),
+          description: c.description || `Browse verified ${c.name} listings and rental rates.`,
+          listing_count: c.listing_count,
+        }))
+      : DEFAULT_CATEGORIES
+  );
+
   return (
     <section className="py-16 sm:py-24 bg-slate-50 dark:bg-slate-900" aria-labelledby="categories-heading">
       <div className="section-container">
@@ -81,7 +127,7 @@ export function CategoryGrid() {
           </Link>
         </div>
 
-        {/* 2-col on mobile, 6-col on lg */}
+        {/* 2-col on mobile, 3-col on md, 6-col on lg */}
         <motion.div
           variants={containerVariants}
           initial="hidden"
@@ -89,12 +135,12 @@ export function CategoryGrid() {
           viewport={{ once: true, margin: "-40px" }}
           className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 sm:gap-6"
         >
-          {CATEGORIES.map((cat) => {
+          {categories.map((cat) => {
             const Icon = cat.icon;
             return (
               <motion.div key={cat.slug} variants={itemVariants}>
                 <Link
-                  href={`/machines/${cat.slug}`}
+                  href={`/machines?category=${cat.slug}`}
                   className="group block h-full p-6 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl hover:border-amber-500 dark:hover:border-amber-500 hover:shadow-xl transition-all duration-300"
                   aria-label={`Browse ${cat.name}`}
                 >
@@ -106,7 +152,7 @@ export function CategoryGrid() {
                   <h3 className="font-bold text-sm text-slate-900 dark:text-white text-center mb-2 uppercase tracking-wide group-hover:text-amber-600 transition-colors">
                     {cat.name}
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed line-clamp-2">
                     {cat.description}
                   </p>
                 </Link>

@@ -39,7 +39,23 @@ export function formatRelativeTime(date: string | Date): string {
   return formatDate(date);
 }
 
-// ── Slug generation ───────────────────────────────────────────
+// ── Category Sorting ──────────────────────────────────────────
+/**
+ * Sorts category items or strings alphabetically ascending (A to Z),
+ * ensuring 'Other' / 'Others' is always placed as the very last option.
+ */
+export function sortCategoriesAlphabetical<T extends { name: string } | string>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const nameA = typeof a === "string" ? a : a.name;
+    const nameB = typeof b === "string" ? b : b.name;
+    const isOtherA = nameA.toLowerCase().trim().startsWith("other");
+    const isOtherB = nameB.toLowerCase().trim().startsWith("other");
+    if (isOtherA && !isOtherB) return 1;
+    if (!isOtherA && isOtherB) return -1;
+    return nameA.localeCompare(nameB, undefined, { sensitivity: "base" });
+  });
+}
+
 export function generateSlug(text: string): string {
   return text
     .toLowerCase()

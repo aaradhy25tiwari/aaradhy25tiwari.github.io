@@ -170,6 +170,11 @@ async def seed():
             if not exists.scalar_one_or_none():
                 db.add(SubscriptionPlan(id=uuid.uuid4(), **plan_data))
 
+        print("Syncing categories with equipment master data...")
+        from app.services.category_sync import sync_all_categories_from_master
+        sync_res = await sync_all_categories_from_master(db)
+        print(f"Synced from master catalog: {sync_res}")
+
         await db.commit()
         print("✅ Seed complete.")
 
