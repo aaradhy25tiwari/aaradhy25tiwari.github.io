@@ -122,24 +122,16 @@ async def submit_account_request(
 ):
     """Submit a new account request for admin review. Applies exponential backoff rate limiting."""
     await check_auth_rate_limit(request, payload.email)
-    # Check for duplicate email in requests
+    # Check for duplicate email in requests or existing users
     existing_req = await db.execute(
         select(AccountRequest).where(AccountRequest.email == payload.email)
     )
-    if existing_req.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account request with this email already exists.",
-        )
-    # Check if already a registered user
     existing_user = await db.execute(
         select(User).where(User.email == payload.email)
     )
-    if existing_user.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists. Please log in.",
-        )
+    if existing_req.scalar_one_or_none() or existing_user.scalar_one_or_none():
+        # Generic response to prevent email existence enumeration
+        return {"message": "Your request has been received. If eligible, you will receive an email update shortly."}
 
     req = AccountRequest(
         id=uuid.uuid4(),
@@ -161,7 +153,7 @@ async def submit_account_request(
         send_account_request_received_email, payload.email, payload.full_name
     )
 
-    return {"message": "Your request has been submitted. We'll email you within 24 hours."}
+    return {"message": "Your request has been received. If eligible, you will receive an email update shortly."}
 
 
 # ── GET /admin/account-requests ────────────────────────────────

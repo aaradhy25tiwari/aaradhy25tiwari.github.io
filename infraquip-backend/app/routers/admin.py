@@ -14,7 +14,7 @@ from app.models.machine import Machine, MachineStatus, Category, SubCategory, Eq
 from app.models.user import User, UserRole
 from app.models.enquiry import Enquiry
 from app.models.analytics import PlatformAnalytics
-from app.models.subscription import Subscription
+from app.models.subscription import Subscription, SubscriptionStatus
 from app.schemas.admin import (
     ReviewDecisionRequest, ReviewQueueResponse, ReviewQueueItem,
     AdminStatsResponse, AdminUserResponse, AdminUserListResponse,
@@ -447,13 +447,28 @@ async def list_vendors(
     result = await db.execute(stmt.offset(offset).limit(per_page))
     vendors = result.scalars().all()
 
+    # Pre-fetch machine counts for this page of vendors
+    vendor_ids = [u.id for u in vendors]
+    counts_map = {}
+    if vendor_ids:
+        c_res = await db.execute(
+            select(Machine.vendor_id, func.count(Machine.id))
+            .where(Machine.vendor_id.in_(vendor_ids))
+            .group_by(Machine.vendor_id)
+        )
+        counts_map = {row[0]: row[1] for row in c_res.all()}
+
     items = []
     for u in vendors:
         items.append({
             "id": str(u.id),
             "email": u.email,
+            "phone": u.phone,
             "full_name": u.full_name,
             "business_name": u.vendor_profile.company_name if u.vendor_profile else None,
+            "city": u.vendor_profile.city if u.vendor_profile else None,
+            "state": u.vendor_profile.state if u.vendor_profile else None,
+            "machines_count": counts_map.get(u.id, 0),
             "is_verified": u.is_verified,
             "is_banned": u.is_banned,
             "failed_login_attempts": u.failed_login_attempts or 0,
@@ -468,6 +483,201 @@ async def list_vendors(
         "page": page,
         "per_page": per_page,
         "total_pages": math.ceil(total / per_page) if total > 0 else 0,
+    }
+
+
+# ── GET /admin/vendors/{vendor_id} ─────────────────────────────
+@router.get("/vendors/{vendor_id}")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def get_vendor_details(
+    request: Request,
+    vendor_id: str,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """Retrieve full vendor details including profile, fleet, metrics, and subscription."""
+    try:
+        vendor_uuid = uuid.UUID(vendor_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid vendor ID")
+
+    stmt = (
+        select(User)
+        .options(
+            joinedload(User.vendor_profile),
+            selectinload(User.subscriptions).joinedload(Subscription.plan),
+        )
+        .where(User.id == vendor_uuid, User.role == UserRole.vendor)
+    )
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+
+    # Fetch all machines for this vendor
+    m_stmt = (
+        select(Machine)
+        .options(
+            selectinload(Machine.images),
+            joinedload(Machine.category),
+        )
+        .where(Machine.vendor_id == vendor_uuid)
+        .order_by(Machine.created_at.desc())
+    )
+    m_res = await db.execute(m_stmt)
+    machines = m_res.scalars().all()
+
+    # Enquiries count & recent enquiries
+    enq_count_res = await db.execute(
+        select(func.count(Enquiry.id)).where(Enquiry.vendor_id == vendor_uuid)
+    )
+    total_enquiries = enq_count_res.scalar() or 0
+
+    recent_enq_res = await db.execute(
+        select(Enquiry)
+        .options(joinedload(Enquiry.machine))
+        .where(Enquiry.vendor_id == vendor_uuid)
+        .order_by(Enquiry.created_at.desc())
+        .limit(10)
+    )
+    recent_enquiries = recent_enq_res.scalars().all()
+
+    # Active subscription
+    active_sub = next((s for s in user.subscriptions if s.status == SubscriptionStatus.active), None)
+    if not active_sub and user.subscriptions:
+        active_sub = sorted(user.subscriptions, key=lambda s: s.created_at, reverse=True)[0]
+
+    # Stats breakdown
+    total_machines = len(machines)
+    active_machines = sum(1 for m in machines if m.status == MachineStatus.approved and (m.availability is not False))
+    pending_machines = sum(1 for m in machines if m.status == MachineStatus.pending)
+    paused_machines = sum(1 for m in machines if m.status == MachineStatus.paused or m.availability is False)
+    rejected_machines = sum(1 for m in machines if m.status == MachineStatus.rejected)
+
+    vp = user.vendor_profile
+
+    machine_items = []
+    for m in machines:
+        primary_img = next((img.display_url for img in m.images if img.is_primary), None)
+        if not primary_img and m.images:
+            primary_img = m.images[0].display_url
+
+        machine_items.append({
+            "id": str(m.id),
+            "slug": m.slug,
+            "title": m.title,
+            "make": m.make,
+            "model": m.model,
+            "year_of_manufacture": m.year_of_manufacture,
+            "status": m.status.value if hasattr(m.status, "value") else str(m.status),
+            "availability": m.availability,
+            "city": m.city,
+            "state": m.state,
+            "category_name": m.category.name if m.category else None,
+            "rental_price_daily": float(m.rental_price_daily) if m.rental_price_daily else None,
+            "rental_price_monthly": float(m.rental_price_monthly) if m.rental_price_monthly else None,
+            "purchase_price": float(m.purchase_price) if m.purchase_price else None,
+            "contact_for_price": m.contact_for_price,
+            "views_count": m.views_count,
+            "enquiries_count": m.enquiries_count,
+            "primary_image": primary_img,
+            "created_at": m.created_at,
+        })
+
+    enquiry_items = [
+        {
+            "id": str(e.id),
+            "requirement_type": e.requirement_type.value if hasattr(e.requirement_type, "value") else str(e.requirement_type),
+            "customer_company": e.customer_company,
+            "location_of_use": e.location_of_use,
+            "status": e.status.value if hasattr(e.status, "value") else str(e.status),
+            "machine_title": e.machine.title if e.machine else None,
+            "created_at": e.created_at,
+        }
+        for e in recent_enquiries
+    ]
+
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "phone": user.phone,
+        "full_name": user.full_name,
+        "avatar_url": user.avatar_url,
+        "role": user.role.value if hasattr(user.role, "value") else str(user.role),
+        "is_verified": user.is_verified,
+        "is_banned": user.is_banned,
+        "failed_login_attempts": user.failed_login_attempts or 0,
+        "reactivation_requested": user.reactivation_requested or False,
+        "reactivation_requested_at": user.reactivation_requested_at,
+        "created_at": user.created_at,
+        "vendor_profile": {
+            "id": str(vp.id) if vp else None,
+            "company_name": vp.company_name if vp else user.full_name,
+            "gstin": vp.gstin if vp else None,
+            "pan": vp.pan if vp else None,
+            "business_type": vp.business_type if vp else None,
+            "description": vp.description if vp else None,
+            "city": vp.city if vp else None,
+            "state": vp.state if vp else None,
+            "profile_photo_url": vp.profile_photo_url if vp else None,
+            "is_verified": vp.is_verified if vp else user.is_verified,
+            "response_rate": vp.response_rate if vp else None,
+            "member_since": vp.member_since if vp else user.created_at,
+            "total_views": vp.total_views if vp else 0,
+        } if vp else None,
+        "stats": {
+            "total_machines": total_machines,
+            "active_machines": active_machines,
+            "pending_machines": pending_machines,
+            "paused_machines": paused_machines,
+            "rejected_machines": rejected_machines,
+            "total_enquiries": total_enquiries,
+        },
+        "subscription": {
+            "id": str(active_sub.id) if active_sub else None,
+            "status": active_sub.status.value if (active_sub and hasattr(active_sub.status, "value")) else (str(active_sub.status) if active_sub else None),
+            "plan_code": active_sub.plan.plan_code if (active_sub and active_sub.plan) else "free",
+            "plan_name": active_sub.plan.name if (active_sub and active_sub.plan) else "Free Vendor",
+            "price_monthly": float(active_sub.plan.price_monthly) if (active_sub and active_sub.plan) else 0.0,
+            "active_listing_limit": active_sub.plan.active_listing_limit if (active_sub and active_sub.plan) else None,
+            "current_period_end": active_sub.current_period_end if active_sub else None,
+            "created_at": active_sub.created_at if active_sub else None,
+        } if active_sub else None,
+        "machines": machine_items,
+        "recent_enquiries": enquiry_items,
+    }
+
+
+# ── PATCH /admin/vendors/{vendor_id}/verify ────────────────────
+@router.patch("/vendors/{vendor_id}/verify")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def toggle_vendor_verification(
+    request: Request,
+    vendor_id: str,
+    current_user: AdminUser,
+    db: DBSession,
+):
+    """Toggle vendor verification status."""
+    try:
+        vendor_uuid = uuid.UUID(vendor_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid vendor ID")
+
+    stmt = select(User).options(joinedload(User.vendor_profile)).where(User.id == vendor_uuid, User.role == UserRole.vendor)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+
+    new_status = not user.is_verified
+    user.is_verified = new_status
+    if user.vendor_profile:
+        user.vendor_profile.is_verified = new_status
+    await db.commit()
+
+    return {
+        "message": f"Vendor {'verified' if new_status else 'unverified'} successfully.",
+        "is_verified": new_status,
     }
 
 

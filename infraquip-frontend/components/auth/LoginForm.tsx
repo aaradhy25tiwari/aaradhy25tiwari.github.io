@@ -21,7 +21,12 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isVendorRole = searchParams.get("role") === "vendor";
-  const redirectParam = searchParams.get("redirect");
+  const rawRedirect = searchParams.get("redirect") || searchParams.get("redirectTo");
+  // Prevent Open Redirect: must start with '/' and not '//' or '/\'
+  const safeRedirect =
+    rawRedirect && rawRedirect.startsWith("/") && !rawRedirect.startsWith("//") && !rawRedirect.startsWith("/\\")
+      ? rawRedirect
+      : null;
 
   const supabase = getSupabaseClient();
   const [showPassword, setShowPassword] = useState(false);
@@ -139,7 +144,7 @@ export function LoginForm() {
         console.warn("login-success hook warning", loginErr);
       }
 
-      const targetUrl = redirectParam || (isVendorRole ? "/dashboard/vendor/listings/new" : "/dashboard");
+      const targetUrl = safeRedirect || (isVendorRole ? "/dashboard/vendor/listings/new" : "/dashboard");
       router.push(targetUrl);
     } catch (err: any) {
       console.error("Login fetch error:", err);

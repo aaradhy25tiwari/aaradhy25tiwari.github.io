@@ -10,8 +10,9 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 export interface DashboardNavItem {
   href: string;
@@ -36,7 +37,15 @@ export function DashboardShell({
   extraAction,
 }: DashboardShellProps) {
   const pathname = usePathname();
+  const { user, loading } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // When session ends, go to guest home page
+  useEffect(() => {
+    if (!loading && !user) {
+      window.location.href = "/";
+    }
+  }, [user, loading]);
 
   // Close drawer on route change
   useEffect(() => {
@@ -52,6 +61,15 @@ export function DashboardShell({
     }
     return () => { document.body.style.overflow = ""; };
   }, [drawerOpen]);
+
+  // Block rendering protected dashboard UI if session has ended
+  if (loading || !user) {
+    return (
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-muted/20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const isActive = (item: DashboardNavItem) =>
     item.exact

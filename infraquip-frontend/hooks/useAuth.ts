@@ -81,6 +81,12 @@ export function useAuth() {
           await fetchUser();
         } else if (event === "SIGNED_OUT") {
           setState({ user: null, loading: false, error: null });
+          if (typeof window !== "undefined") {
+            const path = window.location.pathname;
+            if (path.startsWith("/admin") || path.startsWith("/dashboard")) {
+              window.location.href = "/";
+            }
+          }
         } else if (event === "TOKEN_REFRESHED" && session) {
           // Silently update — user state unchanged
         }
@@ -91,9 +97,17 @@ export function useAuth() {
   }, [fetchUser, supabase.auth]);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      /* ignore */
+    }
     setState({ user: null, loading: false, error: null });
-    router.push("/");
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    } else {
+      router.push("/");
+    }
   }, [supabase.auth, router]);
 
   const refreshUser = useCallback(async () => {

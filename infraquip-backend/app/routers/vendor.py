@@ -126,6 +126,7 @@ async def create_listing(
         .options(joinedload(Subscription.plan))
         .where(Subscription.user_id == current_user.id, Subscription.status == "active")
         .order_by(Subscription.created_at.desc())
+        .with_for_update(of=Subscription)
     )
     sub = sub_result.scalar_one_or_none()
 

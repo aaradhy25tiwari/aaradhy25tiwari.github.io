@@ -83,6 +83,10 @@ ALTER TABLE wishlists ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE machine_images ENABLE ROW LEVEL SECURITY;
+ALTER TABLE account_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE password_reset_otps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE account_reactivation_otps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE equipment_master_catalog ENABLE ROW LEVEL SECURITY;
 
 -- Helper function to get current user's UUID from our users table
 CREATE OR REPLACE FUNCTION auth_user_id() RETURNS uuid AS $$
@@ -200,6 +204,25 @@ CREATE POLICY "Anyone can view approved reviews" ON reviews
 CREATE POLICY "Customer can write reviews" ON reviews
   FOR INSERT WITH CHECK (customer_id = auth_user_id() AND auth_user_role() = 'customer');
 
+-- ── account_requests ──────────────────────────────────────────
+CREATE POLICY "Service role only on account_requests" ON account_requests
+  USING (auth.role() = 'service_role');
+
+-- ── password_reset_otps ───────────────────────────────────────
+CREATE POLICY "Service role only on password_reset_otps" ON password_reset_otps
+  USING (auth.role() = 'service_role');
+
+-- ── account_reactivation_otps ─────────────────────────────────
+CREATE POLICY "Service role only on account_reactivation_otps" ON account_reactivation_otps
+  USING (auth.role() = 'service_role');
+
+-- ── equipment_master_catalog ──────────────────────────────────
+CREATE POLICY "Anyone can view equipment master catalog" ON equipment_master_catalog
+  FOR SELECT USING (true);
+
+CREATE POLICY "Service role only on master catalog mutations" ON equipment_master_catalog
+  FOR ALL USING (auth.role() = 'service_role');
+
 
 -- ============================================================
 -- Supabase Storage Bucket Policies
@@ -218,6 +241,7 @@ CREATE POLICY "Authenticated vendors can upload images"
   WITH CHECK (
     bucket_id = 'machine-images'
     AND auth.role() = 'authenticated'
+    AND auth.uid()::text = (storage.foldername(name))[1]
   );
 
 CREATE POLICY "Vendors can delete their own images"

@@ -1,5 +1,10 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
 from typing import List
+import secrets
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -15,7 +20,17 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     DEBUG: bool = True
     API_V1_PREFIX: str = "/api/v1"
-    SECRET_KEY: str = "change-me-in-production"
+    SECRET_KEY: str = ""
+
+    @model_validator(mode="after")
+    def validate_secrets(self) -> "Settings":
+        if self.APP_ENV.lower() in ("production", "prod"):
+            if not self.SECRET_KEY or self.SECRET_KEY == "change-me-in-production":
+                raise ValueError("CRITICAL: SECRET_KEY must be set to a secure, random value in production.")
+        elif not self.SECRET_KEY or self.SECRET_KEY == "change-me-in-production":
+            # For local development/testing, assign a random secret if unset instead of a static vulnerable string
+            self.SECRET_KEY = secrets.token_hex(32)
+        return self
 
     # ── Database ─────────────────────────────────────────────────
     DATABASE_URL: str = "postgresql+asyncpg://postgres:password@localhost:5432/infraquip"

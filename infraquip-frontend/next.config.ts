@@ -66,12 +66,13 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://maps.googleapis.com https://checkout.razorpay.com https://cdn.jsdelivr.net",
-              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
-              "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://maps.googleapis.com https://checkout.razorpay.com",
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in https://maps.gstatic.com https://maps.googleapis.com https://lh3.googleusercontent.com",
-              "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://api.infraquip.com https://*.onrender.com https://cdn.jsdelivr.net",
+              "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://api.infraquip.com https://*.onrender.com",
               "frame-src https://api.razorpay.com",
+              "frame-ancestors 'none'",
             ].join("; "),
           },
         ],
@@ -116,6 +117,9 @@ const nextConfig: NextConfig = {
   
   // ── Allowed Dev Origins ─────────────────────────────────────────
   allowedDevOrigins: ["192.168.1.9"],
+
+  // ── Production Browser Source Maps ───────────────────────────
+  productionBrowserSourceMaps: false,
 
   // ── Powered by header ─────────────────────────────────────────
   poweredByHeader: false,

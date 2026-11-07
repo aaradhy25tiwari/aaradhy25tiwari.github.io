@@ -162,8 +162,8 @@ async def login_failed(
     if not user:
         return {
             "blocked": False,
-            "attempts_remaining": None,
-            "message": "Incorrect credentials. Please try again.",
+            "attempts_remaining": 3,
+            "message": "Incorrect password. You have 3 attempts remaining before your account is blocked.",
         }
 
     if user.is_banned:
@@ -270,11 +270,9 @@ async def request_reactivation(
     result = await db.execute(select(User).where(User.email == email_clean))
     user = result.scalar_one_or_none()
 
-    if not user:
-        return {"message": "If an account exists, a 6-digit reactivation verification code has been sent to your email."}
-
-    if not user.is_banned and (user.failed_login_attempts or 0) < 4:
-        return {"message": "Your account is active. You can log in directly or reset your password if forgotten."}
+    if not user or (not user.is_banned and (user.failed_login_attempts or 0) < 4):
+        # Generic response prevents account status & existence enumeration
+        return {"message": "If an eligible account exists, a 6-digit reactivation verification code has been sent to your email."}
 
     # Generate 6-digit numeric OTP
     otp_code = "".join(secrets.choice("0123456789") for _ in range(6))
@@ -309,7 +307,7 @@ async def request_reactivation(
         user.full_name,
     )
 
-    return {"message": "If an account exists, a 6-digit reactivation verification code has been sent to your email."}
+    return {"message": "If an eligible account exists, a 6-digit reactivation verification code has been sent to your email."}
 
 
 # ── POST /auth/verify-reactivation-otp ─────────────────────────
@@ -339,8 +337,9 @@ async def verify_reactivation_otp(
             AccountReactivationOTP.is_used == False,
         )
         .order_by(AccountReactivationOTP.created_at.desc())
+        .with_for_update()
     )
-    otp_record = result.scalar_one_or_none()
+    otp_record = result.scalars().first()
 
     if not otp_record or not otp_record.is_valid():
         raise HTTPException(
@@ -505,7 +504,7 @@ async def reset_password(
     if not re.search(r"[0-9]", payload.new_password):
         raise HTTPException(status_code=400, detail="Password must contain at least one number.")
 
-    # 2. Check and validate OTP
+    # 2. Check and validate OTP with pessimistic database lock to prevent concurrency race conditions
     result = await db.execute(
         select(PasswordResetOTP)
         .where(
@@ -514,14 +513,18 @@ async def reset_password(
             PasswordResetOTP.is_used == False,
         )
         .order_by(PasswordResetOTP.created_at.desc())
+        .with_for_update()
     )
-    otp_record = result.scalar_one_or_none()
+    otp_record = result.scalars().first()
 
     if not otp_record or not otp_record.is_valid():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired verification code. Please request a new one.",
         )
+
+    # Invalidate OTP within active transaction immediately
+    otp_record.is_used = True
 
     # 3. Find User
     user_result = await db.execute(select(User).where(User.email == email_clean))

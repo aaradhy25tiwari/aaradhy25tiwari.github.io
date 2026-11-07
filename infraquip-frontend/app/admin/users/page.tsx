@@ -95,6 +95,12 @@ export default function AdminUsersPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
+            suppressHydrationWarning
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            data-lpignore="true"
+            data-form-type="other"
             placeholder="Search by name or email..."
             value={search}
             onChange={(e) => {

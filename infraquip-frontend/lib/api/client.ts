@@ -39,7 +39,7 @@ apiClient.interceptors.response.use(
   async (error: AxiosError<{ detail: string | { msg: string }[] }>) => {
     const status = error.response?.status;
 
-    // Token expired — attempt refresh
+    // Token expired / Unauthorized — attempt refresh
     if (status === 401) {
       try {
         const supabase = getSupabaseClient();
@@ -58,14 +58,25 @@ apiClient.interceptors.response.use(
             };
             return apiClient(originalConfig);
           } else {
-            // Refresh failed or token invalid — clean up local state
+            // Refresh failed or token invalid — clean up local state and return to guest home page
             try {
               await supabase.auth.signOut({ scope: "local" });
             } catch {
               /* ignore */
             }
-            if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-              window.location.href = "/login";
+            if (typeof window !== "undefined") {
+              const path = window.location.pathname;
+              if (path.startsWith("/admin") || path.startsWith("/dashboard")) {
+                window.location.href = "/";
+              }
+            }
+          }
+        } else {
+          // No session exists, but received 401 on a protected page — go to guest home page
+          if (typeof window !== "undefined") {
+            const path = window.location.pathname;
+            if (path.startsWith("/admin") || path.startsWith("/dashboard")) {
+              window.location.href = "/";
             }
           }
         }
@@ -78,8 +89,11 @@ apiClient.interceptors.response.use(
         } catch {
           /* ignore */
         }
-        if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-          window.location.href = "/login";
+        if (typeof window !== "undefined") {
+          const path = window.location.pathname;
+          if (path.startsWith("/admin") || path.startsWith("/dashboard")) {
+            window.location.href = "/";
+          }
         }
       }
     }
