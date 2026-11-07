@@ -16,7 +16,7 @@ import { MapView } from "@/components/shared/MapView";
 import { useAuth } from "@/hooks/useAuth";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 interface MachineDetailClientProps {
   slug: string;
@@ -27,16 +27,6 @@ export function MachineDetailClient({ slug, fromVendor = false }: MachineDetailC
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [wishlisted, setWishlisted] = useState<boolean | null>(null);
-  const [isFromVendor, setIsFromVendor] = useState(fromVendor);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("from") === "vendor") {
-        setIsFromVendor(true);
-      }
-    }
-  }, []);
 
   const { data, isLoading, error } = useQuery<Machine, Error>({
     queryKey: ["machine-detail", slug],
@@ -113,13 +103,13 @@ export function MachineDetailClient({ slug, fromVendor = false }: MachineDetailC
     )
   );
   const isVendor = user?.role === "vendor";
-  const isViewingOwnListing = isOwner || (isVendor && (isFromVendor || fromVendor || !data.vendor || String(data.vendor?.id) === String(user?.id)));
+  const isViewingOwnListing = isOwner;
 
   // Vendors cannot send enquiries (enforced by backend 403), and owners should not enquire on their own machines
   const canEnquire = !isViewingOwnListing && !isVendor;
 
-  // "About the Vendor" card should not be shown if owner/vendor viewing their own listing or navigated from vendor listings
-  const showVendorCard = Boolean(data.vendor && !isViewingOwnListing && !isFromVendor && !isOwner);
+  // "About the Vendor" card should not be shown if owner viewing their own listing or navigated from vendor listings
+  const showVendorCard = Boolean(data.vendor && !isViewingOwnListing && !fromVendor);
 
   // ── JSON-LD structured data ────────────────────────────────
   const jsonLd = {
