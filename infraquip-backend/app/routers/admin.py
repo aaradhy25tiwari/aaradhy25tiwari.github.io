@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload, joinedload
 
 from app.deps import AdminUser, DBSession
 from app.models.machine import Machine, MachineStatus, Category, SubCategory, EquipmentMasterCatalog
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, VendorProfile
 from app.models.enquiry import Enquiry
 from app.models.analytics import PlatformAnalytics
 from app.models.subscription import Subscription, SubscriptionStatus
@@ -427,10 +427,11 @@ async def list_vendors(
     current_user: AdminUser,
     db: DBSession,
     search: Optional[str] = Query(None, max_length=100),
+    status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=50),
 ):
-    """List all vendors with optional search."""
+    """List all vendors with optional search and status filter."""
     offset = (page - 1) * per_page
     stmt = (
         select(User)
@@ -439,9 +440,21 @@ async def list_vendors(
         .order_by(User.created_at.desc())
     )
 
+    if status == "verified":
+        stmt = stmt.where(User.is_verified.is_(True), User.is_banned.is_(False))
+    elif status == "unverified":
+        stmt = stmt.where(User.is_verified.is_(False), User.is_banned.is_(False))
+    elif status == "banned":
+        stmt = stmt.where(User.is_banned.is_(True))
+
     if search:
-        stmt = stmt.where(
-            User.email.ilike(f"%{search}%") | User.full_name.ilike(f"%{search}%")
+        search_term = f"%{search.strip()}%"
+        stmt = stmt.outerjoin(User.vendor_profile).where(
+            User.email.ilike(search_term)
+            | User.full_name.ilike(search_term)
+            | VendorProfile.company_name.ilike(search_term)
+            | VendorProfile.city.ilike(search_term)
+            | VendorProfile.state.ilike(search_term)
         )
 
     total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { 
   Loader2, Building2, CheckCircle2, XCircle, Search, 
   ChevronRight, MapPin, Package, Phone, Mail, Ban, ShieldCheck, ShieldAlert 
@@ -36,44 +36,59 @@ interface PaginatedVendorsResponse {
 
 type FilterStatus = "all" | "verified" | "unverified" | "banned";
 
+function getPaginationItems(currentPage: number, totalPages: number): (number | "ellipsis-start" | "ellipsis-end")[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+
+  const items: (number | "ellipsis-start" | "ellipsis-end")[] = [1];
+  const start = Math.max(2, Math.min(currentPage - 1, totalPages - 3));
+  const end = Math.min(totalPages - 1, Math.max(currentPage + 1, 4));
+
+  if (start > 2) {
+    items.push("ellipsis-start");
+  }
+
+  for (let i = start; i <= end; i++) {
+    items.push(i);
+  }
+
+  if (end < totalPages - 1) {
+    items.push("ellipsis-end");
+  }
+
+  items.push(totalPages);
+  return items;
+}
+
 export default function AdminVendorsPage() {
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<FilterStatus>("all");
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const { data, isLoading } = useQuery<PaginatedVendorsResponse>({
-    queryKey: ["admin-vendors", search, page],
+    queryKey: ["admin-vendors", debouncedSearch, filter, page],
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), per_page: "20" });
-      if (search.trim()) params.set("search", search.trim());
+      if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
+      if (filter !== "all") params.set("status", filter);
       const { data } = await apiClient.get<PaginatedVendorsResponse>(`/admin/vendors?${params.toString()}`);
       return data;
     },
+    placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
 
   const vendors = data?.results ?? [];
-
-  const filteredVendors = useMemo(() => {
-    return vendors.filter((v) => {
-      // Status filter: exclude banned vendors from verified and unverified
-      if (filter === "verified" && (!v.is_verified || v.is_banned)) return false;
-      if (filter === "unverified" && (v.is_verified || v.is_banned)) return false;
-      if (filter === "banned" && !v.is_banned) return false;
-
-      // Text search
-      if (!search.trim()) return true;
-      const q = search.toLowerCase().trim();
-      return (
-        v.business_name?.toLowerCase().includes(q) ||
-        v.full_name?.toLowerCase().includes(q) ||
-        v.email?.toLowerCase().includes(q) ||
-        v.phone?.toLowerCase().includes(q) ||
-        v.city?.toLowerCase().includes(q) ||
-        v.state?.toLowerCase().includes(q)
-      );
-    });
-  }, [vendors, search, filter]);
 
   return (
     <div className="space-y-6">
@@ -104,10 +119,7 @@ export default function AdminVendorsPage() {
             data-form-type="other"
             placeholder="Search vendors by name or location..."
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
+            onChange={(e) => setSearch(e.target.value)}
             className="w-full rounded-xl border border-border bg-card pl-9 pr-4 py-2 text-xs outline-none transition-all placeholder:text-muted-foreground/60 focus:border-primary focus:ring-1 focus:ring-primary"
           />
         </div>
@@ -145,13 +157,13 @@ export default function AdminVendorsPage() {
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Loading vendor accounts...</p>
         </div>
-      ) : filteredVendors.length === 0 ? (
+      ) : vendors.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-border p-14 text-center bg-card/40">
           <Building2 className="mx-auto h-10 w-10 text-muted-foreground/60" />
           <h3 className="mt-4 text-base font-semibold">No vendors found</h3>
           <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
-            {search
-              ? `No vendors match "${search}". Try adjusting your search query.`
+            {debouncedSearch
+              ? `No vendors match "${debouncedSearch}". Try adjusting your search query.`
               : filter !== "all"
               ? data && data.total_pages > 1
                 ? `No ${filter} vendor accounts found on page ${page}. Try checking other pages below.`
@@ -161,7 +173,7 @@ export default function AdminVendorsPage() {
         </div>
       ) : (
         <div className="grid gap-3">
-          {filteredVendors.map((v) => (
+          {vendors.map((v) => (
             <Link
               key={v.id}
               href={`/admin/vendors/${v.id}`}
@@ -268,23 +280,32 @@ export default function AdminVendorsPage() {
             >
               Previous
             </button>
-            {Array.from({ length: data.total_pages }, (_, i) => i + 1).map((p) => (
-              <button
-                key={p}
-                onClick={() => {
-                  setPage(p);
-                  scrollToTop();
-                }}
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-lg text-xs font-medium transition cursor-pointer",
-                  page === p
-                    ? "bg-primary text-primary-foreground font-semibold"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                )}
-              >
-                {p}
-              </button>
-            ))}
+            {getPaginationItems(data.page, data.total_pages).map((item) =>
+              typeof item === "number" ? (
+                <button
+                  key={item}
+                  onClick={() => {
+                    setPage(item);
+                    scrollToTop();
+                  }}
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-lg text-xs font-medium transition cursor-pointer",
+                    page === item
+                      ? "bg-primary text-primary-foreground font-semibold"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  )}
+                >
+                  {item}
+                </button>
+              ) : (
+                <span
+                  key={item}
+                  className="flex h-8 w-8 items-center justify-center text-xs text-muted-foreground select-none"
+                >
+                  …
+                </span>
+              )
+            )}
             <button
               onClick={() => {
                 setPage((prev) => Math.min(data.total_pages, prev + 1));

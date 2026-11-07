@@ -23,18 +23,35 @@ export async function getTrustedUserRole(
 
   // 2. Query authoritative users table in database
   try {
-    const { data } = await supabase
+    // Authoritative lookup: match Supabase auth UID to users.auth_uid
+    const { data, error } = await supabase
       .from("users")
       .select("role")
-      .or(`auth_uid.eq.${user.id},id.eq.${user.id}`)
-      .limit(1)
+      .eq("auth_uid", user.id)
       .maybeSingle();
 
-    if (data?.role && isAllowedRole(data.role)) {
+    if (error) {
+      console.error("Database error querying user role by auth_uid:", error);
+    } else if (data?.role && isAllowedRole(data.role)) {
       return data.role;
     }
-  } catch {
-    // DB query failed or table not directly accessible via anon client
+
+    // Fallback: check legacy records where users.id equals auth UID
+    if (!data) {
+      const { data: legacyData, error: legacyError } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (legacyError) {
+        console.error("Database error querying user role by legacy id:", legacyError);
+      } else if (legacyData?.role && isAllowedRole(legacyData.role)) {
+        return legacyData.role;
+      }
+    }
+  } catch (err) {
+    console.error("Unexpected error querying user role from database:", err);
   }
 
   // Safe fallback
