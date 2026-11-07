@@ -153,7 +153,9 @@ export default function AdminVendorsPage() {
             {search
               ? `No vendors match "${search}". Try adjusting your search query.`
               : filter !== "all"
-              ? `No ${filter} vendor accounts found on page ${page}. Try checking other pages below.`
+              ? data && data.total_pages > 1
+                ? `No ${filter} vendor accounts found on page ${page}. Try checking other pages below.`
+                : "No vendor accounts match the filter."
               : "No vendor accounts found."}
           </p>
         </div>
