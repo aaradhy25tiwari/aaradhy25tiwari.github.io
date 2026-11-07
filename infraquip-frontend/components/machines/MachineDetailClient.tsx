@@ -16,16 +16,27 @@ import { MapView } from "@/components/shared/MapView";
 import { useAuth } from "@/hooks/useAuth";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface MachineDetailClientProps {
   slug: string;
+  fromVendor?: boolean;
 }
 
-export function MachineDetailClient({ slug }: MachineDetailClientProps) {
+export function MachineDetailClient({ slug, fromVendor = false }: MachineDetailClientProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [wishlisted, setWishlisted] = useState<boolean | null>(null);
+  const [isFromVendor, setIsFromVendor] = useState(fromVendor);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("from") === "vendor") {
+        setIsFromVendor(true);
+      }
+    }
+  }, []);
 
   const { data, isLoading, error } = useQuery<Machine, Error>({
     queryKey: ["machine-detail", slug],
@@ -94,6 +105,21 @@ export function MachineDetailClient({ slug }: MachineDetailClientProps) {
   const enquireHref = user
     ? `/enquire/${data.id}?slug=${data.slug}`
     : `/login?redirectTo=/enquire/${data.id}`;
+
+  const isOwner = Boolean(
+    user && (
+      (data.vendor?.id && String(data.vendor.id) === String(user.id)) ||
+      (data.vendor_id && String(data.vendor_id) === String(user.id))
+    )
+  );
+  const isVendor = user?.role === "vendor";
+  const isViewingOwnListing = isOwner || (isVendor && (isFromVendor || fromVendor || !data.vendor || String(data.vendor?.id) === String(user?.id)));
+
+  // Vendors cannot send enquiries (enforced by backend 403), and owners should not enquire on their own machines
+  const canEnquire = !isViewingOwnListing && !isVendor;
+
+  // "About the Vendor" card should not be shown if owner/vendor viewing their own listing or navigated from vendor listings
+  const showVendorCard = Boolean(data.vendor && !isViewingOwnListing && !isFromVendor && !isOwner);
 
   // ── JSON-LD structured data ────────────────────────────────
   const jsonLd = {
@@ -283,29 +309,33 @@ export function MachineDetailClient({ slug }: MachineDetailClientProps) {
                   </div>
                 </div>
 
-                <div className="space-y-2.5">
-                  <Button className="w-full btn-amber-glow gap-2" size="lg" asChild>
-                    <Link href={enquireHref}>
-                      <MessageSquare className="h-4 w-4" />
-                      {user ? "Send Enquiry" : "Log in to Enquire"}
-                    </Link>
-                  </Button>
-                  {user?.role === "customer" || user?.role === "broker" ? (
-                    <Button
-                      variant="outline"
-                      className="w-full gap-2"
-                      onClick={() => wishlistMutation.mutate()}
-                      disabled={wishlistMutation.isPending}
-                    >
-                      <Heart className={cn("h-4 w-4", wishlisted && "fill-rose-400 text-rose-400")} />
-                      {wishlisted ? "Saved to Wishlist" : "Save to Wishlist"}
-                    </Button>
-                  ) : null}
-                </div>
+                {(canEnquire || user?.role === "customer" || user?.role === "broker") && (
+                  <div className="space-y-2.5">
+                    {canEnquire && (
+                      <Button className="w-full btn-amber-glow gap-2" size="lg" asChild>
+                        <Link href={enquireHref}>
+                          <MessageSquare className="h-4 w-4" />
+                          {user ? "Send Enquiry" : "Log in to Enquire"}
+                        </Link>
+                      </Button>
+                    )}
+                    {user?.role === "customer" || user?.role === "broker" ? (
+                      <Button
+                        variant="outline"
+                        className="w-full gap-2"
+                        onClick={() => wishlistMutation.mutate()}
+                        disabled={wishlistMutation.isPending}
+                      >
+                        <Heart className={cn("h-4 w-4", wishlisted && "fill-rose-400 text-rose-400")} />
+                        {wishlisted ? "Saved to Wishlist" : "Save to Wishlist"}
+                      </Button>
+                    ) : null}
+                  </div>
+                )}
               </div>
 
               {/* Vendor card */}
-              {data.vendor && (
+              {showVendorCard && data.vendor && (
                 <div className="rounded-3xl border border-border bg-card p-6">
                   <h3 className="font-semibold mb-4">About the Vendor</h3>
                   <div className="space-y-3 text-sm">
@@ -364,31 +394,35 @@ export function MachineDetailClient({ slug }: MachineDetailClientProps) {
       </div>
 
       {/* ── Sticky mobile CTA ───────────────────────────────── */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden border-t border-border bg-background/95 backdrop-blur-xl p-4">
-        <div className="flex items-center gap-3 max-w-screen-sm mx-auto">
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-muted-foreground truncate">{data.title}</p>
-            <p className="text-sm font-bold text-primary">{priceLabel}</p>
+      {(canEnquire || user?.role === "customer" || user?.role === "broker") && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden border-t border-border bg-background/95 backdrop-blur-xl p-4">
+          <div className="flex items-center gap-3 max-w-screen-sm mx-auto">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground truncate">{data.title}</p>
+              <p className="text-sm font-bold text-primary">{priceLabel}</p>
+            </div>
+            {canEnquire && (
+              <Button className="btn-amber-glow gap-1.5 flex-shrink-0" asChild>
+                <Link href={enquireHref}>
+                  <MessageSquare className="h-4 w-4" />
+                  Enquire
+                </Link>
+              </Button>
+            )}
+            {user?.role === "customer" || user?.role === "broker" ? (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => wishlistMutation.mutate()}
+                disabled={wishlistMutation.isPending}
+                aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+              >
+                <Heart className={cn("h-4 w-4", wishlisted && "fill-rose-400 text-rose-400")} />
+              </Button>
+            ) : null}
           </div>
-          <Button className="btn-amber-glow gap-1.5 flex-shrink-0" asChild>
-            <Link href={enquireHref}>
-              <MessageSquare className="h-4 w-4" />
-              Enquire
-            </Link>
-          </Button>
-          {user?.role === "customer" || user?.role === "broker" ? (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => wishlistMutation.mutate()}
-              disabled={wishlistMutation.isPending}
-              aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
-            >
-              <Heart className={cn("h-4 w-4", wishlisted && "fill-rose-400 text-rose-400")} />
-            </Button>
-          ) : null}
         </div>
-      </div>
+      )}
     </>
   );
 }

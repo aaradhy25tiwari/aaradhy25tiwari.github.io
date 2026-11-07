@@ -180,6 +180,7 @@ class MachineListItemResponse(BaseModel):
 class MachineDetailResponse(BaseModel):
     """Full detail response for listing page."""
     id: UUID
+    vendor_id: Optional[UUID] = None
     slug: str
     category_id: Optional[UUID] = None
     sub_category_id: Optional[UUID] = None

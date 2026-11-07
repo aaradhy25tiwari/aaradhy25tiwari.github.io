@@ -149,7 +149,7 @@ export function VendorListingsPage() {
                 )}
               >
                 <Link
-                  href={`/machines/${machine.slug}`}
+                  href={`/machines/${machine.slug}?from=vendor`}
                   className="flex flex-1 items-start sm:items-center gap-4 min-w-0"
                 >
                   <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-muted">
@@ -262,7 +262,7 @@ export function VendorListingsPage() {
                     <Trash2 className="h-4 w-4" />
                   </button>
                   <Link
-                    href={`/machines/${machine.slug}`}
+                    href={`/machines/${machine.slug}?from=vendor`}
                     className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                     aria-label="View listing preview"
                     title="View listing preview"

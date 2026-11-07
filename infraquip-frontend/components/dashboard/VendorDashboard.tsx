@@ -167,7 +167,7 @@ export function VendorDashboard() {
               listings.map((m) => (
                 <Link
                   key={m.id}
-                  href={`/machines/${m.slug}`}
+                  href={`/machines/${m.slug}?from=vendor`}
                   className="flex items-center justify-between rounded-xl border border-border/60 bg-background p-3 transition hover:border-primary/40"
                 >
                   <div className="min-w-0 flex-1">

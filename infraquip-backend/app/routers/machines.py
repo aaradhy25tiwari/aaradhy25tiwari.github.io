@@ -81,6 +81,7 @@ async def get_machine_detail(
     # Build the response dict manually to handle computed fields
     response = MachineDetailResponse(
         id=str(machine.id),
+        vendor_id=machine.vendor_id,
         slug=machine.slug,
         category_id=machine.category_id,
         sub_category_id=machine.sub_category_id,
