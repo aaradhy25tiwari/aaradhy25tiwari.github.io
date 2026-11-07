@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,11 +22,22 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const isVendorRole = searchParams.get("role") === "vendor";
   const rawRedirect = searchParams.get("redirect") || searchParams.get("redirectTo");
-  // Prevent Open Redirect: must start with '/' and not '//' or '/\'
-  const safeRedirect =
-    rawRedirect && rawRedirect.startsWith("/") && !rawRedirect.startsWith("//") && !rawRedirect.startsWith("/\\")
-      ? rawRedirect
-      : null;
+  // Prevent Open Redirect: must start with '/' and resolve strictly to the app origin
+  const safeRedirect = useMemo(() => {
+    if (!rawRedirect || !rawRedirect.startsWith("/") || rawRedirect.startsWith("//") || rawRedirect.startsWith("/\\")) {
+      return null;
+    }
+    try {
+      const baseOrigin = typeof window !== "undefined" && window.location.origin ? window.location.origin : "http://localhost";
+      const resolved = new URL(rawRedirect, baseOrigin);
+      if (resolved.origin === baseOrigin) {
+        return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, [rawRedirect]);
 
   const supabase = getSupabaseClient();
   const [showPassword, setShowPassword] = useState(false);

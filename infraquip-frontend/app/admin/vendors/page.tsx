@@ -8,7 +8,7 @@ import {
   ChevronRight, MapPin, Package, Phone, Mail, Ban, ShieldCheck, ShieldAlert 
 } from "lucide-react";
 import apiClient from "@/lib/api/client";
-import { formatRelativeTime, cn } from "@/lib/utils";
+import { formatRelativeTime, cn, scrollToTop } from "@/lib/utils";
 
 interface VendorListItem {
   id: string;
@@ -26,16 +26,27 @@ interface VendorListItem {
   created_at: string;
 }
 
+interface PaginatedVendorsResponse {
+  results: VendorListItem[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
 type FilterStatus = "all" | "verified" | "unverified" | "banned";
 
 export default function AdminVendorsPage() {
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<FilterStatus>("all");
 
-  const { data, isLoading } = useQuery<{ results: VendorListItem[]; total: number }>({
-    queryKey: ["admin-vendors"],
+  const { data, isLoading } = useQuery<PaginatedVendorsResponse>({
+    queryKey: ["admin-vendors", search, page],
     queryFn: async () => {
-      const { data } = await apiClient.get("/admin/vendors?per_page=50");
+      const params = new URLSearchParams({ page: String(page), per_page: "20" });
+      if (search.trim()) params.set("search", search.trim());
+      const { data } = await apiClient.get<PaginatedVendorsResponse>(`/admin/vendors?${params.toString()}`);
       return data;
     },
     staleTime: 30_000,
@@ -45,9 +56,9 @@ export default function AdminVendorsPage() {
 
   const filteredVendors = useMemo(() => {
     return vendors.filter((v) => {
-      // Status filter
-      if (filter === "verified" && !v.is_verified) return false;
-      if (filter === "unverified" && v.is_verified) return false;
+      // Status filter: exclude banned vendors from verified and unverified
+      if (filter === "verified" && (!v.is_verified || v.is_banned)) return false;
+      if (filter === "unverified" && (v.is_verified || v.is_banned)) return false;
       if (filter === "banned" && !v.is_banned) return false;
 
       // Text search
@@ -64,10 +75,6 @@ export default function AdminVendorsPage() {
     });
   }, [vendors, search, filter]);
 
-  const verifiedCount = useMemo(() => vendors.filter((v) => v.is_verified && !v.is_banned).length, [vendors]);
-  const unverifiedCount = useMemo(() => vendors.filter((v) => !v.is_verified && !v.is_banned).length, [vendors]);
-  const bannedCount = useMemo(() => vendors.filter((v) => v.is_banned).length, [vendors]);
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -76,7 +83,7 @@ export default function AdminVendorsPage() {
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-bold tracking-tight">Vendors</h1>
             <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-              {vendors.length} total
+              {data?.total ?? vendors.length} total
             </span>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -97,7 +104,10 @@ export default function AdminVendorsPage() {
             data-form-type="other"
             placeholder="Search vendors by name or location..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             className="w-full rounded-xl border border-border bg-card pl-9 pr-4 py-2 text-xs outline-none transition-all placeholder:text-muted-foreground/60 focus:border-primary focus:ring-1 focus:ring-primary"
           />
         </div>
@@ -106,14 +116,17 @@ export default function AdminVendorsPage() {
       {/* Filter Tabs */}
       <div className="flex flex-wrap gap-2 border-b border-border pb-3">
         {[
-          { id: "all", label: "All Vendors", count: vendors.length },
-          { id: "verified", label: "Verified", count: verifiedCount },
-          { id: "unverified", label: "Unverified", count: unverifiedCount },
-          { id: "banned", label: "Banned", count: bannedCount },
+          { id: "all", label: "All Vendors" },
+          { id: "verified", label: "Verified" },
+          { id: "unverified", label: "Unverified" },
+          { id: "banned", label: "Banned" },
         ].map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setFilter(tab.id as FilterStatus)}
+            onClick={() => {
+              setFilter(tab.id as FilterStatus);
+              setPage(1);
+            }}
             className={cn(
               "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
               filter === tab.id
@@ -122,14 +135,6 @@ export default function AdminVendorsPage() {
             )}
           >
             <span>{tab.label}</span>
-            <span
-              className={cn(
-                "rounded-full px-1.5 py-0.2 text-[10px]",
-                filter === tab.id ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
-              )}
-            >
-              {tab.count}
-            </span>
           </button>
         ))}
       </div>
@@ -147,7 +152,9 @@ export default function AdminVendorsPage() {
           <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
             {search
               ? `No vendors match "${search}". Try adjusting your search query.`
-              : "No vendor accounts found for this filter tab."}
+              : filter !== "all"
+              ? `No ${filter} vendor accounts found on page ${page}. Try checking other pages below.`
+              : "No vendor accounts found."}
           </p>
         </div>
       ) : (
@@ -239,6 +246,54 @@ export default function AdminVendorsPage() {
               </div>
             </Link>
           ))}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {data && data.total_pages > 1 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border pt-4">
+          <span className="text-xs text-muted-foreground">
+            Page {data.page} of {data.total_pages} ({data.total} total vendors)
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                setPage((prev) => Math.max(1, prev - 1));
+                scrollToTop();
+              }}
+              disabled={page <= 1}
+              className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card text-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted"
+            >
+              Previous
+            </button>
+            {Array.from({ length: data.total_pages }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                onClick={() => {
+                  setPage(p);
+                  scrollToTop();
+                }}
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-lg text-xs font-medium transition cursor-pointer",
+                  page === p
+                    ? "bg-primary text-primary-foreground font-semibold"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                )}
+              >
+                {p}
+              </button>
+            ))}
+            <button
+              onClick={() => {
+                setPage((prev) => Math.min(data.total_pages, prev + 1));
+                scrollToTop();
+              }}
+              disabled={page >= data.total_pages}
+              className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card text-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -34,7 +34,7 @@ const mobileTabItems = [
   navItems[1], // Account Requests
   navItems[2], // Review Queue
   navItems[3], // Machines
-  navItems[6], // Enquiries
+  navItems[7], // Enquiries
 ];
 
 export function AdminDashboardWrapper({ children }: { children: React.ReactNode }) {
@@ -62,6 +62,24 @@ export function AdminDashboardWrapper({ children }: { children: React.ReactNode 
     return () => { document.body.style.overflow = ""; };
   }, [mobileDrawerOpen]);
 
+  const isAdmin = !loading && !!user && user.role === "admin";
+
+  // Pending request count for badge
+  const { data: reqStats } = useQuery<{ pending: number }>({
+    queryKey: ["account-request-stats"],
+    queryFn: () => apiClient.get("/account-requests/admin/stats").then(r => r.data),
+    enabled: isAdmin,
+    refetchInterval: 60_000,
+  });
+
+  // Pending review queue count for badge
+  const { data: reviewQueueStats } = useQuery<{ pending: number }>({
+    queryKey: ["review-queue-stats"],
+    queryFn: () => apiClient.get("/admin/reviews/pending-count").then(r => r.data).catch(() => ({ pending: 0 })),
+    enabled: isAdmin,
+    refetchInterval: 60_000,
+  });
+
   // Block rendering protected admin UI if session has ended or not admin
   if (loading || !user || user.role !== "admin") {
     return (
@@ -70,20 +88,6 @@ export function AdminDashboardWrapper({ children }: { children: React.ReactNode 
       </div>
     );
   }
-
-  // Pending request count for badge
-  const { data: reqStats } = useQuery<{ pending: number }>({
-    queryKey: ["account-request-stats"],
-    queryFn: () => apiClient.get("/account-requests/admin/stats").then(r => r.data),
-    refetchInterval: 60_000,
-  });
-
-  // Pending review queue count for badge
-  const { data: reviewQueueStats } = useQuery<{ pending: number }>({
-    queryKey: ["review-queue-stats"],
-    queryFn: () => apiClient.get("/admin/reviews/pending-count").then(r => r.data).catch(() => ({ pending: 0 })),
-    refetchInterval: 60_000,
-  });
 
   const getBadge = (item: typeof navItems[0]) => {
     if (item.badgeKey === "requests") return reqStats?.pending ?? 0;

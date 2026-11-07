@@ -11,11 +11,18 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code");
   const rawNext = url.searchParams.get("next") ?? "/dashboard";
 
-  // Prevent Open Redirect: must start with a single '/' and not '//' or '/\'
-  const safeNext =
-    rawNext.startsWith("/") && !rawNext.startsWith("//") && !rawNext.startsWith("/\\")
-      ? rawNext
-      : "/dashboard";
+  // Prevent Open Redirect: validate root-relative path and resolve against origin
+  let safeNext = "/dashboard";
+  if (rawNext.startsWith("/") && !rawNext.startsWith("//") && !rawNext.startsWith("/\\")) {
+    try {
+      const resolved = new URL(rawNext, url.origin);
+      if (resolved.origin === url.origin) {
+        safeNext = `${resolved.pathname}${resolved.search}${resolved.hash}`;
+      }
+    } catch {
+      safeNext = "/dashboard";
+    }
+  }
 
   if (code) {
     const supabase = await createClient();
@@ -23,5 +30,5 @@ export async function GET(request: Request) {
   }
 
   // Redirect to dashboard or the validated internal route
-  return NextResponse.redirect(new URL(safeNext, request.url));
+  return NextResponse.redirect(new URL(safeNext, url.origin));
 }

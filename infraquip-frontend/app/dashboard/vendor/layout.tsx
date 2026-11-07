@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { VendorDashboardWrapper } from "@/components/dashboard/VendorDashboardWrapper";
+import { getTrustedUserRole } from "@/lib/auth/roles";
 
 export const metadata: Metadata = {
   title: {
@@ -22,9 +23,9 @@ export default async function VendorDashboardLayout({ children }: { children: Re
     redirect("/");
   }
 
-  const role = user.user_metadata?.role || "customer";
+  const role = await getTrustedUserRole(supabase, user);
   if (role !== "vendor" && role !== "admin") {
-    redirect(role === "admin" ? "/admin" : `/dashboard/${role}`);
+    redirect(`/dashboard/${role}`);
   }
 
   return <VendorDashboardWrapper>{children}</VendorDashboardWrapper>;

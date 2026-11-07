@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import type { User } from "@/types/user";
 import apiClient from "@/lib/api/client";
+import { redirectIfProtectedPath } from "@/lib/auth/redirect";
 
 interface AuthState {
   user: User | null;
@@ -81,12 +82,7 @@ export function useAuth() {
           await fetchUser();
         } else if (event === "SIGNED_OUT") {
           setState({ user: null, loading: false, error: null });
-          if (typeof window !== "undefined") {
-            const path = window.location.pathname;
-            if (path.startsWith("/admin") || path.startsWith("/dashboard")) {
-              window.location.href = "/";
-            }
-          }
+          redirectIfProtectedPath();
         } else if (event === "TOKEN_REFRESHED" && session) {
           // Silently update — user state unchanged
         }
@@ -98,9 +94,12 @@ export function useAuth() {
 
   const signOut = useCallback(async () => {
     try {
-      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+      }
     } catch {
-      /* ignore */
+      await supabase.auth.signOut({ scope: "local" }).catch(() => {});
     }
     setState({ user: null, loading: false, error: null });
     if (typeof window !== "undefined") {

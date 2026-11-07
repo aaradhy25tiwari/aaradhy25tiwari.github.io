@@ -10,7 +10,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Loader2 } from "lucide-react";
+import { Menu, X, Loader2, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -37,15 +37,15 @@ export function DashboardShell({
   extraAction,
 }: DashboardShellProps) {
   const pathname = usePathname();
-  const { user, loading } = useAuth();
+  const { user, loading, error, refreshUser } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // When session ends, go to guest home page
   useEffect(() => {
-    if (!loading && !user) {
+    if (!loading && !user && !error) {
       window.location.href = "/";
     }
-  }, [user, loading]);
+  }, [user, loading, error]);
 
   // Close drawer on route change
   useEffect(() => {
@@ -62,7 +62,28 @@ export function DashboardShell({
     return () => { document.body.style.overflow = ""; };
   }, [drawerOpen]);
 
-  // Block rendering protected dashboard UI if session has ended
+  // Render error state if an error occurred instead of stuck on loading spinner
+  if (error) {
+    return (
+      <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center gap-4 bg-muted/20 px-4 text-center">
+        <div className="rounded-full bg-destructive/10 p-3 text-destructive">
+          <AlertTriangle className="h-6 w-6" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-foreground">Failed to load dashboard</p>
+          <p className="text-xs text-muted-foreground">{error}</p>
+        </div>
+        <button
+          onClick={() => refreshUser()}
+          className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition hover:opacity-90"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
+  // Block rendering protected dashboard UI if session has ended or still loading
   if (loading || !user) {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-muted/20">

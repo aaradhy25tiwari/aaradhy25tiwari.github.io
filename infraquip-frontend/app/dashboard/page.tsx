@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getTrustedUserRole } from "@/lib/auth/roles";
 
 export default async function DashboardRootPage() {
   const supabase = await createClient();
@@ -7,7 +8,7 @@ export default async function DashboardRootPage() {
   if (!user) {
     redirect("/");
   }
-  const role = user.user_metadata?.role || "customer";
+  const role = await getTrustedUserRole(supabase, user);
   if (role === "admin") {
     redirect("/admin");
   }

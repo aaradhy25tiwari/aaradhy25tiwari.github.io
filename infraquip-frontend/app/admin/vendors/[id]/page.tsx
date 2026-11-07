@@ -132,11 +132,12 @@ export default function AdminVendorDetailPage() {
     enabled: !!vendorId,
   });
 
-  // Toggle Verification mutation
+  // Explicit Verification mutation
   const verifyMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (targetVerified: boolean) => {
       const { data } = await apiClient.patch<{ message: string; is_verified: boolean }>(
-        `/admin/vendors/${vendorId}/verify`
+        `/admin/vendors/${vendorId}/verify`,
+        { is_verified: targetVerified }
       );
       return data;
     },
@@ -322,7 +323,7 @@ export default function AdminVendorDetailPage() {
           <div className="flex flex-wrap items-center gap-2.5 shrink-0 pt-3 lg:pt-0 border-t border-border lg:border-0">
             {/* Verify / Revoke Button */}
             <Button
-              onClick={() => verifyMutation.mutate()}
+              onClick={() => verifyMutation.mutate(!vendor.is_verified)}
               disabled={verifyMutation.isPending}
               variant={vendor.is_verified ? "outline" : "default"}
               size="sm"
@@ -345,7 +346,13 @@ export default function AdminVendorDetailPage() {
 
             {/* Ban / Unban Button */}
             <Button
-              onClick={() => banMutation.mutate()}
+              onClick={() => {
+                const action = vendor.is_banned ? "unban" : "ban";
+                const vendorName = profile?.company_name || vendor.full_name || vendor.email;
+                if (window.confirm(`Are you sure you want to ${action} ${vendorName}?`)) {
+                  banMutation.mutate();
+                }
+              }}
               disabled={banMutation.isPending}
               variant="outline"
               size="sm"
@@ -434,7 +441,7 @@ export default function AdminVendorDetailPage() {
             <Sparkles className="h-4 w-4 text-emerald-500" />
           </div>
           <p className="text-2xl font-bold tracking-tight text-foreground">
-            {profile?.response_rate !== null && profile?.response_rate !== undefined ? `${profile.response_rate}%` : "100%"}
+            {profile?.response_rate !== null && profile?.response_rate !== undefined ? `${profile.response_rate}%` : "—"}
           </p>
           <span className="text-[11px] text-muted-foreground">
             {profile?.total_views ?? 0} profile views
@@ -595,7 +602,7 @@ export default function AdminVendorDetailPage() {
                 <h2 className="text-base font-bold text-foreground">Plan &amp; Limits</h2>
               </div>
               <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-500 capitalize">
-                {vendor.subscription?.status || "Active"}
+                {vendor.subscription?.status || "No subscription"}
               </span>
             </div>
 

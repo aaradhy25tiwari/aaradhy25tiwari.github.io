@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AdminDashboardWrapper } from "@/components/dashboard/AdminDashboardWrapper";
+import { getTrustedUserRole } from "@/lib/auth/roles";
 
 export const metadata: Metadata = {
   title: {
@@ -21,7 +22,7 @@ export default async function AdminDashboardLayout({ children }: { children: Rea
     redirect("/");
   }
 
-  const role = user.user_metadata?.role || "customer";
+  const role = await getTrustedUserRole(supabase, user);
   if (role !== "admin") {
     redirect(`/dashboard/${role}`);
   }

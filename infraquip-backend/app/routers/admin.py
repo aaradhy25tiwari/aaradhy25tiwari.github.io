@@ -5,6 +5,7 @@ import re
 import io
 import csv
 from typing import Optional, List, Dict, Any
+from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request, status, UploadFile, File
 from sqlalchemy import select, func, case
 from sqlalchemy.orm import selectinload, joinedload
@@ -648,16 +649,21 @@ async def get_vendor_details(
     }
 
 
+class VendorVerificationRequest(BaseModel):
+    is_verified: bool
+
+
 # ── PATCH /admin/vendors/{vendor_id}/verify ────────────────────
 @router.patch("/vendors/{vendor_id}/verify")
 @limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
-async def toggle_vendor_verification(
+async def update_vendor_verification(
     request: Request,
     vendor_id: str,
+    payload: VendorVerificationRequest,
     current_user: AdminUser,
     db: DBSession,
 ):
-    """Toggle vendor verification status."""
+    """Update vendor verification status."""
     try:
         vendor_uuid = uuid.UUID(vendor_id)
     except ValueError:
@@ -669,7 +675,7 @@ async def toggle_vendor_verification(
     if not user:
         raise HTTPException(status_code=404, detail="Vendor not found")
 
-    new_status = not user.is_verified
+    new_status = payload.is_verified
     user.is_verified = new_status
     if user.vendor_profile:
         user.vendor_profile.is_verified = new_status

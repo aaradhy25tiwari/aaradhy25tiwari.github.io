@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from "axios";
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { redirectIfProtectedPath } from "@/lib/auth/redirect";
 
 // Ensure server-side rendering uses an absolute URL for the API
 const isServer = typeof window === "undefined";
@@ -64,21 +65,11 @@ apiClient.interceptors.response.use(
             } catch {
               /* ignore */
             }
-            if (typeof window !== "undefined") {
-              const path = window.location.pathname;
-              if (path.startsWith("/admin") || path.startsWith("/dashboard")) {
-                window.location.href = "/";
-              }
-            }
+            redirectIfProtectedPath();
           }
         } else {
           // No session exists, but received 401 on a protected page — go to guest home page
-          if (typeof window !== "undefined") {
-            const path = window.location.pathname;
-            if (path.startsWith("/admin") || path.startsWith("/dashboard")) {
-              window.location.href = "/";
-            }
-          }
+          redirectIfProtectedPath();
         }
       } catch (e) {
         // Refresh failed catastrophically (e.g. network failure)
@@ -89,12 +80,7 @@ apiClient.interceptors.response.use(
         } catch {
           /* ignore */
         }
-        if (typeof window !== "undefined") {
-          const path = window.location.pathname;
-          if (path.startsWith("/admin") || path.startsWith("/dashboard")) {
-            window.location.href = "/";
-          }
-        }
+        redirectIfProtectedPath();
       }
     }
 
