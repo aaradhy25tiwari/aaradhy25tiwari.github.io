@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { 
@@ -64,18 +64,22 @@ function getPaginationItems(currentPage: number, totalPages: number): (number | 
 export default function AdminVendorsPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const lastDebouncedRef = useRef(debouncedSearch);
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<FilterStatus>("all");
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedSearch(search);
-      setPage(1);
+      if (lastDebouncedRef.current !== search) {
+        lastDebouncedRef.current = search;
+        setDebouncedSearch(search);
+        setPage(1);
+      }
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading } = useQuery<PaginatedVendorsResponse>({
+  const { data, isLoading, isFetching, isPlaceholderData } = useQuery<PaginatedVendorsResponse>({
     queryKey: ["admin-vendors", debouncedSearch, filter, page],
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), per_page: "20" });
@@ -97,7 +101,10 @@ export default function AdminVendorsPage() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-bold tracking-tight">Vendors</h1>
-            <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+            <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary flex items-center gap-1.5">
+              {(isPlaceholderData || (isFetching && !isLoading)) && (
+                <Loader2 className="h-3 w-3 animate-spin text-primary" />
+              )}
               {data?.total ?? vendors.length} total
             </span>
           </div>
@@ -162,8 +169,8 @@ export default function AdminVendorsPage() {
           <Building2 className="mx-auto h-10 w-10 text-muted-foreground/60" />
           <h3 className="mt-4 text-base font-semibold">No vendors found</h3>
           <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
-            {debouncedSearch
-              ? `No vendors match "${debouncedSearch}". Try adjusting your search query.`
+            {(debouncedSearch.trim() || search.trim())
+              ? `No vendors match "${search.trim() || debouncedSearch.trim()}". Try adjusting your search query.`
               : filter !== "all"
               ? data && data.total_pages > 1
                 ? `No ${filter} vendor accounts found on page ${page}. Try checking other pages below.`
@@ -172,7 +179,7 @@ export default function AdminVendorsPage() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-3">
+        <div className={cn("grid gap-3 transition-opacity duration-150", (isPlaceholderData || (isFetching && !isLoading)) && "opacity-50 pointer-events-none")}>
           {vendors.map((v) => (
             <Link
               key={v.id}

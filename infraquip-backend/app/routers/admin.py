@@ -4,7 +4,7 @@ import logging
 import re
 import io
 import csv
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request, status, UploadFile, File
 from sqlalchemy import select, func, case
@@ -427,7 +427,7 @@ async def list_vendors(
     current_user: AdminUser,
     db: DBSession,
     search: Optional[str] = Query(None, max_length=100),
-    status: Optional[str] = Query(None),
+    status: Optional[Literal["verified", "unverified", "banned"]] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=50),
 ):
@@ -447,14 +447,21 @@ async def list_vendors(
     elif status == "banned":
         stmt = stmt.where(User.is_banned.is_(True))
 
-    if search:
-        search_term = f"%{search.strip()}%"
+    search_clean = search.strip() if search else None
+    if search_clean:
+        # Escape backslashes, percent signs, and underscores for ILIKE pattern
+        escaped_search = (
+            search_clean.replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+        search_pattern = f"%{escaped_search}%"
         stmt = stmt.outerjoin(User.vendor_profile).where(
-            User.email.ilike(search_term)
-            | User.full_name.ilike(search_term)
-            | VendorProfile.company_name.ilike(search_term)
-            | VendorProfile.city.ilike(search_term)
-            | VendorProfile.state.ilike(search_term)
+            User.email.ilike(search_pattern, escape="\\")
+            | User.full_name.ilike(search_pattern, escape="\\")
+            | VendorProfile.company_name.ilike(search_pattern, escape="\\")
+            | VendorProfile.city.ilike(search_pattern, escape="\\")
+            | VendorProfile.state.ilike(search_pattern, escape="\\")
         )
 
     total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
