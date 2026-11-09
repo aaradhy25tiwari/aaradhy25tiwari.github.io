@@ -357,14 +357,33 @@ export default function AdminReviewQueuePage() {
 
                     {/* Custom terms review alert */}
                     {previewMachine.has_custom_terms && (
-                      <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-1.5">
+                      <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-2">
                         <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
                           <AlertTriangle className="h-3.5 w-3.5" />
                           Custom Special Terms (Requires Admin Review)
                         </div>
-                        <p className="text-xs text-foreground bg-background/80 p-2 rounded-lg border border-border whitespace-pre-wrap">
-                          {previewMachine.rental_term_sheet?.special_terms || previewMachine.sale_term_sheet?.special_terms || "Custom terms specified."}
-                        </p>
+                        {previewMachine.rental_term_sheet?.special_terms && previewMachine.rental_term_sheet.special_terms.trim() && (
+                          <div className="space-y-1">
+                            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Rental Term Sheet:</span>
+                            <p className="text-xs text-foreground bg-background/80 p-2 rounded-lg border border-border whitespace-pre-wrap">
+                              {previewMachine.rental_term_sheet.special_terms}
+                            </p>
+                          </div>
+                        )}
+                        {previewMachine.sale_term_sheet?.special_terms && previewMachine.sale_term_sheet.special_terms.trim() && (
+                          <div className="space-y-1">
+                            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Sale Term Sheet:</span>
+                            <p className="text-xs text-foreground bg-background/80 p-2 rounded-lg border border-border whitespace-pre-wrap">
+                              {previewMachine.sale_term_sheet.special_terms}
+                            </p>
+                          </div>
+                        )}
+                        {!((previewMachine.rental_term_sheet?.special_terms && previewMachine.rental_term_sheet.special_terms.trim()) ||
+                           (previewMachine.sale_term_sheet?.special_terms && previewMachine.sale_term_sheet.special_terms.trim())) && (
+                          <p className="text-xs text-foreground bg-background/80 p-2 rounded-lg border border-border whitespace-pre-wrap">
+                            Custom terms specified.
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>

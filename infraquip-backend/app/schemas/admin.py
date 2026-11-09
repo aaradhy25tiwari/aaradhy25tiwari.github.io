@@ -33,6 +33,8 @@ class ReviewQueueItem(BaseModel):
     has_custom_terms: bool = False
     has_rental_terms: bool = False
     has_sale_terms: bool = False
+    rental_term_sheet: Optional[Any] = None
+    sale_term_sheet: Optional[Any] = None
 
 
 class ReviewQueueResponse(BaseModel):

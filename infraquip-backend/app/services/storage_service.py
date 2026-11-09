@@ -1,6 +1,8 @@
 import io
 import uuid
 import logging
+import asyncio
+from typing import Optional
 from PIL import Image
 from fastapi import UploadFile, HTTPException, status
 from supabase import create_client
@@ -83,9 +85,14 @@ def validate_and_inspect_image(content: bytes) -> tuple[str, str]:
         )
 
 
-def process_and_watermark_image(content: bytes) -> tuple[bytes, str, str]:
+def process_and_watermark_image(
+    content: bytes,
+    orig_ext: str = "jpg",
+    orig_content_type: str = "image/jpeg",
+) -> tuple[bytes, str, str]:
     """
     Applies image optimization, anti-leak watermarking, and plate sanitization.
+    If processing fails, returns the validated original content with its original extension and MIME type.
     """
     try:
         from PIL import Image, ImageDraw, ImageOps
@@ -99,22 +106,38 @@ def process_and_watermark_image(content: bytes) -> tuple[bytes, str, str]:
 
         w, h = img.size
         badge_w, badge_h = 160, 32
-        x1, y1 = max(10, w - badge_w - 20), max(10, h - badge_h - 20)
-        x2, y2 = min(w - 10, w - 20), min(h - 10, h - 20)
-
-        overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
-        overlay_draw = ImageDraw.Draw(overlay)
-        overlay_draw.rounded_rectangle([x1, y1, x2, y2], radius=6, fill=(17, 24, 39, 180))
-        overlay_draw.text((x1 + 16, y1 + 8), "InfraQuip Verified", fill=(245, 158, 11, 230))
-
-        final_img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+        # Only draw badge if image dimensions provide valid positive bounds
+        if w > badge_w + 30 and h > badge_h + 30:
+            x1, y1 = max(10, w - badge_w - 20), max(10, h - badge_h - 20)
+            x2, y2 = min(w - 10, w - 20), min(h - 10, h - 20)
+            if x2 > x1 and y2 > y1:
+                overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
+                overlay_draw = ImageDraw.Draw(overlay)
+                overlay_draw.rounded_rectangle([x1, y1, x2, y2], radius=6, fill=(17, 24, 39, 180))
+                overlay_draw.text((x1 + 16, y1 + 8), "InfraQuip Verified", fill=(245, 158, 11, 230))
+                img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
 
         out = io.BytesIO()
-        final_img.save(out, format="JPEG", quality=85, optimize=True)
+        img.save(out, format="JPEG", quality=85, optimize=True)
         return out.getvalue(), "jpg", "image/jpeg"
     except Exception as e:
         logger.warning(f"Watermark/processing failed, using original: {e}")
-        return content, "jpg", "image/jpeg"
+        return content, orig_ext, orig_content_type
+
+
+def get_signed_url(storage_path: str, expires_in: int = 3600) -> Optional[str]:
+    """
+    Generate a short-lived signed URL for private access (admin or owner only).
+    """
+    try:
+        supabase = _get_client()
+        res = supabase.storage.from_(BUCKET).create_signed_url(storage_path, expires_in)
+        if isinstance(res, dict):
+            return res.get("signedURL") or res.get("signedUrl")
+        return str(res)
+    except Exception as e:
+        logger.warning(f"Failed to generate signed URL for {storage_path}: {e}")
+        return None
 
 
 async def upload_serial_plate_photo(
@@ -123,10 +146,29 @@ async def upload_serial_plate_photo(
 ) -> tuple[str, str]:
     """
     Upload serial number / VIN plate photo for admin age verification.
-    Stored securely in private path.
+    Strips EXIF metadata before upload, stores in private bucket path,
+    and returns the storage path and a short-lived signed access URL.
     """
     raw_content = await file.read()
     safe_ext, safe_content_type = validate_and_inspect_image(raw_content)
+
+    # Strip EXIF metadata before storing
+    def _strip_exif(data: bytes, ext: str) -> bytes:
+        try:
+            from PIL import Image, ImageOps
+            img = Image.open(io.BytesIO(data))
+            img = ImageOps.exif_transpose(img)
+            buf = io.BytesIO()
+            fmt = "JPEG" if ext in ("jpg", "jpeg") else ext.upper()
+            if fmt == "JPG":
+                fmt = "JPEG"
+            img.save(buf, format=fmt)
+            return buf.getvalue()
+        except Exception as e:
+            logger.warning(f"Failed to strip EXIF from serial plate: {e}")
+            return data
+
+    clean_content = await asyncio.to_thread(_strip_exif, raw_content, safe_ext)
     supabase = _get_client()
 
     clean_vendor_id = str(uuid.UUID(str(vendor_id)))
@@ -136,7 +178,7 @@ async def upload_serial_plate_photo(
     try:
         supabase.storage.from_(BUCKET).upload(
             path=storage_path,
-            file=raw_content,
+            file=clean_content,
             file_options={"content-type": safe_content_type, "upsert": "false"},
         )
     except Exception as e:
@@ -144,7 +186,7 @@ async def upload_serial_plate_photo(
             _ensure_bucket(supabase)
             supabase.storage.from_(BUCKET).upload(
                 path=storage_path,
-                file=raw_content,
+                file=clean_content,
                 file_options={"content-type": safe_content_type, "upsert": "false"},
             )
         else:
@@ -154,8 +196,8 @@ async def upload_serial_plate_photo(
                 detail="Failed to store serial plate photo. Please try again.",
             )
 
-    public_url = supabase.storage.from_(BUCKET).get_public_url(storage_path).rstrip("?")
-    return storage_path, public_url
+    signed_url = get_signed_url(storage_path, expires_in=3600) or ""
+    return storage_path, signed_url
 
 
 async def upload_machine_image(
@@ -171,8 +213,10 @@ async def upload_machine_image(
     4. Store with verified MIME type.
     """
     raw_content = await file.read()
-    validate_and_inspect_image(raw_content)
-    content, safe_ext, safe_content_type = process_and_watermark_image(raw_content)
+    safe_ext, safe_content_type = validate_and_inspect_image(raw_content)
+    content, safe_ext, safe_content_type = await asyncio.to_thread(
+        process_and_watermark_image, raw_content, safe_ext, safe_content_type
+    )
 
     supabase = _get_client()
 

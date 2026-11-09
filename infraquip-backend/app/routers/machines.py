@@ -12,6 +12,7 @@ from app.models.machine import Machine, MachineStatus, MachineImage
 from app.models.user import User, VendorProfile
 from app.models.analytics import Wishlist
 from app.schemas.machine import MachineDetailResponse
+from app.services.storage_service import get_signed_url
 from app.core.rate_limiter import limiter
 from app.config import settings
 
@@ -82,9 +83,15 @@ async def get_machine_detail(
     is_authenticated = bool(current_user)
     is_privileged = bool(is_owner or is_admin)
 
+    # Verification status is consistent across all user perspectives
+    is_vendor_verified = bool(vendor_profile.is_verified) if vendor_profile else False
+
     # Anonymized partner badge for guests/customers
     partner_code = f"IQ-{str(machine.vendor_id)[:6].upper()}" if machine.vendor_id else "IQ-PARTNER"
-    anonymized_vendor_name = f"InfraQuip Verified Partner #{partner_code}"
+    if is_vendor_verified:
+        anonymized_vendor_name = f"InfraQuip Verified Partner #{partner_code}"
+    else:
+        anonymized_vendor_name = f"InfraQuip Partner #{partner_code}"
 
     if is_privileged:
         # Full vendor profile for owner & admin
@@ -95,31 +102,35 @@ async def get_machine_detail(
             "city": vendor_profile.city if vendor_profile else machine.city,
             "state": vendor_profile.state if vendor_profile else machine.state,
             "avatar_url": machine.vendor.avatar_url,
-            "is_verified": vendor_profile.is_verified if vendor_profile else False,
+            "is_verified": is_vendor_verified,
             "response_rate": vendor_profile.response_rate if vendor_profile else 95,
             "member_since": vendor_profile.member_since if vendor_profile else machine.created_at,
         } if machine.vendor else None
         display_reg_no = machine.registration_number
         display_sr_no = machine.machine_serial_no
-        display_sr_plate = machine.serial_plate_photo_url
+        display_sr_plate = (
+            machine.serial_plate_photo_url
+            if (machine.serial_plate_photo_url and machine.serial_plate_photo_url.startswith("http"))
+            else (get_signed_url(machine.serial_plate_photo_url, expires_in=3600) if machine.serial_plate_photo_url else None)
+        )
     else:
-        # Sanitized vendor profile: no direct contact details, brand, or individual identity
+        # Sanitized vendor profile: non-sensitive public identifier, no direct contact details
         vendor_data = {
-            "id": str(machine.vendor_id) if machine.vendor_id else str(machine.id),
+            "id": partner_code,
             "full_name": anonymized_vendor_name,
             "company_name": anonymized_vendor_name,
             "city": machine.city,
             "state": machine.state,
             "avatar_url": None,
-            "is_verified": vendor_profile.is_verified if vendor_profile else True,
+            "is_verified": is_vendor_verified,
             "response_rate": vendor_profile.response_rate if vendor_profile else 95,
             "member_since": vendor_profile.member_since if vendor_profile else machine.created_at,
         }
-        # Mask registration & chassis numbers
+        # Mask registration & chassis numbers (full mask if < 10 chars, partial if >= 10 chars)
         reg = machine.registration_number or ""
-        display_reg_no = f"{reg[:4]} •••• {reg[-2:]}" if len(reg) >= 6 else ("••••••••" if reg else None)
+        display_reg_no = (f"{reg[:4]} •••• {reg[-2:]}" if len(reg) >= 10 else "••••••••") if reg else None
         sr = machine.machine_serial_no or ""
-        display_sr_no = f"•••• {sr[-4:]}" if len(sr) >= 4 else ("••••••••" if sr else None)
+        display_sr_no = (f"•••• {sr[-4:]}" if len(sr) >= 10 else "••••••••") if sr else None
         display_sr_plate = None  # Strictly admin/owner view only
 
     # Gated Term Sheets: full access for logged-in users; locked for guests

@@ -289,10 +289,20 @@ export function ListingForm({ machine }: ListingFormProps) {
     setIsSavingTerms(true);
     setServerError(null);
     try {
-      const hasCustom = Boolean(rentalTerms?.special_terms?.trim() || saleTerms?.special_terms?.trim());
+      const currentListingType = watch("listing_type");
+      const isRent = currentListingType === "rent" || currentListingType === "both";
+      const isSale = currentListingType === "sale" || currentListingType === "both";
+
+      const finalRentalTerms = isRent ? rentalTerms : null;
+      const finalSaleTerms = isSale ? saleTerms : null;
+      const hasCustom = Boolean(
+        (finalRentalTerms?.special_terms && finalRentalTerms.special_terms.trim()) ||
+        (finalSaleTerms?.special_terms && finalSaleTerms.special_terms.trim())
+      );
+
       await apiClient.put(`/vendor/listings/${targetId}`, {
-        rental_term_sheet: rentalTerms,
-        sale_term_sheet: saleTerms,
+        rental_term_sheet: finalRentalTerms,
+        sale_term_sheet: finalSaleTerms,
         has_custom_terms: hasCustom,
       });
       await queryClient.invalidateQueries({ queryKey: ["vendor-listing", targetId] });
@@ -980,9 +990,21 @@ export function ListingForm({ machine }: ListingFormProps) {
       cleanPayload.chassis_number = watch("chassis_number") || null;
       cleanPayload.machine_serial_no = watch("machine_serial_no") || null;
       cleanPayload.serial_plate_photo_url = watch("serial_plate_photo_url") || null;
-      cleanPayload.rental_term_sheet = rentalTerms;
-      cleanPayload.sale_term_sheet = saleTerms;
-      cleanPayload.has_custom_terms = Boolean(rentalTerms?.special_terms?.trim() || saleTerms?.special_terms?.trim());
+      if (isEditing && machine) {
+        const isRent = cleanPayload.listing_type === "rent" || cleanPayload.listing_type === "both";
+        const isSale = cleanPayload.listing_type === "sale" || cleanPayload.listing_type === "both";
+        cleanPayload.rental_term_sheet = isRent ? (rentalTerms || machine.rental_term_sheet) : null;
+        cleanPayload.sale_term_sheet = isSale ? (saleTerms || machine.sale_term_sheet) : null;
+        cleanPayload.has_custom_terms = Boolean(
+          (cleanPayload.rental_term_sheet?.special_terms && cleanPayload.rental_term_sheet.special_terms.trim()) ||
+          (cleanPayload.sale_term_sheet?.special_terms && cleanPayload.sale_term_sheet.special_terms.trim())
+        );
+      } else {
+        // When creating, omit unreviewed term sheets until Step 4 saves them
+        cleanPayload.rental_term_sheet = null;
+        cleanPayload.sale_term_sheet = null;
+        cleanPayload.has_custom_terms = false;
+      }
 
       if (isEditing && machine) {
         await apiClient.put(`/vendor/listings/${machine.id}`, cleanPayload);

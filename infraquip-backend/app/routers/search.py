@@ -249,6 +249,10 @@ async def search_machines(
 
         distance_km = round(raw_dist / 1000, 1) if raw_dist is not None else None
 
+        is_vp_verified = bool(vp.is_verified) if vp else False
+        partner_code = f"IQ-{str(m.vendor_id)[:6].upper()}" if m.vendor_id else "IQ-PARTNER"
+        v_name = f"InfraQuip Verified Partner #{partner_code}" if is_vp_verified else f"InfraQuip Partner #{partner_code}"
+
         items.append(
             MachineListItemResponse(
                 id=str(m.id),
@@ -279,9 +283,9 @@ async def search_machines(
                 views_count=m.views_count,
                 enquiries_count=m.enquiries_count,
                 primary_image=img_response,
-                vendor_name=f"InfraQuip Verified Partner #IQ-{str(m.vendor_id)[:6].upper()}" if m.vendor_id else "InfraQuip Verified Partner",
+                vendor_name=v_name,
                 vendor_city=m.city,
-                vendor_is_verified=vp.is_verified if vp else True,
+                vendor_is_verified=is_vp_verified,
                 distance_km=distance_km,
                 latitude=m.latitude,
                 longitude=m.longitude,

@@ -24,6 +24,7 @@ from app.services.notification_service import (
     notify_listing_approved,
     notify_listing_rejected,
 )
+from app.services.storage_service import get_signed_url
 from app.services.email_service import (
     send_listing_approved_email,
     send_listing_rejected_email,
@@ -80,10 +81,16 @@ async def get_review_queue(
             registration_number=m.registration_number,
             chassis_number=m.chassis_number,
             machine_serial_no=m.machine_serial_no,
-            serial_plate_photo_url=m.serial_plate_photo_url,
+            serial_plate_photo_url=(
+                m.serial_plate_photo_url
+                if (m.serial_plate_photo_url and m.serial_plate_photo_url.startswith("http"))
+                else (get_signed_url(m.serial_plate_photo_url, expires_in=3600) if m.serial_plate_photo_url else None)
+            ),
             has_custom_terms=m.has_custom_terms,
             has_rental_terms=bool(m.rental_term_sheet),
             has_sale_terms=bool(m.sale_term_sheet),
+            rental_term_sheet=m.rental_term_sheet,
+            sale_term_sheet=m.sale_term_sheet,
         )
         for m in machines
     ]

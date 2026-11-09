@@ -25,7 +25,7 @@ export function DetailedTermSheet({
   isLocked = false,
 }: DetailedTermSheetProps) {
   const isRent = listingType === "rent" || listingType === "both";
-  const isSale = listingType === "sale";
+  const isSale = listingType === "sale" || listingType === "both";
 
   if (isLocked) {
     return (
@@ -108,9 +108,6 @@ export function DetailedTermSheet({
                 Standard terms agreed by the vendor for project deployments
               </p>
             </div>
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-500">
-              <ShieldCheck className="h-3.5 w-3.5" /> Verified Terms
-            </span>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -136,7 +133,7 @@ export function DetailedTermSheet({
               </div>
               <p className="text-sm font-bold text-foreground">
                 {rentalTerms.operators_included
-                  ? `${rentalTerms.operator_count || 1} Certified Operator(s) Included`
+                  ? `${rentalTerms.operator_count ?? 1} Certified Operator(s) Included`
                   : "Customer Supplies Operator"}
               </p>
               <p className="text-[11px] text-muted-foreground">
@@ -150,12 +147,12 @@ export function DetailedTermSheet({
                 <Clock className="h-4 w-4 text-primary" /> Working Hours & Overtime
               </div>
               <p className="text-sm font-bold text-foreground">
-                {rentalTerms.working_hours_per_day || 8} hrs/day ({rentalTerms.monthly_hours_limit || 208} hrs/mo)
+                {rentalTerms.working_hours_per_day != null ? `${rentalTerms.working_hours_per_day} hrs/day` : "Not specified"} ({rentalTerms.monthly_hours_limit != null ? `${rentalTerms.monthly_hours_limit} hrs/mo` : "Not specified"})
               </p>
               <p className="text-[11px] text-muted-foreground">
-                {rentalTerms.overtime_rate_hourly
+                {rentalTerms.overtime_rate_hourly != null
                   ? `Overtime: ₹${rentalTerms.overtime_rate_hourly}/hr`
-                  : "Overtime: Pro-rata basis"}
+                  : "Overtime: Not specified"}
               </p>
             </div>
 
@@ -165,13 +162,13 @@ export function DetailedTermSheet({
                 <Truck className="h-4 w-4 text-primary" /> Mobilization & Demob
               </div>
               <p className="text-sm font-bold text-foreground capitalize">
-                {rentalTerms.mob_demob_type?.replace(/_/g, " ") || "Customer Actuals"}
+                {rentalTerms.mob_demob_type?.replace(/_/g, " ") || "Not specified"}
               </p>
-              <p className="text-[11px] text-muted-foreground">
-                {rentalTerms.mob_demob_charge
-                  ? `Flat charge: ₹${rentalTerms.mob_demob_charge.toLocaleString("en-IN")}`
-                  : "Trailer transport charged at actuals from yard to site."}
-              </p>
+              {rentalTerms.mob_demob_charge != null && (
+                <p className="text-[11px] text-muted-foreground">
+                  Flat charge: ₹{rentalTerms.mob_demob_charge.toLocaleString("en-IN")}
+                </p>
+              )}
             </div>
 
             {/* Accommodation & Food */}
@@ -180,10 +177,10 @@ export function DetailedTermSheet({
                 <Home className="h-4 w-4 text-primary" /> Operator Accommodation
               </div>
               <p className="text-sm font-bold text-foreground capitalize">
-                {rentalTerms.operator_accommodation?.replace(/_/g, " ") || "Customer Provides at Site"}
+                {rentalTerms.operator_accommodation?.replace(/_/g, " ") || "Not specified"}
               </p>
               <p className="text-[11px] text-muted-foreground">
-                Food: {rentalTerms.operator_food?.replace(/_/g, " ") || "Customer scope"}
+                Food: {rentalTerms.operator_food?.replace(/_/g, " ") || "Not specified"}
               </p>
             </div>
 
@@ -193,10 +190,9 @@ export function DetailedTermSheet({
                 <Wrench className="h-4 w-4 text-primary" /> Maintenance & SLA
               </div>
               <p className="text-sm font-bold text-foreground">
-                {rentalTerms.maintenance_sla_hours || 24}-Hour Repair SLA
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Idle hours deducted if breakdown exceeds SLA window.
+                {rentalTerms.maintenance_sla_hours != null
+                  ? `${rentalTerms.maintenance_sla_hours}-Hour Repair SLA`
+                  : "Not specified"}
               </p>
             </div>
           </div>
@@ -206,7 +202,7 @@ export function DetailedTermSheet({
             <div className="flex items-center gap-2">
               <Banknote className="h-4 w-4 shrink-0" />
               <span>
-                <strong>Deposit Terms:</strong> {rentalTerms.security_deposit_months || 1} Month Security Deposit + {rentalTerms.advance_rent_months || 1} Month Advance Rent upon mobilization.
+                <strong>Deposit Terms:</strong> {rentalTerms.security_deposit_months != null ? `${rentalTerms.security_deposit_months} Month(s) Security Deposit` : "Security Deposit: Not specified"} • {rentalTerms.advance_rent_months != null ? `${rentalTerms.advance_rent_months} Month(s) Advance Rent` : "Advance Rent: Not specified"}
               </span>
             </div>
           </div>
@@ -238,9 +234,23 @@ export function DetailedTermSheet({
                 Clearance status, inspection protocol, and transfer conditions
               </p>
             </div>
-            <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 border border-blue-500/20 px-2.5 py-0.5 text-xs font-semibold text-blue-500">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Title Clear
-            </span>
+            {saleTerms.hypothecation_status === "no_loan" ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-500">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Clear Title (No Loan)
+              </span>
+            ) : saleTerms.hypothecation_status === "bank_noc_in_hand" ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 border border-blue-500/20 px-2.5 py-0.5 text-xs font-semibold text-blue-500">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Bank NOC in Hand
+              </span>
+            ) : saleTerms.hypothecation_status === "loan_active_vendor_clears" ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 text-xs font-semibold text-amber-500">
+                <AlertCircle className="h-3.5 w-3.5" /> Active Loan (Vendor to Clear)
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted border border-border px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+                Title Status: Not specified
+              </span>
+            )}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -248,10 +258,7 @@ export function DetailedTermSheet({
             <div className="rounded-2xl border border-border/80 bg-muted/20 p-4 space-y-1">
               <p className="text-xs font-semibold text-muted-foreground">Hypothecation / Loan</p>
               <p className="text-sm font-bold text-foreground capitalize">
-                {saleTerms.hypothecation_status?.replace(/_/g, " ") || "No Loan (Clean Title)"}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Bank NOC provided upon token receipt.
+                {saleTerms.hypothecation_status ? saleTerms.hypothecation_status.replace(/_/g, " ") : "Not specified"}
               </p>
             </div>
 
@@ -259,10 +266,7 @@ export function DetailedTermSheet({
             <div className="rounded-2xl border border-border/80 bg-muted/20 p-4 space-y-1">
               <p className="text-xs font-semibold text-muted-foreground">RTO NOC / Ownership Transfer</p>
               <p className="text-sm font-bold text-foreground capitalize">
-                {saleTerms.rto_noc_responsibility?.replace(/_/g, " ") || "Vendor Provided"}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                All clearance papers provided for re-registration.
+                {saleTerms.rto_noc_responsibility ? saleTerms.rto_noc_responsibility.replace(/_/g, " ") : "Not specified"}
               </p>
             </div>
 
@@ -270,10 +274,7 @@ export function DetailedTermSheet({
             <div className="rounded-2xl border border-border/80 bg-muted/20 p-4 space-y-1">
               <p className="text-xs font-semibold text-muted-foreground">Tax / GST Status</p>
               <p className="text-sm font-bold text-foreground capitalize">
-                {saleTerms.tax_gst_status?.replace(/_/g, " ") || "18% GST Extra"}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Tax invoice with GST input credit available.
+                {saleTerms.tax_gst_status ? saleTerms.tax_gst_status.replace(/_/g, " ") : "Not specified"}
               </p>
             </div>
 
@@ -292,10 +293,10 @@ export function DetailedTermSheet({
             <div className="rounded-2xl border border-border/80 bg-muted/20 p-4 space-y-1">
               <p className="text-xs font-semibold text-muted-foreground">Component Health</p>
               <p className="text-sm font-bold text-foreground">
-                {saleTerms.tyre_track_wear_percent != null ? `${saleTerms.tyre_track_wear_percent}% Life Remaining` : "Standard Condition"}
+                {saleTerms.tyre_track_wear_percent != null ? `${saleTerms.tyre_track_wear_percent}% Wear` : "Not specified"}
               </p>
               <p className="text-[11px] text-muted-foreground">
-                Engine: {saleTerms.engine_condition || "Good"} • Hydraulics: {saleTerms.hydraulic_condition || "Normal"}
+                Engine: {saleTerms.engine_condition ? saleTerms.engine_condition.replace(/_/g, " ") : "Not specified"} • Hydraulics: {saleTerms.hydraulic_condition ? saleTerms.hydraulic_condition.replace(/_/g, " ") : "Not specified"}
               </p>
             </div>
 
@@ -303,10 +304,10 @@ export function DetailedTermSheet({
             <div className="rounded-2xl border border-border/80 bg-muted/20 p-4 space-y-1">
               <p className="text-xs font-semibold text-muted-foreground">Payment Milestones</p>
               <p className="text-sm font-bold text-foreground">
-                {saleTerms.token_deposit_percent || 10}% Token Advance
+                {saleTerms.token_deposit_percent != null ? `${saleTerms.token_deposit_percent}% Token Advance` : "Token Advance: Not specified"}
               </p>
               <p className="text-[11px] text-muted-foreground capitalize">
-                Balance: {saleTerms.balance_payment_terms?.replace(/_/g, " ") || "On Inspection & Handover"}
+                Balance: {saleTerms.balance_payment_terms ? saleTerms.balance_payment_terms.replace(/_/g, " ") : "Not specified"}
               </p>
             </div>
           </div>

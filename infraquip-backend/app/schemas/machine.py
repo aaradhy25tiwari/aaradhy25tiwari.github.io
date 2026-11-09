@@ -2,8 +2,8 @@
 Machine (Listing) Schemas
 """
 from datetime import datetime
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, field_validator
+from typing import Optional, List, Dict, Any, Literal, Union
+from pydantic import BaseModel, Field, field_validator, model_validator
 from app.models.machine import (
     MachineCondition, ListingType, MachineStatus, MinRentalDuration,
     MachineRunningCondition, MachineOwnershipType
@@ -26,7 +26,7 @@ class MachineImageResponse(BaseModel):
 # ── Vendor Summary (on listing) ───────────────────────────────
 
 class VendorSummary(BaseModel):
-    id: UUID
+    id: Union[UUID, str]
     full_name: str
     company_name: Optional[str] = None
     city: Optional[str] = None
@@ -43,35 +43,55 @@ class VendorSummary(BaseModel):
 class RentalTermSheet(BaseModel):
     fuel_included: bool = False  # Wet lease vs Dry lease
     operators_included: bool = True
-    operator_count: int = 1
-    operator_shift_type: str = "single_shift_8h"  # single_shift_8h, single_shift_10h, double_shift_16h, 24h_continuous
-    working_hours_per_day: int = 8
-    working_days_per_month: int = 26
-    monthly_hours_limit: int = 208
-    overtime_rate_hourly: Optional[float] = None
-    mob_demob_type: str = "customer_actuals"  # customer_actuals, fixed_charge, free_over_3months
-    mob_demob_charge: Optional[float] = None
-    operator_accommodation: str = "customer_provides"  # customer_provides, vendor_provided, not_applicable
-    operator_food: str = "customer_provides"  # customer_provides, vendor_provided, not_applicable
-    maintenance_sla_hours: int = 24
-    security_deposit_months: Optional[float] = 1.0
-    advance_rent_months: Optional[float] = 1.0
-    special_terms: Optional[str] = None
+    operator_count: int = Field(default=1, ge=0, le=10)
+    operator_shift_type: Literal[
+        "single_shift_8h", "single_shift_10h", "double_shift_16h", "24h_continuous"
+    ] = "single_shift_8h"
+    working_hours_per_day: int = Field(default=8, ge=1, le=24)
+    working_days_per_month: int = Field(default=26, ge=1, le=31)
+    monthly_hours_limit: int = Field(default=208, ge=1, le=744)
+    overtime_rate_hourly: Optional[float] = Field(default=None, ge=0, le=100000)
+    mob_demob_type: Literal[
+        "customer_actuals", "fixed_charge", "free_over_3months"
+    ] = "customer_actuals"
+    mob_demob_charge: Optional[float] = Field(default=None, ge=0, le=10000000)
+    operator_accommodation: Literal[
+        "customer_provides", "vendor_provided", "not_applicable"
+    ] = "customer_provides"
+    operator_food: Literal[
+        "customer_provides", "vendor_provided", "not_applicable"
+    ] = "customer_provides"
+    maintenance_sla_hours: int = Field(default=24, ge=1, le=168)
+    security_deposit_months: Optional[float] = Field(default=1.0, ge=0, le=24)
+    advance_rent_months: Optional[float] = Field(default=1.0, ge=0, le=24)
+    special_terms: Optional[str] = Field(default=None, max_length=2000)
     model_config = {"from_attributes": True}
 
 
 class SaleTermSheet(BaseModel):
-    hypothecation_status: str = "no_loan"  # no_loan, loan_active_vendor_clears, bank_noc_in_hand
-    rto_noc_responsibility: str = "vendor_provided"  # vendor_provided, customer_responsibility, not_applicable_non_rto
-    tax_gst_status: str = "18_percent_extra"  # included, 18_percent_extra, exempt
+    hypothecation_status: Literal[
+        "no_loan", "loan_active_vendor_clears", "bank_noc_in_hand"
+    ] = "no_loan"
+    rto_noc_responsibility: Literal[
+        "vendor_provided", "customer_responsibility", "not_applicable_non_rto"
+    ] = "vendor_provided"
+    tax_gst_status: Literal[
+        "18_percent_extra", "included", "exempt"
+    ] = "18_percent_extra"
     inspection_allowed: bool = True
     mechanic_check_allowed: bool = True
-    tyre_track_wear_percent: Optional[int] = None  # e.g. 75% life remaining
-    engine_condition: Optional[str] = "excellent"
-    hydraulic_condition: Optional[str] = "normal"
-    token_deposit_percent: Optional[int] = 10
-    balance_payment_terms: str = "on_inspection_and_handover"  # on_inspection_and_handover, prior_to_dispatch
-    special_terms: Optional[str] = None
+    tyre_track_wear_percent: Optional[int] = Field(default=None, ge=0, le=100)
+    engine_condition: Optional[Literal[
+        "excellent", "good", "fair", "needs_minor_service"
+    ]] = "excellent"
+    hydraulic_condition: Optional[Literal[
+        "normal", "leak_free", "serviced", "needs_attention"
+    ]] = "normal"
+    token_deposit_percent: Optional[int] = Field(default=10, ge=0, le=100)
+    balance_payment_terms: Literal[
+        "on_inspection_and_handover", "prior_to_dispatch"
+    ] = "on_inspection_and_handover"
+    special_terms: Optional[str] = Field(default=None, max_length=2000)
     model_config = {"from_attributes": True}
 
 
@@ -98,9 +118,9 @@ class MachineCreateRequest(BaseModel):
 
     # RTO & Age Validation Fields
     is_rto_registered: bool = False
-    registration_number: Optional[str] = None
-    chassis_number: Optional[str] = None
-    machine_serial_no: Optional[str] = None
+    registration_number: Optional[str] = Field(None, max_length=50)
+    chassis_number: Optional[str] = Field(None, max_length=100)
+    machine_serial_no: Optional[str] = Field(None, max_length=100)
     serial_plate_photo_url: Optional[str] = None
 
     # Detailed Term Sheets
@@ -123,6 +143,18 @@ class MachineCreateRequest(BaseModel):
     address_line: Optional[str] = Field(None, max_length=40)
     latitude: Optional[float] = Field(None, ge=-90, le=90)
     longitude: Optional[float] = Field(None, ge=-180, le=180)
+
+    @model_validator(mode="after")
+    def validate_rto_or_serial(self):
+        if self.is_rto_registered:
+            if not self.registration_number or not self.registration_number.strip():
+                raise ValueError("Registration number is required when equipment is RTO registered")
+        else:
+            if not self.machine_serial_no or not self.machine_serial_no.strip():
+                raise ValueError("Machine serial number is required for non-registrable equipment")
+            if not self.serial_plate_photo_url or not self.serial_plate_photo_url.strip():
+                raise ValueError("Serial plate photo is required for machine age validation of non-registrable equipment")
+        return self
 
     @field_validator("rental_price_hourly", "rental_price_daily", "rental_price_weekly", "rental_price_monthly", "purchase_price")
     @classmethod
@@ -172,9 +204,9 @@ class MachineUpdateRequest(BaseModel):
     longitude: Optional[float] = None
     availability: Optional[bool] = None
     is_rto_registered: Optional[bool] = None
-    registration_number: Optional[str] = None
-    chassis_number: Optional[str] = None
-    machine_serial_no: Optional[str] = None
+    registration_number: Optional[str] = Field(None, max_length=50)
+    chassis_number: Optional[str] = Field(None, max_length=100)
+    machine_serial_no: Optional[str] = Field(None, max_length=100)
     serial_plate_photo_url: Optional[str] = None
     rental_term_sheet: Optional[RentalTermSheet] = None
     sale_term_sheet: Optional[SaleTermSheet] = None

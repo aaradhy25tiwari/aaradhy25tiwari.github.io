@@ -153,6 +153,26 @@ async def create_listing(
         slug = f"{base_slug}-{counter}"
         counter += 1
 
+    # Validate and normalize serial plate photo path for non-registrable equipment
+    serial_plate_path = None
+    if not payload.is_rto_registered:
+        if not payload.serial_plate_photo_url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Serial plate photo is required for non-registrable equipment.",
+            )
+        expected_prefix = f"admin_verification/{current_user.id}/"
+        raw_val = payload.serial_plate_photo_url.strip()
+        if expected_prefix in raw_val:
+            serial_plate_path = raw_val[raw_val.index(expected_prefix):].split("?")[0]
+        elif raw_val.startswith(expected_prefix):
+            serial_plate_path = raw_val.split("?")[0]
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid serial plate photo path. Must be under admin_verification/{current_user.id}/",
+            )
+
     machine = Machine(
         id=uuid.uuid4(),
         vendor_id=current_user.id,
@@ -189,7 +209,7 @@ async def create_listing(
         registration_number=payload.registration_number,
         chassis_number=payload.chassis_number,
         machine_serial_no=payload.machine_serial_no,
-        serial_plate_photo_url=payload.serial_plate_photo_url,
+        serial_plate_photo_url=serial_plate_path,
         rental_term_sheet=payload.rental_term_sheet.model_dump() if payload.rental_term_sheet else None,
         sale_term_sheet=payload.sale_term_sheet.model_dump() if payload.sale_term_sheet else None,
         has_custom_terms=bool(
@@ -320,6 +340,20 @@ async def update_listing(
         raise HTTPException(status_code=404, detail="Listing not found")
 
     update_data = payload.model_dump(exclude_unset=True)
+
+    if "serial_plate_photo_url" in update_data and update_data["serial_plate_photo_url"]:
+        expected_prefix = f"admin_verification/{current_user.id}/"
+        raw_val = update_data["serial_plate_photo_url"].strip()
+        if expected_prefix in raw_val:
+            update_data["serial_plate_photo_url"] = raw_val[raw_val.index(expected_prefix):].split("?")[0]
+        elif raw_val.startswith(expected_prefix):
+            update_data["serial_plate_photo_url"] = raw_val.split("?")[0]
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid serial plate photo path. Must be under admin_verification/{current_user.id}/",
+            )
+
     for field, value in update_data.items():
         setattr(machine, field, value)
 
