@@ -59,14 +59,28 @@ export function MachineCard({ machine, className, onToggleWishlist }: MachineCar
         />
         
         {/* Badges */}
-        <div className="absolute top-3 left-3 flex flex-wrap gap-2">
+        <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
           {machine.availability ? (
-            <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-md tracking-wider uppercase shadow-sm">
+            <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md tracking-wider uppercase shadow-sm">
               Available
             </span>
           ) : (
-            <span className="bg-zinc-800 text-white text-[10px] font-bold px-2 py-1 rounded-md tracking-wider uppercase shadow-sm">
+            <span className="bg-zinc-800 text-white text-[10px] font-bold px-2 py-0.5 rounded-md tracking-wider uppercase shadow-sm">
               Busy
+            </span>
+          )}
+          {machine.is_rto_registered ? (
+            <span className="bg-blue-600/90 text-white text-[10px] font-medium px-2 py-0.5 rounded-md shadow-sm">
+              RTO Reg
+            </span>
+          ) : machine.is_rto_registered === false ? (
+            <span className="bg-zinc-700/90 text-white text-[10px] font-medium px-2 py-0.5 rounded-md shadow-sm">
+              Off-Road
+            </span>
+          ) : null}
+          {machine.has_term_sheet && (
+            <span className="bg-amber-600/90 text-white text-[10px] font-medium px-2 py-0.5 rounded-md shadow-sm">
+              Term Sheet
             </span>
           )}
         </div>
@@ -138,14 +152,16 @@ export function MachineCard({ machine, className, onToggleWishlist }: MachineCar
               )}
             </div>
           </div>
-          <div className="flex items-center gap-1.5 max-w-[50%]">
+          <div className="flex items-center gap-1.5 max-w-[55%]">
             <div className="truncate text-right">
-              <p className="text-xs font-medium text-foreground truncate">
-                {machine.vendor_name}
+              <p className="text-xs font-medium text-foreground truncate" title={machine.vendor_name || "InfraQuip Verified Partner"}>
+                {machine.vendor_name || "InfraQuip Partner"}
               </p>
             </div>
             {machine.vendor_is_verified && (
-              <BadgeCheck className="w-4 h-4 text-amber-500 shrink-0" />
+              <span title="InfraQuip Verified Partner" className="inline-flex shrink-0">
+                <BadgeCheck className="w-4 h-4 text-amber-500" />
+              </span>
             )}
           </div>
         </div>

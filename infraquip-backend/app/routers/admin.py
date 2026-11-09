@@ -75,6 +75,15 @@ async def get_review_queue(
             submitted_at=m.created_at,
             primary_image=m.images[0].display_url if m.images else None,
             category_name=m.category.name if m.category else None,
+            year_of_manufacture=m.year_of_manufacture,
+            is_rto_registered=m.is_rto_registered,
+            registration_number=m.registration_number,
+            chassis_number=m.chassis_number,
+            machine_serial_no=m.machine_serial_no,
+            serial_plate_photo_url=m.serial_plate_photo_url,
+            has_custom_terms=m.has_custom_terms,
+            has_rental_terms=bool(m.rental_term_sheet),
+            has_sale_terms=bool(m.sale_term_sheet),
         )
         for m in machines
     ]

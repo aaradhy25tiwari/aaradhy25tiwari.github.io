@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, CheckCircle, XCircle, Eye, AlertTriangle } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, Eye, AlertTriangle, ShieldCheck, FileText, ExternalLink } from "lucide-react";
 import apiClient from "@/lib/api/client";
 import { formatRelativeTime, cn } from "@/lib/utils";
 import {
@@ -27,6 +27,15 @@ interface PendingMachine {
   created_at: string;
   primary_image?: string;
   category_name?: string;
+  year_of_manufacture?: number;
+  is_rto_registered?: boolean;
+  registration_number?: string;
+  chassis_number?: string;
+  machine_serial_no?: string;
+  serial_plate_photo_url?: string;
+  has_custom_terms?: boolean;
+  rental_term_sheet?: any;
+  sale_term_sheet?: any;
 }
 
 export default function AdminReviewQueuePage() {
@@ -137,9 +146,30 @@ export default function AdminReviewQueuePage() {
                   </div>
                 )}
                 <div>
-                  <p className="font-medium text-sm lg:text-base truncate">{machine.title}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-medium text-sm lg:text-base">{machine.title}</p>
+                    {machine.is_rto_registered ? (
+                      <span className="px-2 py-0.5 rounded text-[11px] bg-blue-500/10 text-blue-500 font-medium">
+                        RTO: {machine.registration_number || "Yes"}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-[11px] bg-zinc-500/10 text-zinc-400 font-medium">
+                        Off-Road{machine.machine_serial_no ? `: ${machine.machine_serial_no}` : ""}
+                      </span>
+                    )}
+                    {machine.serial_plate_photo_url && (
+                      <span className="px-2 py-0.5 rounded text-[11px] bg-emerald-500/10 text-emerald-500 font-medium">
+                        📸 Nameplate Photo
+                      </span>
+                    )}
+                    {machine.has_custom_terms && (
+                      <span className="px-2 py-0.5 rounded text-[11px] bg-amber-500/10 text-amber-500 font-medium">
+                        ⚠️ Custom Terms
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {machine.vendor_name} &middot; <span className="font-semibold text-foreground">{machine.make}</span> {machine.model} &middot; {machine.city}, {machine.state} &middot; {formatRelativeTime(machine.created_at)}
+                    {machine.vendor_name} &middot; <span className="font-semibold text-foreground">{machine.make}</span> {machine.model} {machine.year_of_manufacture ? `(${machine.year_of_manufacture})` : ""} &middot; {machine.city}, {machine.state} &middot; {formatRelativeTime(machine.created_at)}
                   </p>
                 </div>
               </div>
@@ -270,9 +300,73 @@ export default function AdminReviewQueuePage() {
                       <p className="font-medium">{previewMachine.make}</p>
                       <p className="text-muted-foreground">Model:</p>
                       <p className="font-medium">{previewMachine.model}</p>
+                      <p className="text-muted-foreground">Year of Mfg (Stated):</p>
+                      <p className="font-medium text-primary">{previewMachine.year_of_manufacture || "Not specified"}</p>
+                      <p className="text-muted-foreground">Registration Type:</p>
+                      <p className="font-medium">
+                        {previewMachine.is_rto_registered ? (
+                          <span className="text-blue-500 font-semibold">RTO Registered</span>
+                        ) : (
+                          <span className="text-amber-500 font-semibold">Off-Road / Plant Equip</span>
+                        )}
+                      </p>
+                      {previewMachine.is_rto_registered ? (
+                        <>
+                          <p className="text-muted-foreground">Reg Number:</p>
+                          <p className="font-medium font-mono">{previewMachine.registration_number || "—"}</p>
+                          <p className="text-muted-foreground">Chassis / VIN:</p>
+                          <p className="font-medium font-mono">{previewMachine.chassis_number || "—"}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-muted-foreground">Machine Serial No:</p>
+                          <p className="font-medium font-mono">{previewMachine.machine_serial_no || "—"}</p>
+                        </>
+                      )}
                       <p className="text-muted-foreground">Location:</p>
                       <p className="font-medium">{previewMachine.city}, {previewMachine.state}</p>
                     </div>
+
+                    {/* Serial Plate Photo for Admin Age Validation */}
+                    {previewMachine.serial_plate_photo_url && (
+                      <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                            <ShieldCheck className="h-4 w-4" />
+                            Serial No / Nameplate Photo (Age Validation)
+                          </span>
+                          <a
+                            href={previewMachine.serial_plate_photo_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] text-primary hover:underline flex items-center gap-0.5"
+                          >
+                            Open full size <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                        <img
+                          src={previewMachine.serial_plate_photo_url}
+                          alt="Machine Serial Number Plate"
+                          className="w-full max-h-44 object-contain rounded-lg border border-border bg-black/40"
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Verify the Year of Manufacture stamped on the metal plate matches the stated year: <strong>{previewMachine.year_of_manufacture}</strong>.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Custom terms review alert */}
+                    {previewMachine.has_custom_terms && (
+                      <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-1.5">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          Custom Special Terms (Requires Admin Review)
+                        </div>
+                        <p className="text-xs text-foreground bg-background/80 p-2 rounded-lg border border-border whitespace-pre-wrap">
+                          {previewMachine.rental_term_sheet?.special_terms || previewMachine.sale_term_sheet?.special_terms || "Custom terms specified."}
+                        </p>
+                      </div>
+                    )}
                   </div>
                   
                   {/* Master Catalog Management Section for Admin */}

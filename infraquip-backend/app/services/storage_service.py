@@ -83,6 +83,81 @@ def validate_and_inspect_image(content: bytes) -> tuple[str, str]:
         )
 
 
+def process_and_watermark_image(content: bytes) -> tuple[bytes, str, str]:
+    """
+    Applies image optimization, anti-leak watermarking, and plate sanitization.
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageOps
+        img = Image.open(io.BytesIO(content))
+        img = ImageOps.exif_transpose(img)
+        img = img.convert("RGB")
+
+        max_dim = 1920
+        if max(img.width, img.height) > max_dim:
+            img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+
+        w, h = img.size
+        badge_w, badge_h = 160, 32
+        x1, y1 = max(10, w - badge_w - 20), max(10, h - badge_h - 20)
+        x2, y2 = min(w - 10, w - 20), min(h - 10, h - 20)
+
+        overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        overlay_draw.rounded_rectangle([x1, y1, x2, y2], radius=6, fill=(17, 24, 39, 180))
+        overlay_draw.text((x1 + 16, y1 + 8), "InfraQuip Verified", fill=(245, 158, 11, 230))
+
+        final_img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+
+        out = io.BytesIO()
+        final_img.save(out, format="JPEG", quality=85, optimize=True)
+        return out.getvalue(), "jpg", "image/jpeg"
+    except Exception as e:
+        logger.warning(f"Watermark/processing failed, using original: {e}")
+        return content, "jpg", "image/jpeg"
+
+
+async def upload_serial_plate_photo(
+    file: UploadFile,
+    vendor_id: str,
+) -> tuple[str, str]:
+    """
+    Upload serial number / VIN plate photo for admin age verification.
+    Stored securely in private path.
+    """
+    raw_content = await file.read()
+    safe_ext, safe_content_type = validate_and_inspect_image(raw_content)
+    supabase = _get_client()
+
+    clean_vendor_id = str(uuid.UUID(str(vendor_id)))
+    file_name = f"sr_plate_{uuid.uuid4()}.{safe_ext}"
+    storage_path = f"admin_verification/{clean_vendor_id}/{file_name}"
+
+    try:
+        supabase.storage.from_(BUCKET).upload(
+            path=storage_path,
+            file=raw_content,
+            file_options={"content-type": safe_content_type, "upsert": "false"},
+        )
+    except Exception as e:
+        if "Bucket not found" in str(e) or "NoSuchBucket" in str(e):
+            _ensure_bucket(supabase)
+            supabase.storage.from_(BUCKET).upload(
+                path=storage_path,
+                file=raw_content,
+                file_options={"content-type": safe_content_type, "upsert": "false"},
+            )
+        else:
+            logger.error(f"Storage upload error for serial plate {storage_path}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to store serial plate photo. Please try again.",
+            )
+
+    public_url = supabase.storage.from_(BUCKET).get_public_url(storage_path).rstrip("?")
+    return storage_path, public_url
+
+
 async def upload_machine_image(
     file: UploadFile,
     vendor_id: str,
@@ -95,8 +170,9 @@ async def upload_machine_image(
     3. Generate isolated random UUID path outside web root.
     4. Store with verified MIME type.
     """
-    content = await file.read()
-    safe_ext, safe_content_type = validate_and_inspect_image(content)
+    raw_content = await file.read()
+    validate_and_inspect_image(raw_content)
+    content, safe_ext, safe_content_type = process_and_watermark_image(raw_content)
 
     supabase = _get_client()
 

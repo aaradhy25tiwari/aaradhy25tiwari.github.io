@@ -38,6 +38,43 @@ class VendorSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Detailed Term Sheets ──────────────────────────────────────
+
+class RentalTermSheet(BaseModel):
+    fuel_included: bool = False  # Wet lease vs Dry lease
+    operators_included: bool = True
+    operator_count: int = 1
+    operator_shift_type: str = "single_shift_8h"  # single_shift_8h, single_shift_10h, double_shift_16h, 24h_continuous
+    working_hours_per_day: int = 8
+    working_days_per_month: int = 26
+    monthly_hours_limit: int = 208
+    overtime_rate_hourly: Optional[float] = None
+    mob_demob_type: str = "customer_actuals"  # customer_actuals, fixed_charge, free_over_3months
+    mob_demob_charge: Optional[float] = None
+    operator_accommodation: str = "customer_provides"  # customer_provides, vendor_provided, not_applicable
+    operator_food: str = "customer_provides"  # customer_provides, vendor_provided, not_applicable
+    maintenance_sla_hours: int = 24
+    security_deposit_months: Optional[float] = 1.0
+    advance_rent_months: Optional[float] = 1.0
+    special_terms: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+
+class SaleTermSheet(BaseModel):
+    hypothecation_status: str = "no_loan"  # no_loan, loan_active_vendor_clears, bank_noc_in_hand
+    rto_noc_responsibility: str = "vendor_provided"  # vendor_provided, customer_responsibility, not_applicable_non_rto
+    tax_gst_status: str = "18_percent_extra"  # included, 18_percent_extra, exempt
+    inspection_allowed: bool = True
+    mechanic_check_allowed: bool = True
+    tyre_track_wear_percent: Optional[int] = None  # e.g. 75% life remaining
+    engine_condition: Optional[str] = "excellent"
+    hydraulic_condition: Optional[str] = "normal"
+    token_deposit_percent: Optional[int] = 10
+    balance_payment_terms: str = "on_inspection_and_handover"  # on_inspection_and_handover, prior_to_dispatch
+    special_terms: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+
 # ── Create / Update Schemas ───────────────────────────────────
 
 class MachineCreateRequest(BaseModel):
@@ -58,6 +95,18 @@ class MachineCreateRequest(BaseModel):
     running_condition: MachineRunningCondition = MachineRunningCondition.running
     hmr: Optional[int] = Field(None, ge=0, le=999999)
     ownership_type: MachineOwnershipType = MachineOwnershipType.owner
+
+    # RTO & Age Validation Fields
+    is_rto_registered: bool = False
+    registration_number: Optional[str] = None
+    chassis_number: Optional[str] = None
+    machine_serial_no: Optional[str] = None
+    serial_plate_photo_url: Optional[str] = None
+
+    # Detailed Term Sheets
+    rental_term_sheet: Optional[RentalTermSheet] = None
+    sale_term_sheet: Optional[SaleTermSheet] = None
+    has_custom_terms: bool = False
 
     # Pricing
     rental_price_hourly: Optional[float] = Field(None, gt=0)
@@ -122,6 +171,14 @@ class MachineUpdateRequest(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     availability: Optional[bool] = None
+    is_rto_registered: Optional[bool] = None
+    registration_number: Optional[str] = None
+    chassis_number: Optional[str] = None
+    machine_serial_no: Optional[str] = None
+    serial_plate_photo_url: Optional[str] = None
+    rental_term_sheet: Optional[RentalTermSheet] = None
+    sale_term_sheet: Optional[SaleTermSheet] = None
+    has_custom_terms: Optional[bool] = None
 
 
 # ── Response Schemas ──────────────────────────────────────────
@@ -174,6 +231,11 @@ class MachineListItemResponse(BaseModel):
     longitude: Optional[float] = None
     is_wishlisted: Optional[bool] = None
     created_at: Optional[datetime] = None
+    is_rto_registered: bool = False
+    has_term_sheet: bool = False
+    fuel_included: Optional[bool] = None
+    operators_included: Optional[bool] = None
+    has_custom_terms: bool = False
     model_config = {"from_attributes": True}
 
 
@@ -223,6 +285,17 @@ class MachineDetailResponse(BaseModel):
     review_count: Optional[int] = None
     is_wishlisted: Optional[bool] = None
     created_at: datetime
+
+    # RTO & Detailed Term Sheets
+    is_rto_registered: bool = False
+    registration_number: Optional[str] = None
+    chassis_number: Optional[str] = None
+    machine_serial_no: Optional[str] = None
+    serial_plate_photo_url: Optional[str] = None
+    rental_term_sheet: Optional[RentalTermSheet] = None
+    sale_term_sheet: Optional[SaleTermSheet] = None
+    has_custom_terms: bool = False
+    is_term_sheet_locked: bool = False
     model_config = {"from_attributes": True}
 
 

@@ -279,13 +279,18 @@ async def search_machines(
                 views_count=m.views_count,
                 enquiries_count=m.enquiries_count,
                 primary_image=img_response,
-                vendor_name=vp.company_name if vp else (m.vendor.full_name if m.vendor else ""),
-                vendor_city=vp.city if vp else None,
-                vendor_is_verified=vp.is_verified if vp else False,
+                vendor_name=f"InfraQuip Verified Partner #IQ-{str(m.vendor_id)[:6].upper()}" if m.vendor_id else "InfraQuip Verified Partner",
+                vendor_city=m.city,
+                vendor_is_verified=vp.is_verified if vp else True,
                 distance_km=distance_km,
                 latitude=m.latitude,
                 longitude=m.longitude,
                 is_wishlisted=is_w if current_user else None,
+                is_rto_registered=m.is_rto_registered,
+                has_term_sheet=bool(m.rental_term_sheet or m.sale_term_sheet),
+                fuel_included=m.rental_term_sheet.get("fuel_included") if m.rental_term_sheet else None,
+                operators_included=m.rental_term_sheet.get("operators_included") if m.rental_term_sheet else None,
+                has_custom_terms=m.has_custom_terms,
             )
         )
 

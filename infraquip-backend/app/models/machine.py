@@ -116,6 +116,18 @@ class Machine(Base):
     hmr = Column(Integer, nullable=True) # Hours Meter Reading
     ownership_type = Column(Enum(MachineOwnershipType), default=MachineOwnershipType.owner, nullable=False)
 
+    # ── RTO & Age Validation Fields ───────────────────────────
+    is_rto_registered = Column(Boolean, default=False, nullable=False)
+    registration_number = Column(String(50), nullable=True)
+    chassis_number = Column(String(100), nullable=True)
+    machine_serial_no = Column(String(100), nullable=True)
+    serial_plate_photo_url = Column(Text, nullable=True)  # Admin-only for age validation
+
+    # ── Detailed Term Sheets ──────────────────────────────────
+    rental_term_sheet = Column(JSONB, nullable=True)
+    sale_term_sheet = Column(JSONB, nullable=True)
+    has_custom_terms = Column(Boolean, default=False, nullable=False)
+
     # ── Pricing ───────────────────────────────────────────────
     rental_price_hourly = Column(Numeric(12, 2), nullable=True)
     rental_price_daily = Column(Numeric(12, 2), nullable=True)

@@ -24,6 +24,15 @@ class ReviewQueueItem(BaseModel):
     submitted_at: datetime
     primary_image: Optional[str] = None
     category_name: Optional[str] = None
+    year_of_manufacture: Optional[int] = None
+    is_rto_registered: bool = False
+    registration_number: Optional[str] = None
+    chassis_number: Optional[str] = None
+    machine_serial_no: Optional[str] = None
+    serial_plate_photo_url: Optional[str] = None
+    has_custom_terms: bool = False
+    has_rental_terms: bool = False
+    has_sale_terms: bool = False
 
 
 class ReviewQueueResponse(BaseModel):

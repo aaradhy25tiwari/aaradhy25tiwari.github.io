@@ -5,13 +5,14 @@ import Link from "next/link";
 import Script from "next/script";
 import {
   Loader2, MapPin, Star, Eye, ArrowRight,
-  MessageSquare, Heart, Calendar, Award, Clock, BadgeCheck
+  MessageSquare, Heart, Calendar, Award, Clock, BadgeCheck, ShieldCheck, FileText
 } from "lucide-react";
 import apiClient from "@/lib/api/client";
 import { formatINR, formatDate, getConditionColor, cn } from "@/lib/utils";
 import type { Machine } from "@/types/machine";
 import { PhotoCarousel } from "@/components/machines/PhotoCarousel";
 import { RelatedListings } from "@/components/machines/RelatedListings";
+import { DetailedTermSheet } from "@/components/machines/DetailedTermSheet";
 import { MapView } from "@/components/shared/MapView";
 import { useAuth } from "@/hooks/useAuth";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -178,6 +179,23 @@ export function MachineDetailClient({ slug, fromVendor = false }: MachineDetailC
                   <span className="inline-flex items-center rounded-full bg-blue-600/10 text-blue-500 border border-blue-500/20 px-3 py-1 text-xs font-medium capitalize">
                     {data.ownership_type}
                   </span>
+                  {data.is_rto_registered ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-3 py-1 text-xs font-medium">
+                      <ShieldCheck className="h-3 w-3" />
+                      RTO Reg: {data.registration_number || "Verified"}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-3 py-1 text-xs font-medium">
+                      <ShieldCheck className="h-3 w-3" />
+                      Off-Road / Plant Equip{data.machine_serial_no ? ` • Sr #${data.machine_serial_no}` : ""}
+                    </span>
+                  )}
+                  {(data.rental_term_sheet || data.sale_term_sheet) && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 text-primary px-3 py-1 text-xs font-medium">
+                      <FileText className="h-3 w-3" />
+                      Detailed Term Sheet Attached
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -224,6 +242,15 @@ export function MachineDetailClient({ slug, fromVendor = false }: MachineDetailC
                 </div>
               )}
             </div>
+            {/* Detailed Term Sheet */}
+            <DetailedTermSheet
+              slug={data.slug}
+              rentalTerms={data.rental_term_sheet}
+              saleTerms={data.sale_term_sheet}
+              listingType={data.listing_type}
+              isLocked={Boolean(data.is_term_sheet_locked || !user)}
+            />
+
             {/* Map */}
           {data.latitude && data.longitude && (
             <div className="space-y-3">
@@ -353,6 +380,9 @@ export function MachineDetailClient({ slug, fromVendor = false }: MachineDetailC
                         <span className="font-medium">{formatDate(data.vendor.member_since)}</span>
                       </div>
                     )}
+                    <p className="text-[11px] text-muted-foreground pt-2 border-t border-border/60 leading-relaxed">
+                      🔒 Verified Partner: Direct vendor contact details and site visits are coordinated upon enquiry submission.
+                    </p>
                   </div>
                 </div>
               )}

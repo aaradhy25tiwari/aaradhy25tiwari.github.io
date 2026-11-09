@@ -78,10 +78,65 @@ async def get_machine_detail(
     if not primary_image and machine.images:
         primary_image = machine.images[0]
 
+    # Anonymize vendor & equipment registration for guest and customer privacy
+    is_authenticated = bool(current_user)
+    is_privileged = bool(is_owner or is_admin)
+
+    # Anonymized partner badge for guests/customers
+    partner_code = f"IQ-{str(machine.vendor_id)[:6].upper()}" if machine.vendor_id else "IQ-PARTNER"
+    anonymized_vendor_name = f"InfraQuip Verified Partner #{partner_code}"
+
+    if is_privileged:
+        # Full vendor profile for owner & admin
+        vendor_data = {
+            "id": str(machine.vendor.id),
+            "full_name": machine.vendor.full_name,
+            "company_name": vendor_profile.company_name if vendor_profile else machine.vendor.full_name,
+            "city": vendor_profile.city if vendor_profile else machine.city,
+            "state": vendor_profile.state if vendor_profile else machine.state,
+            "avatar_url": machine.vendor.avatar_url,
+            "is_verified": vendor_profile.is_verified if vendor_profile else False,
+            "response_rate": vendor_profile.response_rate if vendor_profile else 95,
+            "member_since": vendor_profile.member_since if vendor_profile else machine.created_at,
+        } if machine.vendor else None
+        display_reg_no = machine.registration_number
+        display_sr_no = machine.machine_serial_no
+        display_sr_plate = machine.serial_plate_photo_url
+    else:
+        # Sanitized vendor profile: no direct contact details, brand, or individual identity
+        vendor_data = {
+            "id": str(machine.vendor_id) if machine.vendor_id else str(machine.id),
+            "full_name": anonymized_vendor_name,
+            "company_name": anonymized_vendor_name,
+            "city": machine.city,
+            "state": machine.state,
+            "avatar_url": None,
+            "is_verified": vendor_profile.is_verified if vendor_profile else True,
+            "response_rate": vendor_profile.response_rate if vendor_profile else 95,
+            "member_since": vendor_profile.member_since if vendor_profile else machine.created_at,
+        }
+        # Mask registration & chassis numbers
+        reg = machine.registration_number or ""
+        display_reg_no = f"{reg[:4]} •••• {reg[-2:]}" if len(reg) >= 6 else ("••••••••" if reg else None)
+        sr = machine.machine_serial_no or ""
+        display_sr_no = f"•••• {sr[-4:]}" if len(sr) >= 4 else ("••••••••" if sr else None)
+        display_sr_plate = None  # Strictly admin/owner view only
+
+    # Gated Term Sheets: full access for logged-in users; locked for guests
+    if is_authenticated:
+        rental_sheet = machine.rental_term_sheet
+        sale_sheet = machine.sale_term_sheet
+        is_sheet_locked = False
+    else:
+        # Guest view: locked term sheet
+        rental_sheet = None
+        sale_sheet = None
+        is_sheet_locked = bool(machine.rental_term_sheet or machine.sale_term_sheet)
+
     # Build the response dict manually to handle computed fields
     response = MachineDetailResponse(
         id=str(machine.id),
-        vendor_id=machine.vendor_id,
+        vendor_id=machine.vendor_id if is_privileged else None,
         slug=machine.slug,
         category_id=machine.category_id,
         sub_category_id=machine.sub_category_id,
@@ -112,7 +167,7 @@ async def get_machine_detail(
         is_negotiable=getattr(machine, "is_negotiable", False) or False,
         city=machine.city,
         state=machine.state,
-        address_line=machine.address_line,
+        address_line=machine.address_line if is_privileged else None,
         latitude=machine.latitude,
         longitude=machine.longitude,
         views_count=machine.views_count + 1,
@@ -128,20 +183,19 @@ async def get_machine_detail(
             }
             for img in sorted(machine.images, key=lambda x: x.sort_order)
         ],
-        vendor={
-            "id": str(machine.vendor.id),
-            "full_name": machine.vendor.full_name,
-            "company_name": vendor_profile.company_name if vendor_profile else None,
-            "city": vendor_profile.city if vendor_profile else machine.city,
-            "state": vendor_profile.state if vendor_profile else machine.state,
-            "avatar_url": machine.vendor.avatar_url,
-            "is_verified": vendor_profile.is_verified if vendor_profile else False,
-            "response_rate": vendor_profile.response_rate if vendor_profile else None,
-            "member_since": vendor_profile.member_since if vendor_profile else None,
-        } if machine.vendor else None,
+        vendor=vendor_data,
         category_name=machine.category.name if machine.category else None,
         is_wishlisted=is_wishlisted,
         created_at=machine.created_at,
+        is_rto_registered=machine.is_rto_registered,
+        registration_number=display_reg_no,
+        chassis_number=machine.chassis_number if is_privileged else None,
+        machine_serial_no=display_sr_no,
+        serial_plate_photo_url=display_sr_plate,
+        rental_term_sheet=rental_sheet,
+        sale_term_sheet=sale_sheet,
+        has_custom_terms=machine.has_custom_terms,
+        is_term_sheet_locked=is_sheet_locked,
     )
     return response
 

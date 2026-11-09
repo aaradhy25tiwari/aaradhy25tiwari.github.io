@@ -185,6 +185,17 @@ async def create_listing(
         longitude=payload.longitude,
         category_id=payload.category_id,
         sub_category_id=payload.sub_category_id,
+        is_rto_registered=payload.is_rto_registered,
+        registration_number=payload.registration_number,
+        chassis_number=payload.chassis_number,
+        machine_serial_no=payload.machine_serial_no,
+        serial_plate_photo_url=payload.serial_plate_photo_url,
+        rental_term_sheet=payload.rental_term_sheet.model_dump() if payload.rental_term_sheet else None,
+        sale_term_sheet=payload.sale_term_sheet.model_dump() if payload.sale_term_sheet else None,
+        has_custom_terms=bool(
+            (payload.rental_term_sheet and payload.rental_term_sheet.special_terms and payload.rental_term_sheet.special_terms.strip())
+            or (payload.sale_term_sheet and payload.sale_term_sheet.special_terms and payload.sale_term_sheet.special_terms.strip())
+        ),
     )
     db.add(machine)
     await db.commit()
@@ -212,6 +223,52 @@ async def create_listing(
         .where(Machine.id == machine.id)
     )
     return result.scalar_one()
+
+
+# ── POST /vendor/upload-serial-plate ──────────────────────────
+@router.post("/upload-serial-plate")
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def upload_serial_plate(
+    request: Request,
+    current_user: VendorUser,
+    file: UploadFile = File(...),
+):
+    """Upload serial plate / VIN plate photo for age verification (admin view only)."""
+    from app.services.storage_service import upload_serial_plate_photo
+    path, url = await upload_serial_plate_photo(file, str(current_user.id))
+    return {"storage_path": path, "url": url}
+
+
+# ── GET /vendor/listings-previous-terms ───────────────────────
+@router.get("/listings-previous-terms")
+@limiter.limit(settings.RATE_LIMIT_AUTHENTICATED, key_func=get_authenticated_user_key)
+async def get_previous_terms(
+    request: Request,
+    current_user: VendorUser,
+    db: DBSession,
+):
+    """Return previous listings with configured term sheets so vendor can copy them with 1 click."""
+    stmt = (
+        select(Machine.id, Machine.title, Machine.listing_type, Machine.rental_term_sheet, Machine.sale_term_sheet)
+        .where(
+            Machine.vendor_id == current_user.id,
+            (Machine.rental_term_sheet.is_not(None) | Machine.sale_term_sheet.is_not(None)),
+        )
+        .order_by(Machine.created_at.desc())
+        .limit(10)
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+    return [
+        {
+            "id": str(r.id),
+            "title": r.title,
+            "listing_type": r.listing_type.value if hasattr(r.listing_type, "value") else str(r.listing_type),
+            "rental_term_sheet": r.rental_term_sheet,
+            "sale_term_sheet": r.sale_term_sheet,
+        }
+        for r in rows
+    ]
 
 
 # ── GET /vendor/listings/{listing_id} ─────────────────────────
