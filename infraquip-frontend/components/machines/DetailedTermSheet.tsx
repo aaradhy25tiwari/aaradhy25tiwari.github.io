@@ -26,6 +26,8 @@ export function DetailedTermSheet({
 }: DetailedTermSheetProps) {
   const isRent = listingType === "rent" || listingType === "both";
   const isSale = listingType === "sale" || listingType === "both";
+  const showRental = Boolean(isRent && rentalTerms);
+  const showSale = Boolean(isSale && saleTerms);
 
   if (isLocked) {
     return (
@@ -80,8 +82,8 @@ export function DetailedTermSheet({
     );
   }
 
-  // If no term sheets configured at all
-  if (!rentalTerms && !saleTerms) {
+  // If no applicable term sections will render for this listing type
+  if (!showRental && !showSale) {
     return (
       <div className="rounded-3xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
         <FileText className="mx-auto h-8 w-8 text-muted-foreground/50 mb-2" />
@@ -96,7 +98,7 @@ export function DetailedTermSheet({
   return (
     <div className="space-y-6">
       {/* ── Rental Term Sheet ───────────────────────────────── */}
-      {isRent && rentalTerms && (
+      {showRental && rentalTerms && (
         <div className="rounded-3xl border border-border bg-card p-6 space-y-5">
           <div className="flex items-center justify-between border-b border-border pb-3 flex-wrap gap-2">
             <div>
@@ -222,7 +224,7 @@ export function DetailedTermSheet({
       )}
 
       {/* ── Sale Term Sheet ─────────────────────────────────── */}
-      {isSale && saleTerms && (
+      {showSale && saleTerms && (
         <div className="rounded-3xl border border-border bg-card p-6 space-y-5">
           <div className="flex items-center justify-between border-b border-border pb-3 flex-wrap gap-2">
             <div>

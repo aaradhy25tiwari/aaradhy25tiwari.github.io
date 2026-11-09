@@ -11,6 +11,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 BUCKET = "machine-images"
+PRIVATE_VERIFICATION_BUCKET = "admin-verification-docs"
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB limit
 
 
@@ -18,12 +19,12 @@ def _get_client():
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
 
 
-def _ensure_bucket(supabase):
+def _ensure_bucket(supabase, bucket_name: str = BUCKET, is_public: bool = True):
     try:
-        supabase.storage.get_bucket(BUCKET)
+        supabase.storage.get_bucket(bucket_name)
     except Exception:
         try:
-            supabase.storage.create_bucket(BUCKET, options={"public": True})
+            supabase.storage.create_bucket(bucket_name, options={"public": is_public})
         except Exception:
             pass
 
@@ -125,18 +126,22 @@ def process_and_watermark_image(
         return content, orig_ext, orig_content_type
 
 
-def get_signed_url(storage_path: str, expires_in: int = 3600) -> Optional[str]:
+def get_signed_url(
+    storage_path: str,
+    expires_in: int = 3600,
+    bucket_name: str = PRIVATE_VERIFICATION_BUCKET,
+) -> Optional[str]:
     """
     Generate a short-lived signed URL for private access (admin or owner only).
     """
     try:
         supabase = _get_client()
-        res = supabase.storage.from_(BUCKET).create_signed_url(storage_path, expires_in)
+        res = supabase.storage.from_(bucket_name).create_signed_url(storage_path, expires_in)
         if isinstance(res, dict):
             return res.get("signedURL") or res.get("signedUrl")
         return str(res)
     except Exception as e:
-        logger.warning(f"Failed to generate signed URL for {storage_path}: {e}")
+        logger.warning(f"Failed to generate signed URL for {storage_path} in {bucket_name}: {e}")
         return None
 
 
@@ -173,7 +178,7 @@ async def upload_serial_plate_photo(
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Failed to strip EXIF from serial plate: {e}")
+            logger.error(f"Failed to strip EXIF from serial plate: {e}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Unable to sanitize image metadata. Please upload a valid JPEG, PNG, or WebP image.",
@@ -187,15 +192,15 @@ async def upload_serial_plate_photo(
     storage_path = f"admin_verification/{clean_vendor_id}/{file_name}"
 
     try:
-        supabase.storage.from_(BUCKET).upload(
+        supabase.storage.from_(PRIVATE_VERIFICATION_BUCKET).upload(
             path=storage_path,
             file=clean_content,
             file_options={"content-type": safe_content_type, "upsert": "false"},
         )
     except Exception as e:
         if "Bucket not found" in str(e) or "NoSuchBucket" in str(e):
-            _ensure_bucket(supabase)
-            supabase.storage.from_(BUCKET).upload(
+            _ensure_bucket(supabase, PRIVATE_VERIFICATION_BUCKET, is_public=False)
+            supabase.storage.from_(PRIVATE_VERIFICATION_BUCKET).upload(
                 path=storage_path,
                 file=clean_content,
                 file_options={"content-type": safe_content_type, "upsert": "false"},
@@ -207,7 +212,7 @@ async def upload_serial_plate_photo(
                 detail="Failed to store serial plate photo. Please try again.",
             )
 
-    signed_url = get_signed_url(storage_path, expires_in=3600) or ""
+    signed_url = get_signed_url(storage_path, expires_in=3600, bucket_name=PRIVATE_VERIFICATION_BUCKET) or ""
     return storage_path, signed_url
 
 

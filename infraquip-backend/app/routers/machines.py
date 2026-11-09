@@ -4,6 +4,7 @@ Full CRUD lives in vendor.py; this router exposes public endpoints.
 """
 import uuid
 import asyncio
+import logging
 from fastapi import APIRouter, HTTPException, status, Request
 from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload, joinedload
@@ -16,6 +17,8 @@ from app.schemas.machine import MachineDetailResponse
 from app.services.storage_service import get_signed_url
 from app.core.rate_limiter import limiter
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -109,11 +112,16 @@ async def get_machine_detail(
         } if machine.vendor else None
         display_reg_no = machine.registration_number
         display_sr_no = machine.machine_serial_no
-        display_sr_plate = (
-            machine.serial_plate_photo_url
-            if (machine.serial_plate_photo_url and machine.serial_plate_photo_url.startswith("http"))
-            else (await asyncio.to_thread(get_signed_url, machine.serial_plate_photo_url, 3600) if machine.serial_plate_photo_url else None)
-        )
+        display_sr_plate = None
+        if machine.serial_plate_photo_url:
+            if machine.serial_plate_photo_url.startswith("http"):
+                display_sr_plate = machine.serial_plate_photo_url
+            else:
+                try:
+                    display_sr_plate = await asyncio.to_thread(get_signed_url, machine.serial_plate_photo_url, 3600)
+                except Exception as e:
+                    logger.warning(f"Failed to generate signed URL for machine {machine.id} serial plate: {e}")
+                    display_sr_plate = None
     else:
         # Sanitized vendor profile: non-sensitive public identifier, no direct contact details
         vendor_data = {

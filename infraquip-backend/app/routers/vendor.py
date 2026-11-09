@@ -388,7 +388,9 @@ async def update_listing(
     s_terms = update_data.get("sale_term_sheet", machine.sale_term_sheet)
     r_special = (r_terms.get("special_terms") if isinstance(r_terms, dict) else getattr(r_terms, "special_terms", None)) if r_terms else None
     s_special = (s_terms.get("special_terms") if isinstance(s_terms, dict) else getattr(s_terms, "special_terms", None)) if s_terms else None
-    update_data["has_custom_terms"] = bool((r_special and r_special.strip()) or (s_special and s_special.strip()))
+    has_r_custom = bool(isinstance(r_special, str) and r_special.strip())
+    has_s_custom = bool(isinstance(s_special, str) and s_special.strip())
+    update_data["has_custom_terms"] = has_r_custom or has_s_custom
 
     for field, value in update_data.items():
         setattr(machine, field, value)

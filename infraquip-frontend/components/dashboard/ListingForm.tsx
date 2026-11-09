@@ -218,6 +218,11 @@ export function ListingForm({ machine }: ListingFormProps) {
   const [rtoError, setRtoError] = useState<string | null>(null);
   const [isUploadingPlate, setIsUploadingPlate] = useState(false);
   const [plateUploadError, setPlateUploadError] = useState<string | null>(null);
+  const [platePreviewUrl, setPlatePreviewUrl] = useState<string | null>(
+    machine?.serial_plate_photo_url && machine.serial_plate_photo_url.startsWith("http")
+      ? machine.serial_plate_photo_url
+      : null
+  );
 
   // ── Term Sheet State ──
   const [rentalTerms, setRentalTerms] = useState<RentalTermSheet | null>(
@@ -229,17 +234,6 @@ export function ListingForm({ machine }: ListingFormProps) {
   const [previousListingsTerms, setPreviousListingsTerms] = useState<any[]>([]);
   const [isSavingTerms, setIsSavingTerms] = useState(false);
 
-  // Apply defaults only in term-sheet step (step 4) if not already set, and fetch previous terms
-  useEffect(() => {
-    if (step === 4) {
-      setRentalTerms((prev) => prev ?? DEFAULT_RENTAL_TERMS);
-      setSaleTerms((prev) => prev ?? DEFAULT_SALE_TERMS);
-      apiClient.get<any[]>("/vendor/listings-previous-terms")
-        .then((r) => setPreviousListingsTerms(r.data || []))
-        .catch(() => {});
-    }
-  }, [step]);
-
   const handleSerialPlateUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -249,7 +243,8 @@ export function ListingForm({ machine }: ListingFormProps) {
       const fd = new FormData();
       fd.append("file", file);
       const { data } = await apiClient.post<{ storage_path: string; url: string }>("/vendor/upload-serial-plate", fd);
-      setValue("serial_plate_photo_url", data.url, { shouldValidate: true, shouldDirty: true });
+      setValue("serial_plate_photo_url", data.storage_path, { shouldValidate: true, shouldDirty: true });
+      setPlatePreviewUrl(data.url || null);
       if (rtoError) setRtoError(null);
     } catch (err: any) {
       const detail = err.response?.data?.detail;
@@ -361,6 +356,25 @@ export function ListingForm({ machine }: ListingFormProps) {
     register("min_rental_duration");
   }, [register]);
 
+  // Apply defaults only in term-sheet step (step 4) if not already set for active listing types, and fetch previous terms
+  useEffect(() => {
+    if (step === 4) {
+      const currentListingType = watch("listing_type");
+      const isRent = currentListingType === "rent" || currentListingType === "both";
+      const isSale = currentListingType === "sale" || currentListingType === "both";
+
+      if (isRent) {
+        setRentalTerms((prev) => prev ?? DEFAULT_RENTAL_TERMS);
+      }
+      if (isSale) {
+        setSaleTerms((prev) => prev ?? DEFAULT_SALE_TERMS);
+      }
+      apiClient.get<any[]>("/vendor/listings-previous-terms")
+        .then((r) => setPreviousListingsTerms(r.data || []))
+        .catch(() => {});
+    }
+  }, [step, watch]);
+
   // Synchronize form when editing existing machine
   useEffect(() => {
     if (machine) {
@@ -403,6 +417,9 @@ export function ListingForm({ machine }: ListingFormProps) {
         const parsed = parseDuration(machine.min_rental_duration);
         setDurationValue(parsed.value);
         setDurationUnit(parsed.unit);
+      }
+      if (machine.serial_plate_photo_url && machine.serial_plate_photo_url.startsWith("http")) {
+        setPlatePreviewUrl(machine.serial_plate_photo_url);
       }
       setSavedId(machine.id);
     }
@@ -1473,11 +1490,17 @@ export function ListingForm({ machine }: ListingFormProps) {
 
                       {watch("serial_plate_photo_url") ? (
                         <div className="flex items-center gap-4 rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-3">
-                          <img
-                            src={watch("serial_plate_photo_url") || ""}
-                            alt="Serial Plate Preview"
-                            className="h-16 w-24 object-cover rounded-lg border border-border bg-black/40"
-                          />
+                          {platePreviewUrl ? (
+                            <img
+                              src={platePreviewUrl}
+                              alt="Serial Plate Preview"
+                              className="h-16 w-24 object-cover rounded-lg border border-border bg-black/40"
+                            />
+                          ) : (
+                            <div className="h-16 w-24 rounded-lg border border-border bg-muted/40 flex items-center justify-center text-muted-foreground text-[10px] text-center p-1 font-medium">
+                              Plate photo stored
+                            </div>
+                          )}
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                               <CheckCircle className="h-3.5 w-3.5" /> Nameplate photo attached

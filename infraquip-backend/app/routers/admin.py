@@ -69,7 +69,11 @@ async def get_review_queue(
             return None
         if plate_url.startswith("http"):
             return plate_url
-        return await asyncio.to_thread(get_signed_url, plate_url, 3600)
+        try:
+            return await asyncio.to_thread(get_signed_url, plate_url, 3600)
+        except Exception as e:
+            logger.warning(f"Failed to generate signed URL for serial plate {plate_url}: {e}")
+            return None
 
     signed_plate_urls = await asyncio.gather(*[_resolve_plate_url(m.serial_plate_photo_url) for m in machines])
 

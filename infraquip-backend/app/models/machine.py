@@ -124,8 +124,8 @@ class Machine(Base):
     serial_plate_photo_url = Column(Text, nullable=True)  # Admin-only for age validation
 
     # ── Detailed Term Sheets ──────────────────────────────────
-    rental_term_sheet = Column(JSONB, nullable=True)
-    sale_term_sheet = Column(JSONB, nullable=True)
+    rental_term_sheet = Column(JSONB(none_as_null=True), nullable=True)
+    sale_term_sheet = Column(JSONB(none_as_null=True), nullable=True)
     has_custom_terms = Column(Boolean, default=False, nullable=False)
 
     # ── Pricing ───────────────────────────────────────────────

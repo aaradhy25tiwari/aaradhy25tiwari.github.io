@@ -260,7 +260,8 @@ export function TermSheetFormStep({
                 max={24}
                 value={rentalTerms.working_hours_per_day}
                 onChange={(e) => {
-                  const val = parseInt(e.target.value, 10) || 8;
+                  const raw = parseInt(e.target.value, 10);
+                  const val = isNaN(raw) ? 8 : Math.max(1, Math.min(24, raw));
                   updateRental("working_hours_per_day", val);
                   updateRental("monthly_hours_limit", val * (rentalTerms.working_days_per_month || 26));
                 }}
@@ -277,7 +278,8 @@ export function TermSheetFormStep({
                 max={31}
                 value={rentalTerms.working_days_per_month}
                 onChange={(e) => {
-                  const days = parseInt(e.target.value, 10) || 26;
+                  const raw = parseInt(e.target.value, 10);
+                  const days = isNaN(raw) ? 26 : Math.max(1, Math.min(31, raw));
                   updateRental("working_days_per_month", days);
                   updateRental("monthly_hours_limit", (rentalTerms.working_hours_per_day || 10) * days);
                 }}
