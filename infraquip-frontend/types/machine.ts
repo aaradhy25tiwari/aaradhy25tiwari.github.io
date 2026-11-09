@@ -40,6 +40,49 @@ export interface SaleTermSheet {
   special_terms?: string;
 }
 
+export const DEFAULT_RENTAL_TERMS: RentalTermSheet = {
+  fuel_included: false,
+  operators_included: true,
+  operator_count: 1,
+  operator_shift_type: "single_shift_10h",
+  working_hours_per_day: 10,
+  working_days_per_month: 26,
+  monthly_hours_limit: 260,
+  overtime_rate_hourly: 500,
+  mob_demob_type: "customer_actuals",
+  mob_demob_charge: 0,
+  operator_accommodation: "customer_provides",
+  operator_food: "customer_provides",
+  maintenance_sla_hours: 24,
+  security_deposit_months: 1,
+  advance_rent_months: 1,
+  special_terms: "",
+};
+
+export const DEFAULT_SALE_TERMS: SaleTermSheet = {
+  hypothecation_status: "no_loan",
+  rto_noc_responsibility: "vendor_provided",
+  tax_gst_status: "18_percent_extra",
+  inspection_allowed: true,
+  mechanic_check_allowed: true,
+  tyre_track_wear_percent: 25,
+  engine_condition: "excellent",
+  hydraulic_condition: "normal",
+  token_deposit_percent: 10,
+  balance_payment_terms: "prior_to_dispatch",
+  special_terms: "",
+};
+
+export function calculateHasCustomTerms(
+  rentalTerms?: RentalTermSheet | null,
+  saleTerms?: SaleTermSheet | null
+): boolean {
+  return Boolean(
+    (rentalTerms?.special_terms && rentalTerms.special_terms.trim()) ||
+    (saleTerms?.special_terms && saleTerms.special_terms.trim())
+  );
+}
+
 export interface Category {
   id: string;
   name: string;

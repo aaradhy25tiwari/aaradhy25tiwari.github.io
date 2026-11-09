@@ -191,7 +191,7 @@ export function MachineDetailClient({ slug, fromVendor = false }: MachineDetailC
                       Off-Road / Plant Equip{data.machine_serial_no ? ` • Sr #${data.machine_serial_no}` : ""}
                     </span>
                   )}
-                  {(data.rental_term_sheet || data.sale_term_sheet) && (
+                  {(data.rental_term_sheet || data.sale_term_sheet || data.is_term_sheet_locked) && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 text-primary px-3 py-1 text-xs font-medium">
                       <FileText className="h-3 w-3" />
                       Detailed Term Sheet Attached

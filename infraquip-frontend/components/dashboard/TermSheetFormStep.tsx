@@ -6,6 +6,7 @@ import {
   Shield, FileText, Copy, AlertTriangle, CheckCircle, ChevronDown, Check, Info
 } from "lucide-react";
 import type { RentalTermSheet, SaleTermSheet, ListingType } from "@/types/machine";
+import { DEFAULT_RENTAL_TERMS, DEFAULT_SALE_TERMS } from "@/types/machine";
 import { cn } from "@/lib/utils";
 
 interface PreviousListingTerms {
@@ -18,23 +19,26 @@ interface PreviousListingTerms {
 
 interface TermSheetFormStepProps {
   listingType: ListingType;
-  rentalTerms: RentalTermSheet;
-  setRentalTerms: React.Dispatch<React.SetStateAction<RentalTermSheet>>;
-  saleTerms: SaleTermSheet;
-  setSaleTerms: React.Dispatch<React.SetStateAction<SaleTermSheet>>;
+  rentalTerms: RentalTermSheet | null;
+  setRentalTerms: React.Dispatch<React.SetStateAction<RentalTermSheet | null>>;
+  saleTerms: SaleTermSheet | null;
+  setSaleTerms: React.Dispatch<React.SetStateAction<SaleTermSheet | null>>;
   previousListings: PreviousListingTerms[];
 }
 
 export function TermSheetFormStep({
   listingType,
-  rentalTerms,
+  rentalTerms: propRentalTerms,
   setRentalTerms,
-  saleTerms,
+  saleTerms: propSaleTerms,
   setSaleTerms,
   previousListings,
 }: TermSheetFormStepProps) {
   const [copySuccessMsg, setCopySuccessMsg] = useState<string | null>(null);
   const [selectedPrevId, setSelectedPrevId] = useState<string>("");
+
+  const rentalTerms = propRentalTerms || DEFAULT_RENTAL_TERMS;
+  const saleTerms = propSaleTerms || DEFAULT_SALE_TERMS;
 
   const isRent = listingType === "rent" || listingType === "both";
   const isSale = listingType === "sale" || listingType === "both";
@@ -57,11 +61,11 @@ export function TermSheetFormStep({
   };
 
   const updateRental = <K extends keyof RentalTermSheet>(key: K, value: RentalTermSheet[K]) => {
-    setRentalTerms((prev) => ({ ...prev, [key]: value }));
+    setRentalTerms((prev) => ({ ...(prev || DEFAULT_RENTAL_TERMS), [key]: value }));
   };
 
   const updateSale = <K extends keyof SaleTermSheet>(key: K, value: SaleTermSheet[K]) => {
-    setSaleTerms((prev) => ({ ...prev, [key]: value }));
+    setSaleTerms((prev) => ({ ...(prev || DEFAULT_SALE_TERMS), [key]: value }));
   };
 
   return (
@@ -390,6 +394,7 @@ export function TermSheetFormStep({
             </div>
             <textarea
               rows={3}
+              maxLength={2000}
               placeholder="e.g. Minor tyre punctures to be borne by hirer; major hydraulic seals replaced by owner. 15-day demobilization notice required..."
               value={rentalTerms.special_terms || ""}
               onChange={(e) => updateRental("special_terms", e.target.value)}
@@ -540,6 +545,7 @@ export function TermSheetFormStep({
             </div>
             <textarea
               rows={3}
+              maxLength={2000}
               placeholder="e.g. Includes extra 1.2m bucket and spare hydraulic filter kit. Sold as-is where-is after joint inspection..."
               value={saleTerms.special_terms || ""}
               onChange={(e) => updateSale("special_terms", e.target.value)}

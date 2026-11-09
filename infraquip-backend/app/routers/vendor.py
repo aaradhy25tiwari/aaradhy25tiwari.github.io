@@ -354,6 +354,42 @@ async def update_listing(
                 detail=f"Invalid serial plate photo path. Must be under admin_verification/{current_user.id}/",
             )
 
+    # Run merged identification checks only when the request includes an identification field
+    ident_fields = {"is_rto_registered", "registration_number", "machine_serial_no", "serial_plate_photo_url"}
+    if any(f in update_data for f in ident_fields):
+        merged_is_rto = update_data.get("is_rto_registered", machine.is_rto_registered)
+        merged_reg_no = update_data.get("registration_number", machine.registration_number)
+        merged_sr_no = update_data.get("machine_serial_no", machine.machine_serial_no)
+        merged_plate = update_data.get("serial_plate_photo_url", machine.serial_plate_photo_url)
+
+        if merged_is_rto:
+            if not merged_reg_no or not str(merged_reg_no).strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Registration number is required when equipment is RTO registered",
+                )
+        else:
+            if not merged_sr_no or not str(merged_sr_no).strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Machine serial number is required for non-registrable equipment",
+                )
+            if not merged_plate or not str(merged_plate).strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Serial plate photo is required for machine age validation of non-registrable equipment",
+                )
+
+    # Remove client-supplied has_custom_terms so clients cannot override server-derived flagging
+    update_data.pop("has_custom_terms", None)
+
+    # Recompute has_custom_terms from the merged rental and sale term sheets even when omitted from request
+    r_terms = update_data.get("rental_term_sheet", machine.rental_term_sheet)
+    s_terms = update_data.get("sale_term_sheet", machine.sale_term_sheet)
+    r_special = (r_terms.get("special_terms") if isinstance(r_terms, dict) else getattr(r_terms, "special_terms", None)) if r_terms else None
+    s_special = (s_terms.get("special_terms") if isinstance(s_terms, dict) else getattr(s_terms, "special_terms", None)) if s_terms else None
+    update_data["has_custom_terms"] = bool((r_special and r_special.strip()) or (s_special and s_special.strip()))
+
     for field, value in update_data.items():
         setattr(machine, field, value)
 

@@ -13,6 +13,13 @@ import {
 } from "lucide-react";
 import { TermSheetFormStep } from "./TermSheetFormStep";
 import type { RentalTermSheet, SaleTermSheet } from "@/types/machine";
+import { 
+  DEFAULT_RENTAL_TERMS, 
+  DEFAULT_SALE_TERMS, 
+  calculateHasCustomTerms 
+} from "@/types/machine";
+
+export { DEFAULT_RENTAL_TERMS, DEFAULT_SALE_TERMS, calculateHasCustomTerms };
 import apiClient from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { cn, scrollToTop, sortCategoriesAlphabetical } from "@/lib/utils";
@@ -76,39 +83,6 @@ const STEPS = [
   { id: "images",   label: "Photos" },
   { id: "terms",    label: "Term Sheet" },
 ];
-
-const DEFAULT_RENTAL_TERMS: RentalTermSheet = {
-  fuel_included: false,
-  operators_included: true,
-  operator_count: 1,
-  operator_shift_type: "single_shift_10h",
-  working_hours_per_day: 10,
-  working_days_per_month: 26,
-  monthly_hours_limit: 260,
-  overtime_rate_hourly: 500,
-  mob_demob_type: "customer_actuals",
-  mob_demob_charge: 0,
-  operator_accommodation: "customer_provides",
-  operator_food: "customer_provides",
-  maintenance_sla_hours: 24,
-  security_deposit_months: 1,
-  advance_rent_months: 1,
-  special_terms: "",
-};
-
-const DEFAULT_SALE_TERMS: SaleTermSheet = {
-  hypothecation_status: "no_loan",
-  rto_noc_responsibility: "vendor_provided",
-  tax_gst_status: "18_percent_extra",
-  inspection_allowed: true,
-  mechanic_check_allowed: true,
-  tyre_track_wear_percent: 25,
-  engine_condition: "excellent",
-  hydraulic_condition: "normal",
-  token_deposit_percent: 10,
-  balance_payment_terms: "prior_to_dispatch",
-  special_terms: "",
-};
 
 // ── Field group ───────────────────────────────────────────────
 function Field({
@@ -246,18 +220,20 @@ export function ListingForm({ machine }: ListingFormProps) {
   const [plateUploadError, setPlateUploadError] = useState<string | null>(null);
 
   // ── Term Sheet State ──
-  const [rentalTerms, setRentalTerms] = useState<RentalTermSheet>(
-    (machine?.rental_term_sheet as RentalTermSheet) || DEFAULT_RENTAL_TERMS
+  const [rentalTerms, setRentalTerms] = useState<RentalTermSheet | null>(
+    (machine?.rental_term_sheet as RentalTermSheet) || null
   );
-  const [saleTerms, setSaleTerms] = useState<SaleTermSheet>(
-    (machine?.sale_term_sheet as SaleTermSheet) || DEFAULT_SALE_TERMS
+  const [saleTerms, setSaleTerms] = useState<SaleTermSheet | null>(
+    (machine?.sale_term_sheet as SaleTermSheet) || null
   );
   const [previousListingsTerms, setPreviousListingsTerms] = useState<any[]>([]);
   const [isSavingTerms, setIsSavingTerms] = useState(false);
 
-  // Fetch previous terms when step 4 is active
+  // Apply defaults only in term-sheet step (step 4) if not already set, and fetch previous terms
   useEffect(() => {
     if (step === 4) {
+      setRentalTerms((prev) => prev ?? DEFAULT_RENTAL_TERMS);
+      setSaleTerms((prev) => prev ?? DEFAULT_SALE_TERMS);
       apiClient.get<any[]>("/vendor/listings-previous-terms")
         .then((r) => setPreviousListingsTerms(r.data || []))
         .catch(() => {});
@@ -276,7 +252,8 @@ export function ListingForm({ machine }: ListingFormProps) {
       setValue("serial_plate_photo_url", data.url, { shouldValidate: true, shouldDirty: true });
       if (rtoError) setRtoError(null);
     } catch (err: any) {
-      const msg = err.response?.data?.detail || err.message || "Failed to upload nameplate photo.";
+      const detail = err.response?.data?.detail;
+      const msg = typeof detail === "string" ? detail : (err.message || "Failed to upload nameplate photo.");
       setPlateUploadError(msg);
     } finally {
       setIsUploadingPlate(false);
@@ -293,12 +270,9 @@ export function ListingForm({ machine }: ListingFormProps) {
       const isRent = currentListingType === "rent" || currentListingType === "both";
       const isSale = currentListingType === "sale" || currentListingType === "both";
 
-      const finalRentalTerms = isRent ? rentalTerms : null;
-      const finalSaleTerms = isSale ? saleTerms : null;
-      const hasCustom = Boolean(
-        (finalRentalTerms?.special_terms && finalRentalTerms.special_terms.trim()) ||
-        (finalSaleTerms?.special_terms && finalSaleTerms.special_terms.trim())
-      );
+      const finalRentalTerms = isRent ? (rentalTerms || DEFAULT_RENTAL_TERMS) : null;
+      const finalSaleTerms = isSale ? (saleTerms || DEFAULT_SALE_TERMS) : null;
+      const hasCustom = calculateHasCustomTerms(finalRentalTerms, finalSaleTerms);
 
       await apiClient.put(`/vendor/listings/${targetId}`, {
         rental_term_sheet: finalRentalTerms,
@@ -311,7 +285,8 @@ export function ListingForm({ machine }: ListingFormProps) {
       scrollToTop();
       setTimeout(() => router.push("/dashboard/vendor/listings"), 1500);
     } catch (err: any) {
-      const msg = err.response?.data?.detail || err.message || "Failed to save term sheet.";
+      const detail = err.response?.data?.detail;
+      const msg = typeof detail === "string" ? detail : (err.message || "Failed to save term sheet.");
       setServerError(msg);
       scrollToTop();
     } finally {
@@ -413,6 +388,11 @@ export function ListingForm({ machine }: ListingFormProps) {
         purchase_price: machine.purchase_price ?? undefined,
         contact_for_price: machine.contact_for_price ?? false,
         is_negotiable: machine.is_negotiable ?? false,
+        is_rto_registered: machine.is_rto_registered ?? true,
+        registration_number: machine.registration_number || "",
+        chassis_number: machine.chassis_number || "",
+        machine_serial_no: machine.machine_serial_no || "",
+        serial_plate_photo_url: machine.serial_plate_photo_url || "",
       });
       if (machine.rental_price_hourly) setSelectedDuration("hourly");
       else if (machine.rental_price_daily) setSelectedDuration("daily");
@@ -910,7 +890,9 @@ export function ListingForm({ machine }: ListingFormProps) {
     // Validate Step 1 fields
     if (step === 1) {
       setPricingError(null);
-      setValue("listing_type", "rent");
+      if (!isEditing) {
+        setValue("listing_type", "rent");
+      }
 
       // Ensure min_rental_duration is properly set
       const val = durationValue || 1;
@@ -993,17 +975,25 @@ export function ListingForm({ machine }: ListingFormProps) {
       if (isEditing && machine) {
         const isRent = cleanPayload.listing_type === "rent" || cleanPayload.listing_type === "both";
         const isSale = cleanPayload.listing_type === "sale" || cleanPayload.listing_type === "both";
-        cleanPayload.rental_term_sheet = isRent ? (rentalTerms || machine.rental_term_sheet) : null;
-        cleanPayload.sale_term_sheet = isSale ? (saleTerms || machine.sale_term_sheet) : null;
-        cleanPayload.has_custom_terms = Boolean(
-          (cleanPayload.rental_term_sheet?.special_terms && cleanPayload.rental_term_sheet.special_terms.trim()) ||
-          (cleanPayload.sale_term_sheet?.special_terms && cleanPayload.sale_term_sheet.special_terms.trim())
+        // Preserve stored terms unless vendor changed them
+        const activeRental = rentalTerms !== null ? rentalTerms : machine.rental_term_sheet;
+        const activeSale = saleTerms !== null ? saleTerms : machine.sale_term_sheet;
+        cleanPayload.rental_term_sheet = isRent ? activeRental : null;
+        cleanPayload.sale_term_sheet = isSale ? activeSale : null;
+        cleanPayload.has_custom_terms = calculateHasCustomTerms(
+          cleanPayload.rental_term_sheet,
+          cleanPayload.sale_term_sheet
         );
       } else {
-        // When creating, omit unreviewed term sheets until Step 4 saves them
-        cleanPayload.rental_term_sheet = null;
-        cleanPayload.sale_term_sheet = null;
-        cleanPayload.has_custom_terms = false;
+        // In the non-edit branch, preserve term sheets already saved or reviewed instead of always clearing them, while continuing to omit unreviewed terms
+        const isRent = cleanPayload.listing_type === "rent" || cleanPayload.listing_type === "both";
+        const isSale = cleanPayload.listing_type === "sale" || cleanPayload.listing_type === "both";
+        cleanPayload.rental_term_sheet = (isRent && rentalTerms) ? rentalTerms : null;
+        cleanPayload.sale_term_sheet = (isSale && saleTerms) ? saleTerms : null;
+        cleanPayload.has_custom_terms = calculateHasCustomTerms(
+          cleanPayload.rental_term_sheet,
+          cleanPayload.sale_term_sheet
+        );
       }
 
       if (isEditing && machine) {
@@ -1028,8 +1018,9 @@ export function ListingForm({ machine }: ListingFormProps) {
         setStep(3); // Move to photo upload step
         scrollToTop();
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Something went wrong.";
+    } catch (err: any) {
+      const detail = err.response?.data?.detail;
+      const msg = typeof detail === "string" ? detail : (err instanceof Error ? err.message : "Something went wrong.");
       setServerError(msg);
       scrollToTop();
     }

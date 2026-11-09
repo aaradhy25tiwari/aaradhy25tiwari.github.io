@@ -4,6 +4,7 @@ import logging
 import re
 import io
 import csv
+import asyncio
 from typing import Optional, List, Dict, Any, Literal
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request, status, UploadFile, File
@@ -63,6 +64,15 @@ async def get_review_queue(
         select(func.count(Machine.id)).where(Machine.status == MachineStatus.pending)
     )).scalar() or 0
 
+    async def _resolve_plate_url(plate_url: Optional[str]) -> Optional[str]:
+        if not plate_url:
+            return None
+        if plate_url.startswith("http"):
+            return plate_url
+        return await asyncio.to_thread(get_signed_url, plate_url, 3600)
+
+    signed_plate_urls = await asyncio.gather(*[_resolve_plate_url(m.serial_plate_photo_url) for m in machines])
+
     items = [
         ReviewQueueItem(
             id=str(m.id),
@@ -81,18 +91,14 @@ async def get_review_queue(
             registration_number=m.registration_number,
             chassis_number=m.chassis_number,
             machine_serial_no=m.machine_serial_no,
-            serial_plate_photo_url=(
-                m.serial_plate_photo_url
-                if (m.serial_plate_photo_url and m.serial_plate_photo_url.startswith("http"))
-                else (get_signed_url(m.serial_plate_photo_url, expires_in=3600) if m.serial_plate_photo_url else None)
-            ),
+            serial_plate_photo_url=signed_url,
             has_custom_terms=m.has_custom_terms,
             has_rental_terms=bool(m.rental_term_sheet),
             has_sale_terms=bool(m.sale_term_sheet),
             rental_term_sheet=m.rental_term_sheet,
             sale_term_sheet=m.sale_term_sheet,
         )
-        for m in machines
+        for m, signed_url in zip(machines, signed_plate_urls)
     ]
 
     return ReviewQueueResponse(

@@ -3,6 +3,7 @@ Machines Router — Public listing detail, vendor CRUD stub.
 Full CRUD lives in vendor.py; this router exposes public endpoints.
 """
 import uuid
+import asyncio
 from fastapi import APIRouter, HTTPException, status, Request
 from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload, joinedload
@@ -111,7 +112,7 @@ async def get_machine_detail(
         display_sr_plate = (
             machine.serial_plate_photo_url
             if (machine.serial_plate_photo_url and machine.serial_plate_photo_url.startswith("http"))
-            else (get_signed_url(machine.serial_plate_photo_url, expires_in=3600) if machine.serial_plate_photo_url else None)
+            else (await asyncio.to_thread(get_signed_url, machine.serial_plate_photo_url, 3600) if machine.serial_plate_photo_url else None)
         )
     else:
         # Sanitized vendor profile: non-sensitive public identifier, no direct contact details

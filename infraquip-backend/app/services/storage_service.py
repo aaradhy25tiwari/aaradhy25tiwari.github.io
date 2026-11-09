@@ -159,14 +159,25 @@ async def upload_serial_plate_photo(
             img = Image.open(io.BytesIO(data))
             img = ImageOps.exif_transpose(img)
             buf = io.BytesIO()
-            fmt = "JPEG" if ext in ("jpg", "jpeg") else ext.upper()
-            if fmt == "JPG":
+            clean_ext = ext.lower().strip(".")
+            if clean_ext in ("jpg", "jpeg"):
                 fmt = "JPEG"
+            elif clean_ext == "png":
+                fmt = "PNG"
+            elif clean_ext == "webp":
+                fmt = "WEBP"
+            else:
+                fmt = clean_ext.upper()
             img.save(buf, format=fmt)
             return buf.getvalue()
+        except HTTPException:
+            raise
         except Exception as e:
-            logger.warning(f"Failed to strip EXIF from serial plate: {e}")
-            return data
+            logger.error(f"Failed to strip EXIF from serial plate: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Unable to sanitize image metadata. Please upload a valid JPEG, PNG, or WebP image.",
+            )
 
     clean_content = await asyncio.to_thread(_strip_exif, raw_content, safe_ext)
     supabase = _get_client()
