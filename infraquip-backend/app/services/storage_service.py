@@ -199,19 +199,12 @@ async def upload_serial_plate_photo(
         )
     except Exception as e:
         if "Bucket not found" in str(e) or "NoSuchBucket" in str(e):
-            try:
-                _ensure_bucket(supabase, PRIVATE_VERIFICATION_BUCKET, is_public=False)
-                supabase.storage.from_(PRIVATE_VERIFICATION_BUCKET).upload(
-                    path=storage_path,
-                    file=clean_content,
-                    file_options={"content-type": safe_content_type, "upsert": "false"},
-                )
-            except Exception as retry_err:
-                logger.error(f"Storage upload retry error for serial plate {storage_path}: {retry_err}")
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Failed to store serial plate photo. Please try again.",
-                )
+            _ensure_bucket(supabase, PRIVATE_VERIFICATION_BUCKET, is_public=False)
+            supabase.storage.from_(PRIVATE_VERIFICATION_BUCKET).upload(
+                path=storage_path,
+                file=clean_content,
+                file_options={"content-type": safe_content_type, "upsert": "false"},
+            )
         else:
             logger.error(f"Storage upload error for serial plate {storage_path}: {e}")
             raise HTTPException(
@@ -257,19 +250,12 @@ async def upload_machine_image(
         )
     except Exception as e:
         if "Bucket not found" in str(e) or "NoSuchBucket" in str(e):
-            try:
-                _ensure_bucket(supabase)
-                supabase.storage.from_(BUCKET).upload(
-                    path=storage_path,
-                    file=content,
-                    file_options={"content-type": safe_content_type, "upsert": "false"},
-                )
-            except Exception as retry_err:
-                logger.error(f"Storage upload retry error for {storage_path}: {retry_err}")
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Failed to store uploaded image. Please try again.",
-                )
+            _ensure_bucket(supabase)
+            supabase.storage.from_(BUCKET).upload(
+                path=storage_path,
+                file=content,
+                file_options={"content-type": safe_content_type, "upsert": "false"},
+            )
         else:
             logger.error(f"Storage upload error for {storage_path}: {e}")
             raise HTTPException(

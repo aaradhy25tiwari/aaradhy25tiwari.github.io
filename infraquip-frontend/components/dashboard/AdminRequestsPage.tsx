@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Clock, CheckCircle, XCircle, ChevronLeft, ChevronRight,
   User, Building2, MapPin, Phone, Hash, MessageSquare,
-  HardHat, Handshake, RefreshCw, Loader2, Mail, AlertTriangle
+  HardHat, Handshake, RefreshCw, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, scrollToTop } from "@/lib/utils";
@@ -130,16 +130,12 @@ function RequestCard({
   req,
   onApprove,
   onReject,
-  onResend,
   approving,
-  resending,
 }: {
   req: AccountRequest;
   onApprove: () => void;
   onReject: () => void;
-  onResend: () => void;
   approving: boolean;
-  resending: boolean;
 }) {
   const date = new Date(req.created_at).toLocaleDateString("en-IN", {
     day: "numeric", month: "short", year: "numeric",
@@ -227,7 +223,7 @@ function RequestCard({
       )}
 
       {/* Footer */}
-      <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
+      <div className="flex items-center justify-between pt-1">
         <span className="text-xs text-muted-foreground">Submitted {date}</span>
         {req.status === "pending" && (
           <div className="flex gap-2">
@@ -253,20 +249,6 @@ function RequestCard({
             </Button>
           </div>
         )}
-        {req.status === "approved" && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onResend}
-            disabled={resending}
-          >
-            {resending
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-              : <Mail className="h-3.5 w-3.5 mr-1" />
-            }
-            Resend Credentials
-          </Button>
-        )}
       </div>
     </div>
   );
@@ -280,11 +262,6 @@ export function AdminRequestsPage() {
   const [rejectTarget, setRejectTarget] = useState<AccountRequest | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
-  const [resendingId, setResendingId] = useState<string | null>(null);
-  const [actionNotice, setActionNotice] = useState<{
-    type: "success" | "warning" | "error";
-    message: string;
-  } | null>(null);
 
   const queryParams = new URLSearchParams({ page: String(page), per_page: "12" });
   if (statusFilter !== "all") queryParams.set("status", statusFilter);
@@ -302,65 +279,25 @@ export function AdminRequestsPage() {
   });
 
   const approveMutation = useMutation({
-    mutationFn: (id: string) =>
-      apiClient.post<{ message: string; email_sent?: boolean }>(`/account-requests/admin/${id}/approve`).then(r => r.data),
-    onSuccess: (res) => {
+    mutationFn: (id: string) => apiClient.post(`/account-requests/admin/${id}/approve`),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-account-requests"] });
       queryClient.invalidateQueries({ queryKey: ["account-request-stats"] });
       setApprovingId(null);
-      setActionNotice({
-        type: res.email_sent === false ? "warning" : "success",
-        message: res.message,
-      });
     },
-    onError: (err) => {
-      setApprovingId(null);
-      setActionNotice({
-        type: "error",
-        message: err instanceof Error ? err.message : "Failed to approve request.",
-      });
-    },
-  });
-
-  const resendMutation = useMutation({
-    mutationFn: (id: string) =>
-      apiClient.post<{ message: string; email_sent?: boolean }>(`/account-requests/admin/${id}/resend-credentials`).then(r => r.data),
-    onSuccess: (res) => {
-      setResendingId(null);
-      setActionNotice({
-        type: res.email_sent === false ? "warning" : "success",
-        message: res.message,
-      });
-    },
-    onError: (err) => {
-      setResendingId(null);
-      setActionNotice({
-        type: "error",
-        message: err instanceof Error ? err.message : "Failed to resend credentials.",
-      });
-    },
+    onError: () => setApprovingId(null),
   });
 
   const rejectMutation = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      apiClient.post<{ message: string }>(`/account-requests/admin/${id}/reject`, { reason }).then(r => r.data),
-    onSuccess: (res) => {
+      apiClient.post(`/account-requests/admin/${id}/reject`, { reason }),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-account-requests"] });
       queryClient.invalidateQueries({ queryKey: ["account-request-stats"] });
       setRejectTarget(null);
       setRejectingId(null);
-      setActionNotice({
-        type: "success",
-        message: res.message,
-      });
     },
-    onError: (err) => {
-      setRejectingId(null);
-      setActionNotice({
-        type: "error",
-        message: err instanceof Error ? err.message : "Failed to reject request.",
-      });
-    },
+    onError: () => setRejectingId(null),
   });
 
   const filterTabs: { value: RequestStatus | "all"; label: string }[] = [
@@ -385,34 +322,6 @@ export function AdminRequestsPage() {
           Refresh
         </Button>
       </div>
-
-      {/* Status Notice Banner */}
-      {actionNotice && (
-        <div
-          className={cn(
-            "flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm",
-            actionNotice.type === "success" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-            actionNotice.type === "warning" && "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-            actionNotice.type === "error" && "border-destructive/30 bg-destructive/10 text-destructive"
-          )}
-        >
-          <div className="flex items-center gap-2">
-            {actionNotice.type === "success" ? (
-              <CheckCircle className="h-4 w-4 shrink-0" />
-            ) : (
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-            )}
-            <span>{actionNotice.message}</span>
-          </div>
-          <button
-            onClick={() => setActionNotice(null)}
-            className="text-xs opacity-70 hover:opacity-100"
-            aria-label="Dismiss message"
-          >
-            <XCircle className="h-4 w-4" />
-          </button>
-        </div>
-      )}
 
       {/* Filter tabs */}
       <div className="flex gap-2 border-b border-border pb-0">
@@ -466,16 +375,9 @@ export function AdminRequestsPage() {
               key={req.id}
               req={req}
               approving={approvingId === req.id}
-              resending={resendingId === req.id}
               onApprove={() => {
-                setActionNotice(null);
                 setApprovingId(req.id);
                 approveMutation.mutate(req.id);
-              }}
-              onResend={() => {
-                setActionNotice(null);
-                setResendingId(req.id);
-                resendMutation.mutate(req.id);
               }}
               onReject={() => setRejectTarget(req)}
             />

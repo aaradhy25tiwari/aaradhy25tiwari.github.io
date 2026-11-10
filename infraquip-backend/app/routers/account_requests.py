@@ -1,11 +1,10 @@
 """
 Account Requests Router — Gated registration & admin approval queue
 """
-import asyncio
 import uuid
 import secrets
 import string
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, status, Request
 from pydantic import BaseModel, EmailStr
@@ -113,14 +112,6 @@ def get_supabase():
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
 
 
-def _parse_uuid(value: str, label: str = "request ID") -> uuid.UUID:
-    """Parse a UUID string or raise HTTP 400."""
-    try:
-        return uuid.UUID(value)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid {label}.")
-
-
 # ── POST /account-requests  (PUBLIC — no auth required) ────────
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def submit_account_request(
@@ -130,14 +121,13 @@ async def submit_account_request(
     db: DBSession,
 ):
     """Submit a new account request for admin review. Applies exponential backoff rate limiting."""
-    email_clean = str(payload.email).strip().lower()
-    await check_auth_rate_limit(request, email_clean)
+    await check_auth_rate_limit(request, payload.email)
     # Check for duplicate email in requests or existing users
     existing_req = await db.execute(
-        select(AccountRequest).where(func.lower(AccountRequest.email) == email_clean)
+        select(AccountRequest).where(AccountRequest.email == payload.email)
     )
     existing_user = await db.execute(
-        select(User).where(func.lower(User.email) == email_clean)
+        select(User).where(User.email == payload.email)
     )
     if existing_req.scalar_one_or_none() or existing_user.scalar_one_or_none():
         # Generic response to prevent email existence enumeration
@@ -146,7 +136,7 @@ async def submit_account_request(
     req = AccountRequest(
         id=uuid.uuid4(),
         full_name=payload.full_name,
-        email=email_clean,
+        email=payload.email,
         phone=payload.phone,
         role=payload.role,
         company_name=payload.company_name,
@@ -160,7 +150,7 @@ async def submit_account_request(
 
     # Send confirmation email
     background_tasks.add_task(
-        send_account_request_received_email, email_clean, payload.full_name
+        send_account_request_received_email, payload.email, payload.full_name
     )
 
     return {"message": "Your request has been received. If eligible, you will receive an email update shortly."}
@@ -221,12 +211,12 @@ async def list_account_requests(
 async def approve_account_request(
     request_id: str,
     admin: AdminUser,
+    background_tasks: BackgroundTasks,
     db: DBSession,
 ):
     """Approve a request: create Supabase user + app user with temp credentials."""
-    request_uuid = _parse_uuid(request_id)
     result = await db.execute(
-        select(AccountRequest).where(AccountRequest.id == request_uuid)
+        select(AccountRequest).where(AccountRequest.id == uuid.UUID(request_id))
     )
     req = result.scalar_one_or_none()
     if not req:
@@ -234,10 +224,8 @@ async def approve_account_request(
     if req.status != AccountRequestStatus.pending:
         raise HTTPException(status_code=400, detail=f"Request is already {req.status.value}.")
 
-    email_clean = req.email.strip().lower()
-
     # Check not already a user
-    existing = await db.execute(select(User).where(func.lower(User.email) == email_clean))
+    existing = await db.execute(select(User).where(User.email == req.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="A user with this email already exists.")
 
@@ -248,7 +236,7 @@ async def approve_account_request(
     supabase = get_supabase()
     try:
         auth_resp = supabase.auth.admin.create_user({
-            "email": email_clean,
+            "email": req.email,
             "password": temp_password,
             "email_confirm": True,  # Pre-confirm — no email verification step
             "user_metadata": {
@@ -257,7 +245,7 @@ async def approve_account_request(
             },
         })
     except Exception as e:
-        logger.error(f"Supabase user creation failed for account request {email_clean}: {e}")
+        logger.error(f"Supabase user creation failed for account request {req.email}: {e}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to provision user credentials with authentication provider. Please try again.",
@@ -279,13 +267,14 @@ async def approve_account_request(
     )
     free_plan = plan_result.scalar_one_or_none()
 
+    from datetime import timedelta
     expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
 
     # Create app User row
     user = User(
         id=uuid.uuid4(),
         auth_uid=uuid.UUID(auth_uid),
-        email=email_clean,
+        email=req.email,
         full_name=req.full_name,
         phone=req.phone,
         role=role_enum,
@@ -330,7 +319,6 @@ async def approve_account_request(
         db.add(Subscription(user_id=user.id, plan_id=free_plan.id, status="active"))
 
     # Update request record
-    req.email = email_clean
     req.status = AccountRequestStatus.approved
     req.supabase_user_id = uuid.UUID(auth_uid)
     req.reviewed_at = datetime.now(timezone.utc)
@@ -338,92 +326,13 @@ async def approve_account_request(
 
     await db.commit()
 
-    # Send approval email with temp credentials and report actual delivery status
-    email_sent = await asyncio.to_thread(
+    # Send approval email with temp credentials
+    background_tasks.add_task(
         send_account_approved_email,
-        email_clean,
-        req.full_name,
-        req.role,
-        temp_password,
+        req.email, req.full_name, req.role, temp_password
     )
 
-    return {
-        "message": (
-            f"Account approved for {email_clean}. Credentials email sent."
-            if email_sent
-            else f"Account approved for {email_clean}, but the credentials email failed to send. Check server email configuration or use Resend Credentials."
-        ),
-        "email_sent": email_sent,
-    }
-
-
-# ── POST /admin/account-requests/{id}/resend-credentials ───────
-@router.post("/admin/{request_id}/resend-credentials", status_code=status.HTTP_200_OK)
-@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
-async def resend_account_credentials(
-    request: Request,
-    request_id: str,
-    admin: AdminUser,
-    db: DBSession,
-):
-    """Issue a fresh 24h temporary password and resend credentials for an unactivated approved request."""
-    request_uuid = _parse_uuid(request_id)
-    result = await db.execute(
-        select(AccountRequest).where(AccountRequest.id == request_uuid)
-    )
-    req = result.scalar_one_or_none()
-    if not req:
-        raise HTTPException(status_code=404, detail="Request not found.")
-    if req.status != AccountRequestStatus.approved:
-        raise HTTPException(status_code=400, detail="Only approved requests can receive credentials.")
-
-    email_clean = req.email.strip().lower()
-    user_result = await db.execute(select(User).where(func.lower(User.email) == email_clean))
-    user = user_result.scalar_one_or_none()
-    if not user or not user.auth_uid:
-        raise HTTPException(status_code=404, detail="Provisioned user account not found.")
-
-    if not user.must_change_password and user.is_verified:
-        raise HTTPException(
-            status_code=400,
-            detail="User has already activated their account. They can use Forgot Password to sign in.",
-        )
-
-    temp_password = _gen_temp_password()
-    supabase = get_supabase()
-    try:
-        supabase.auth.admin.update_user_by_id(
-            str(user.auth_uid),
-            {"password": temp_password, "email_confirm": True},
-        )
-    except Exception as e:
-        logger.error(f"Supabase password reset failed while resending credentials for {email_clean}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to refresh temporary credentials. Please try again.",
-        )
-
-    user.must_change_password = True
-    user.temp_password_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
-    await db.commit()
-
-    email_sent = await asyncio.to_thread(
-        send_account_approved_email,
-        user.email,
-        req.full_name,
-        req.role,
-        temp_password,
-    )
-    if not email_sent:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Temporary password refreshed, but sending the email failed. Check server SMTP/Resend settings.",
-        )
-
-    return {
-        "message": f"Fresh temporary credentials sent to {user.email}.",
-        "email_sent": True,
-    }
+    return {"message": f"Account approved for {req.email}. Credentials email sent."}
 
 
 # ── POST /admin/account-requests/{id}/reject ───────────────────
@@ -436,9 +345,8 @@ async def reject_account_request(
     db: DBSession,
 ):
     """Reject a request and notify applicant with reason."""
-    request_uuid = _parse_uuid(request_id)
     result = await db.execute(
-        select(AccountRequest).where(AccountRequest.id == request_uuid)
+        select(AccountRequest).where(AccountRequest.id == uuid.UUID(request_id))
     )
     req = result.scalar_one_or_none()
     if not req:

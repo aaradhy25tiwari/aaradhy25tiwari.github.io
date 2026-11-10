@@ -299,7 +299,6 @@ export function ListingForm({ machine }: ListingFormProps) {
     watch,
     trigger,
     setValue,
-    getValues,
     formState: { errors, isSubmitting },
     reset,
   } = useForm<FormData>({
@@ -360,7 +359,7 @@ export function ListingForm({ machine }: ListingFormProps) {
   // Apply defaults only in term-sheet step (step 4) if not already set for active listing types, and fetch previous terms
   useEffect(() => {
     if (step === 4) {
-      const currentListingType = getValues("listing_type");
+      const currentListingType = watch("listing_type");
       const isRent = currentListingType === "rent" || currentListingType === "both";
       const isSale = currentListingType === "sale" || currentListingType === "both";
 
@@ -374,7 +373,7 @@ export function ListingForm({ machine }: ListingFormProps) {
         .then((r) => setPreviousListingsTerms(r.data || []))
         .catch(() => {});
     }
-  }, [step, getValues]);
+  }, [step, watch]);
 
   // Synchronize form when editing existing machine
   useEffect(() => {
