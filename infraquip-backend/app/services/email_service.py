@@ -3,6 +3,7 @@ Email Service — Supports Resend API, Free SMTP Providers (Gmail, Brevo, Mailgu
 """
 import logging
 import smtplib
+import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from app.config import settings
@@ -43,12 +44,13 @@ def _send_smtp(to: str, subject: str, html: str) -> bool:
         
         msg.attach(MIMEText(html, "html"))
         
+        ssl_context = ssl.create_default_context()
         if settings.SMTP_PORT == 465:
-            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10)
+            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10, context=ssl_context)
         else:
             server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10)
             if settings.SMTP_USE_TLS:
-                server.starttls()
+                server.starttls(context=ssl_context)
                 
         if settings.SMTP_USER and settings.SMTP_PASSWORD:
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
