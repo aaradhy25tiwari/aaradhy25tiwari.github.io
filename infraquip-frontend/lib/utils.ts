@@ -16,17 +16,22 @@ export function formatINR(amount: number | null | undefined): string {
 }
 
 // ── Date formatting ───────────────────────────────────────────
-export function formatDate(date: string | Date): string {
+export function formatDate(date: string | Date | null | undefined): string {
+  if (!date) return "—";
+  const target = new Date(date);
+  if (Number.isNaN(target.getTime())) return "—";
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-  }).format(new Date(date));
+  }).format(target);
 }
 
-export function formatRelativeTime(date: string | Date): string {
-  const now = new Date();
+export function formatRelativeTime(date: string | Date | null | undefined): string {
+  if (!date) return "—";
   const target = new Date(date);
+  if (Number.isNaN(target.getTime())) return "—";
+  const now = new Date();
   const diffMs = now.getTime() - target.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMins / 60);
@@ -36,7 +41,7 @@ export function formatRelativeTime(date: string | Date): string {
   if (diffMins < 60) return `${diffMins}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
   if (diffDays < 7) return `${diffDays}d ago`;
-  return formatDate(date);
+  return formatDate(target);
 }
 
 // ── Category Sorting ──────────────────────────────────────────

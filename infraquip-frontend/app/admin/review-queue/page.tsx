@@ -24,7 +24,8 @@ interface PendingMachine {
   vendor_email?: string;
   city: string;
   state: string;
-  created_at: string;
+  submitted_at: string;
+  created_at?: string;
   primary_image?: string;
   category_name?: string;
   year_of_manufacture?: number;
@@ -169,7 +170,7 @@ export default function AdminReviewQueuePage() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {machine.vendor_name} &middot; <span className="font-semibold text-foreground">{machine.make}</span> {machine.model} {machine.year_of_manufacture ? `(${machine.year_of_manufacture})` : ""} &middot; {machine.city}, {machine.state} &middot; {formatRelativeTime(machine.created_at)}
+                    {machine.vendor_name} &middot; <span className="font-semibold text-foreground">{machine.make}</span> {machine.model} {machine.year_of_manufacture ? `(${machine.year_of_manufacture})` : ""} &middot; {machine.city}, {machine.state} &middot; {formatRelativeTime(machine.submitted_at || machine.created_at)}
                   </p>
                 </div>
               </div>
@@ -266,7 +267,7 @@ export default function AdminReviewQueuePage() {
                   <div>
                     <DialogTitle className="text-xl">{previewMachine.title}</DialogTitle>
                     <DialogDescription className="mt-1">
-                      Submitted by <span className="font-medium text-foreground">{previewMachine.vendor_name}</span> &middot; {formatRelativeTime(previewMachine.created_at)}
+                      Submitted by <span className="font-medium text-foreground">{previewMachine.vendor_name}</span> &middot; {formatRelativeTime(previewMachine.submitted_at || previewMachine.created_at)}
                     </DialogDescription>
                   </div>
                   <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-500 flex items-center gap-1 whitespace-nowrap">

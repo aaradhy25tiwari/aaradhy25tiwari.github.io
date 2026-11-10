@@ -1,81 +1,184 @@
 """
 Email Service — Supports Resend API, Free SMTP Providers (Gmail, Brevo, Mailgun, SES), and Console fallback
 """
+import html as html_lib
 import logging
+import os
+import re
 import smtplib
+import socket
+from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr, formatdate, make_msgid
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 
+def _html_to_text(raw_html: str) -> str:
+    """Convert HTML email body to a clean plain-text fallback for deliverability."""
+    cleaned = re.sub(r"(?is)<(script|style).*?>.*?</\1>", "", raw_html)
+    cleaned = re.sub(r"(?i)<br\s*/?>", "\n", cleaned)
+    cleaned = re.sub(r"(?i)</(p|div|h[1-6]|tr|li)>", "\n", cleaned)
+    cleaned = re.sub(r"<[^>]+>", "", cleaned)
+    text = html_lib.unescape(cleaned)
+    lines = [line.strip() for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
+
+
 def _send_resend(to: str, subject: str, html: str) -> bool:
     """Send via Resend API."""
+    api_key = (settings.RESEND_API_KEY or "").strip()
+    if not api_key:
+        return False
     try:
         import resend
-        resend.api_key = settings.RESEND_API_KEY
-        from_email = settings.RESEND_FROM_EMAIL or "noreply@infraquip.com"
-        from_name = settings.RESEND_FROM_NAME or "InfraQuip"
+        resend.api_key = api_key
+        from_email = (settings.RESEND_FROM_EMAIL or "noreply@infraquip.com").strip()
+        from_name = (settings.RESEND_FROM_NAME or "InfraQuip").strip()
         resend.Emails.send({
             "from": f"{from_name} <{from_email}>",
             "to": [to],
             "subject": subject,
             "html": html,
+            "text": _html_to_text(html),
         })
         logger.info(f"Email sent via Resend to {to} (Subject: {subject})")
         return True
     except Exception as e:
-        logger.error(f"Resend email send failed to {to}: {e}")
+        logger.error(f"Resend email send failed to {to}: {e}", exc_info=True)
         return False
+
+
+def _build_smtp_message(to: str, subject: str, html: str, from_name: str, from_email: str) -> MIMEMultipart:
+    """Build a standards-compliant multipart/alternative MIME message."""
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = str(Header(subject, "utf-8"))
+    msg["From"] = formataddr((from_name, from_email))
+    msg["To"] = to
+    msg["Reply-To"] = from_email
+    msg["Date"] = formatdate(localtime=True)
+    domain = from_email.split("@")[-1] if "@" in from_email else None
+    msg["Message-ID"] = make_msgid(domain=domain)
+
+    msg.attach(MIMEText(_html_to_text(html), "plain", "utf-8"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
+    return msg
+
+
+def _deliver_via_smtp_port(
+    host: str,
+    port: int,
+    use_tls: bool,
+    user: str,
+    password: str,
+    from_email: str,
+    to: str,
+    raw_message: str,
+) -> None:
+    """Connect, authenticate, and send a serialized email over SMTP."""
+    if port == 465:
+        server = smtplib.SMTP_SSL(host, port, timeout=15)
+    else:
+        server = smtplib.SMTP(host, port, timeout=15)
+        if use_tls:
+            server.starttls()
+
+    try:
+        if user and password:
+            server.login(user, password)
+        server.sendmail(from_email, [to], raw_message)
+    finally:
+        try:
+            server.quit()
+        except Exception:
+            pass
 
 
 def _send_smtp(to: str, subject: str, html: str) -> bool:
     """Send via standard SMTP (Gmail App Password, Brevo, Mailgun, Amazon SES, etc.)."""
+    host = (settings.SMTP_HOST or "").strip()
+    if not host:
+        return False
+
+    from_email = (settings.SMTP_FROM_EMAIL or settings.SMTP_USER or "noreply@infraquip.com").strip()
+    from_name = (settings.SMTP_FROM_NAME or "InfraQuip").strip()
+    smtp_user = (settings.SMTP_USER or "").strip()
+    smtp_password = (settings.SMTP_PASSWORD or "").strip()
+
+    msg = _build_smtp_message(to, subject, html, from_name, from_email)
+    raw_message = msg.as_string()
+
     try:
-        from_email = settings.SMTP_FROM_EMAIL or settings.SMTP_USER or "noreply@infraquip.com"
-        from_name = settings.SMTP_FROM_NAME or "InfraQuip"
-        
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{from_name} <{from_email}>"
-        msg["To"] = to
-        
-        msg.attach(MIMEText(html, "html"))
-        
-        if settings.SMTP_PORT == 465:
-            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10)
-        else:
-            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10)
-            if settings.SMTP_USE_TLS:
-                server.starttls()
-                
-        if settings.SMTP_USER and settings.SMTP_PASSWORD:
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            
-        server.sendmail(from_email, [to], msg.as_string())
-        server.quit()
-        logger.info(f"Email sent via SMTP to {to} (Subject: {subject})")
+        _deliver_via_smtp_port(
+            host=host,
+            port=settings.SMTP_PORT,
+            use_tls=settings.SMTP_USE_TLS,
+            user=smtp_user,
+            password=smtp_password,
+            from_email=from_email,
+            to=to,
+            raw_message=raw_message,
+        )
+        logger.info(f"Email sent via SMTP ({host}:{settings.SMTP_PORT}) to {to} (Subject: {subject})")
         return True
+    except smtplib.SMTPAuthenticationError as auth_err:
+        logger.error(f"SMTP authentication failed for {to}: {auth_err}", exc_info=True)
+        return False
+    except (OSError, TimeoutError) as conn_err:
+        if settings.SMTP_PORT != 465 and not isinstance(conn_err, socket.gaierror):
+            logger.warning(
+                f"SMTP connection failed on {host}:{settings.SMTP_PORT} ({conn_err}); retrying SSL on port 465."
+            )
+            try:
+                _deliver_via_smtp_port(
+                    host=host,
+                    port=465,
+                    use_tls=False,
+                    user=smtp_user,
+                    password=smtp_password,
+                    from_email=from_email,
+                    to=to,
+                    raw_message=raw_message,
+                )
+                logger.info(f"Email sent via SMTP ({host}:465) to {to} (Subject: {subject})")
+                return True
+            except Exception as retry_err:
+                logger.error(f"SMTP SSL fallback send failed to {to}: {retry_err}", exc_info=True)
+                return False
+        logger.error(f"SMTP email send failed to {to}: {conn_err}", exc_info=True)
+        return False
     except Exception as e:
-        logger.error(f"SMTP email send failed to {to}: {e}")
+        logger.error(f"SMTP email send failed to {to}: {e}", exc_info=True)
         return False
 
 
-def _send(to: str, subject: str, html: str) -> None:
+def _send(to: str, subject: str, html: str) -> bool:
     """Dispatches email based on configured provider (Resend, SMTP, or mock logger)."""
-    provider = settings.EMAIL_PROVIDER.lower()
-    
-    if provider == "resend" or (provider == "auto" and settings.RESEND_API_KEY):
-        if _send_resend(to, subject, html):
-            return
+    provider = (settings.EMAIL_PROVIDER or "auto").strip().lower()
+    has_resend = bool((settings.RESEND_API_KEY or "").strip())
+    has_smtp = bool((settings.SMTP_HOST or "").strip() and (settings.SMTP_USER or "").strip())
 
-    if provider == "smtp" or (provider == "auto" and settings.SMTP_HOST and settings.SMTP_USER):
-        if _send_smtp(to, subject, html):
-            return
+    if provider == "console":
+        logger.info(f"[EMAIL MOCK - CONSOLE MODE] To: {to} | Subject: {subject}")
+        return False
 
-    # Fallback to local console log
-    logger.info(f"[EMAIL MOCK - NO SMTP/RESEND CONFIGURED] To: {to} | Subject: {subject}")
+    senders = [_send_smtp, _send_resend] if provider == "smtp" else [_send_resend, _send_smtp]
+    for sender in senders:
+        if sender(to, subject, html):
+            return True
+
+    if not has_resend and not has_smtp:
+        logger.warning(f"[EMAIL SKIPPED - NO SMTP/RESEND CONFIGURED] To: {to} | Subject: {subject}")
+    else:
+        if os.getenv("RENDER") and not has_resend:
+            logger.error(
+                "[EMAIL DELIVERY FAILED ON RENDER] Outbound SMTP ports are blocked on Render free instances; "
+                "configure RESEND_API_KEY and EMAIL_PROVIDER=auto for production email delivery."
+            )
+        logger.error(f"[EMAIL DELIVERY FAILED] All configured email providers failed for {to} | Subject: {subject}")
+    return False
 
 
 EMAIL_FOOTER = """
@@ -90,8 +193,17 @@ EMAIL_FOOTER = """
 
 
 def _get_base_url() -> str:
-    origins = settings.ALLOWED_ORIGINS.split(",")
-    return origins[0].strip() if origins else "http://localhost:3000"
+    if settings.FRONTEND_URL and settings.FRONTEND_URL.strip():
+        return settings.FRONTEND_URL.strip().rstrip("/")
+    origins = [o.strip().rstrip("/") for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
+    if settings.APP_ENV.lower() in ("production", "prod") or os.getenv("RENDER"):
+        prod_origin = next(
+            (o for o in origins if "localhost" not in o and "127.0.0.1" not in o and "192.168." not in o),
+            None,
+        )
+        if prod_origin:
+            return prod_origin
+    return origins[0] if origins else "http://localhost:3000"
 
 
 def send_welcome_email(email: str, full_name: str, role: str) -> None:
@@ -181,7 +293,7 @@ def send_password_reset_email(email: str, reset_url: str) -> None:
     _send(email, "Reset your InfraQuip password", html)
 
 
-def send_account_request_received_email(email: str, full_name: str) -> None:
+def send_account_request_received_email(email: str, full_name: str) -> bool:
     """Confirmation email sent immediately after user submits access request."""
     html = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px; color: #1f2937;">
@@ -202,12 +314,12 @@ def send_account_request_received_email(email: str, full_name: str) -> None:
       {EMAIL_FOOTER}
     </div>
     """
-    _send(email, "We received your InfraQuip access request", html)
+    return _send(email, "We received your InfraQuip access request", html)
 
 
 def send_account_approved_email(
     email: str, full_name: str, role: str, temp_password: str
-) -> None:
+) -> bool:
     """Sent when admin approves a request — includes temporary credentials."""
     role_label = {"vendor": "Vendor", "broker": "Broker"}.get(role, "Customer")
     base_url = _get_base_url()
@@ -245,10 +357,10 @@ def send_account_approved_email(
       {EMAIL_FOOTER}
     </div>
     """
-    _send(email, "Your InfraQuip account is ready — temporary credentials inside", html)
+    return _send(email, "Your InfraQuip account is ready — temporary credentials inside", html)
 
 
-def send_account_rejected_email(email: str, full_name: str, reason: str) -> None:
+def send_account_rejected_email(email: str, full_name: str, reason: str) -> bool:
     html = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px; color: #1f2937;">
       <div style="text-align: center; margin-bottom: 32px;">
@@ -267,7 +379,7 @@ def send_account_rejected_email(email: str, full_name: str, reason: str) -> None
       {EMAIL_FOOTER}
     </div>
     """
-    _send(email, "Update on your InfraQuip account request", html)
+    return _send(email, "Update on your InfraQuip account request", html)
 
 
 def send_listing_created_email(email: str, vendor_name: str, machine_title: str, dashboard_url: str) -> None:
