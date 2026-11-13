@@ -36,8 +36,11 @@ export function formatRelativeTime(date: string | Date | null | undefined): stri
   const diffMs = now.getTime() - target.getTime();
 
   if (diffMs < 0) {
-    const futureDays = Math.floor(-diffMs / 86400000);
-    if (futureDays === 0) return "today";
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfTarget = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+    const futureDays = Math.round((startOfTarget.getTime() - startOfToday.getTime()) / 86400000);
+
+    if (futureDays <= 0) return "today";
     if (futureDays === 1) return "tomorrow";
     if (futureDays < 7) return `in ${futureDays}d`;
     return formatDate(target);
