@@ -88,6 +88,7 @@ async def get_review_queue(
             city=m.city,
             state=m.state,
             submitted_at=m.created_at,
+            created_at=m.created_at,
             primary_image=m.images[0].display_url if m.images else None,
             category_name=m.category.name if m.category else None,
             year_of_manufacture=m.year_of_manufacture,

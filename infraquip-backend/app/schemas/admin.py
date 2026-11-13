@@ -22,6 +22,7 @@ class ReviewQueueItem(BaseModel):
     city: str
     state: str
     submitted_at: datetime
+    created_at: Optional[datetime] = None
     primary_image: Optional[str] = None
     category_name: Optional[str] = None
     year_of_manufacture: Optional[int] = None
