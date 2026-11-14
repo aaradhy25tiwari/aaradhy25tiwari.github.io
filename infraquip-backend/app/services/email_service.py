@@ -6,6 +6,7 @@ import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import Any
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -105,30 +106,39 @@ def _send_smtp(to: str, subject: str, html: str) -> bool:
         return False
 
 
+_last_dispatch_provider: str | None = None
+
+
 def _send(to: str, subject: str, html: str, provider: str | None = None) -> bool:
     """Dispatches email based on configured provider (Resend, Brevo, SMTP, or console/mock)."""
+    global _last_dispatch_provider
     active_provider = (provider or settings.EMAIL_PROVIDER).lower()
     
     if active_provider == "console":
+        _last_dispatch_provider = "console"
         logger.info(f"[EMAIL CONSOLE] To: {to} | Subject: {subject}")
         return True
 
     # 1. Resend API (HTTPS port 443 — recommended for Render/Cloud)
     if active_provider in ("resend", "auto") and settings.RESEND_API_KEY:
         if _send_resend(to, subject, html):
+            _last_dispatch_provider = "resend"
             return True
 
     # 2. Brevo API (HTTPS port 443 — works seamlessly on Render/Cloud)
     if active_provider in ("brevo", "auto") and getattr(settings, "BREVO_API_KEY", ""):
         if _send_brevo(to, subject, html):
+            _last_dispatch_provider = "brevo"
             return True
 
     # 3. SMTP (Works on local dev, but blocked on Render free tier ports 25/465/587)
     if active_provider in ("smtp", "auto") and settings.SMTP_HOST and settings.SMTP_USER:
         if _send_smtp(to, subject, html):
+            _last_dispatch_provider = "smtp"
             return True
 
     # 4. Fallback to local console log
+    _last_dispatch_provider = None
     logger.warning(
         f"[EMAIL MOCK - NO EMAIL SENT] To: {to} | Subject: {subject} | "
         f"Provider: {active_provider} | Resend configured: {bool(settings.RESEND_API_KEY)} | "
@@ -150,14 +160,21 @@ EMAIL_FOOTER = """
 
 
 def _get_base_url() -> str:
-    if getattr(settings, "FRONTEND_URL", ""):
-        return settings.FRONTEND_URL.rstrip("/")
-    for origin in settings.ALLOWED_ORIGINS.split(","):
-        origin = origin.strip()
+    url = getattr(settings, "effective_frontend_url", "").strip().rstrip("/")
+    if url.startswith(("http://", "https://")):
+        return url
+    if getattr(settings, "FRONTEND_URL", "").strip().startswith(("http://", "https://")):
+        return settings.FRONTEND_URL.strip().rstrip("/")
+    for origin in settings.allowed_origins_list:
         if origin.startswith("https://"):
             return origin.rstrip("/")
-    origins = settings.ALLOWED_ORIGINS.split(",")
-    return origins[0].strip().rstrip("/") if origins else "https://infraquip.in"
+    for origin in settings.allowed_origins_list:
+        if origin.startswith("http://"):
+            return origin.rstrip("/")
+    raise ValueError(
+        "Cannot construct actionable email link: no valid absolute frontend origin configured. "
+        "Please configure FRONTEND_URL or a valid origin in ALLOWED_ORIGINS."
+    )
 
 
 def send_welcome_email(email: str, full_name: str, role: str) -> None:
@@ -542,7 +559,7 @@ def send_account_reactivated_email(
 
 
 
-def get_from_email_for_provider(provider: str | None = None) -> str:
+def get_from_email_for_provider(provider: str | None = None, dispatch_result: Any = None) -> str:
     """Returns the sender email address configured for the selected provider."""
     chosen = (provider or settings.EMAIL_PROVIDER).lower()
     if chosen == "resend":
@@ -552,6 +569,14 @@ def get_from_email_for_provider(provider: str | None = None) -> str:
     if chosen == "smtp":
         return settings.SMTP_FROM_EMAIL or settings.SMTP_USER or "noreply@infraquip.in"
     if chosen == "auto":
+        # Check effective sender recorded by dispatch result or last successful dispatch
+        res_str = str(dispatch_result).lower() if dispatch_result else (_last_dispatch_provider or "").lower()
+        if "brevo" in res_str:
+            return getattr(settings, "BREVO_FROM_EMAIL", "") or settings.SMTP_FROM_EMAIL or "noreply@infraquip.in"
+        if "smtp" in res_str:
+            return settings.SMTP_FROM_EMAIL or settings.SMTP_USER or "noreply@infraquip.in"
+        if "resend" in res_str:
+            return settings.RESEND_FROM_EMAIL or "noreply@infraquip.in"
         if settings.RESEND_API_KEY:
             return settings.RESEND_FROM_EMAIL or "noreply@infraquip.in"
         if getattr(settings, "BREVO_API_KEY", ""):
@@ -563,6 +588,7 @@ def get_from_email_for_provider(provider: str | None = None) -> str:
 
 def send_test_email(to: str, provider: str | None = None) -> tuple[bool, str]:
     """Diagnostic function to test email delivery and return descriptive status."""
+    global _last_dispatch_provider
     chosen_provider = (provider or settings.EMAIL_PROVIDER).lower()
     subject = "InfraQuip Email Service Diagnostic Test"
     base_url = _get_base_url()
@@ -587,24 +613,34 @@ def send_test_email(to: str, provider: str | None = None) -> tuple[bool, str]:
         if not settings.RESEND_API_KEY:
             return False, "RESEND_API_KEY is not configured."
         ok = _send_resend(to, subject, html)
-        return (True, f"Email sent successfully via Resend to {to}") if ok else (False, "Resend send failed. Check server logs for details.")
+        if ok:
+            _last_dispatch_provider = "resend"
+            return True, f"Email sent successfully via Resend to {to}"
+        return False, "Resend send failed. Check server logs for details."
 
     if chosen_provider == "brevo":
         if not getattr(settings, "BREVO_API_KEY", ""):
             return False, "BREVO_API_KEY is not configured."
         ok = _send_brevo(to, subject, html)
-        return (True, f"Email sent successfully via Brevo to {to}") if ok else (False, "Brevo send failed. Check server logs for details.")
+        if ok:
+            _last_dispatch_provider = "brevo"
+            return True, f"Email sent successfully via Brevo to {to}"
+        return False, "Brevo send failed. Check server logs for details."
 
     if chosen_provider == "smtp":
         if not settings.SMTP_HOST or not settings.SMTP_USER:
             return False, "SMTP_HOST or SMTP_USER is not configured."
         ok = _send_smtp(to, subject, html)
-        return (True, f"Email sent successfully via SMTP to {to}") if ok else (False, "SMTP send failed. Note: Render free tier blocks outbound SMTP ports 25, 465, 587. Use Resend or Brevo.")
+        if ok:
+            _last_dispatch_provider = "smtp"
+            return True, f"Email sent successfully via SMTP to {to}"
+        return False, "SMTP send failed. Note: Render free tier blocks outbound SMTP ports 25, 465, 587. Use Resend or Brevo."
 
     # Auto dispatch or fallback using chosen_provider
     ok = _send(to, subject, html, provider=chosen_provider)
     if ok:
-        return True, f"Email sent successfully to {to}"
+        provider_name = _last_dispatch_provider or chosen_provider
+        return True, f"Email sent successfully via {provider_name.capitalize()} to {to}"
     return False, "Email dispatch failed. Neither Resend, Brevo, nor SMTP succeeded. Ensure API credentials are set on Render."
 
 

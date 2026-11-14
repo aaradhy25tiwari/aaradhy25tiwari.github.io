@@ -1761,7 +1761,7 @@ async def admin_test_email(
     """Admin diagnostic endpoint to test email delivery and return debug info."""
     from app.services.email_service import send_test_email, get_from_email_for_provider
     success, detail = await asyncio.to_thread(send_test_email, payload.to_email, payload.provider)
-    from_email = get_from_email_for_provider(payload.provider)
+    from_email = get_from_email_for_provider(payload.provider, dispatch_result=detail)
     return {
         "success": success,
         "detail": detail,

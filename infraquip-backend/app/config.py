@@ -86,6 +86,19 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
 
     @property
+    def effective_frontend_url(self) -> str:
+        """Resolves the actionable absolute frontend URL, falling back to configured ALLOWED_ORIGINS."""
+        if self.FRONTEND_URL and self.FRONTEND_URL.strip().startswith(("http://", "https://")):
+            return self.FRONTEND_URL.strip().rstrip("/")
+        for origin in self.allowed_origins_list:
+            if origin.startswith("https://"):
+                return origin.rstrip("/")
+        for origin in self.allowed_origins_list:
+            if origin.startswith("http://"):
+                return origin.rstrip("/")
+        return ""
+
+    @property
     def allowed_hosts_list(self) -> List[str]:
         from urllib.parse import urlparse
         hosts = ["*"]
