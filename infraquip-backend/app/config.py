@@ -88,14 +88,30 @@ class Settings(BaseSettings):
     @property
     def effective_frontend_url(self) -> str:
         """Resolves the actionable absolute frontend URL, falling back to configured ALLOWED_ORIGINS."""
-        if self.FRONTEND_URL and self.FRONTEND_URL.strip().startswith(("http://", "https://")):
-            return self.FRONTEND_URL.strip().rstrip("/")
+        from urllib.parse import urlparse
+
+        def _is_valid_http_url(val: str) -> bool:
+            try:
+                p = urlparse(val)
+                return p.scheme in ("http", "https") and bool(p.netloc or p.hostname)
+            except Exception:
+                return False
+
+        if self.FRONTEND_URL:
+            trimmed = self.FRONTEND_URL.strip().rstrip("/")
+            if _is_valid_http_url(trimmed):
+                return trimmed
+
         for origin in self.allowed_origins_list:
-            if origin.startswith("https://"):
-                return origin.rstrip("/")
+            trimmed = origin.strip().rstrip("/")
+            if _is_valid_http_url(trimmed) and trimmed.startswith("https://"):
+                return trimmed
+
         for origin in self.allowed_origins_list:
-            if origin.startswith("http://"):
-                return origin.rstrip("/")
+            trimmed = origin.strip().rstrip("/")
+            if _is_valid_http_url(trimmed) and trimmed.startswith("http://"):
+                return trimmed
+
         return ""
 
     @property

@@ -1,15 +1,23 @@
 """
 Email Service — Supports Resend API, Free SMTP Providers (Gmail, Brevo, Mailgun, SES), and Console fallback
 """
+import contextvars
 import logging
+import re
 import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
+from urllib.parse import urlparse
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Request-local context variable tracking the provider that handled the dispatch
+effective_provider_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "effective_provider_var", default=None
+)
 
 
 def _send_resend(to: str, subject: str, html: str) -> bool:
@@ -106,39 +114,35 @@ def _send_smtp(to: str, subject: str, html: str) -> bool:
         return False
 
 
-_last_dispatch_provider: str | None = None
-
-
 def _send(to: str, subject: str, html: str, provider: str | None = None) -> bool:
     """Dispatches email based on configured provider (Resend, Brevo, SMTP, or console/mock)."""
-    global _last_dispatch_provider
     active_provider = (provider or settings.EMAIL_PROVIDER).lower()
     
     if active_provider == "console":
-        _last_dispatch_provider = "console"
+        effective_provider_var.set("console")
         logger.info(f"[EMAIL CONSOLE] To: {to} | Subject: {subject}")
         return True
 
     # 1. Resend API (HTTPS port 443 — recommended for Render/Cloud)
     if active_provider in ("resend", "auto") and settings.RESEND_API_KEY:
         if _send_resend(to, subject, html):
-            _last_dispatch_provider = "resend"
+            effective_provider_var.set("resend")
             return True
 
     # 2. Brevo API (HTTPS port 443 — works seamlessly on Render/Cloud)
     if active_provider in ("brevo", "auto") and getattr(settings, "BREVO_API_KEY", ""):
         if _send_brevo(to, subject, html):
-            _last_dispatch_provider = "brevo"
+            effective_provider_var.set("brevo")
             return True
 
     # 3. SMTP (Works on local dev, but blocked on Render free tier ports 25/465/587)
     if active_provider in ("smtp", "auto") and settings.SMTP_HOST and settings.SMTP_USER:
         if _send_smtp(to, subject, html):
-            _last_dispatch_provider = "smtp"
+            effective_provider_var.set("smtp")
             return True
 
     # 4. Fallback to local console log
-    _last_dispatch_provider = None
+    effective_provider_var.set(None)
     logger.warning(
         f"[EMAIL MOCK - NO EMAIL SENT] To: {to} | Subject: {subject} | "
         f"Provider: {active_provider} | Resend configured: {bool(settings.RESEND_API_KEY)} | "
@@ -159,18 +163,29 @@ EMAIL_FOOTER = """
 """
 
 
+def _is_valid_http_url(val: str) -> bool:
+    try:
+        p = urlparse(val)
+        return p.scheme in ("http", "https") and bool(p.netloc or p.hostname)
+    except Exception:
+        return False
+
+
 def _get_base_url() -> str:
-    url = getattr(settings, "effective_frontend_url", "").strip().rstrip("/")
-    if url.startswith(("http://", "https://")):
-        return url
-    if getattr(settings, "FRONTEND_URL", "").strip().startswith(("http://", "https://")):
-        return settings.FRONTEND_URL.strip().rstrip("/")
+    effective = getattr(settings, "effective_frontend_url", "").strip().rstrip("/")
+    if _is_valid_http_url(effective):
+        return effective
+    configured = getattr(settings, "FRONTEND_URL", "").strip().rstrip("/")
+    if _is_valid_http_url(configured):
+        return configured
     for origin in settings.allowed_origins_list:
-        if origin.startswith("https://"):
-            return origin.rstrip("/")
+        trimmed = origin.strip().rstrip("/")
+        if _is_valid_http_url(trimmed) and trimmed.startswith("https://"):
+            return trimmed
     for origin in settings.allowed_origins_list:
-        if origin.startswith("http://"):
-            return origin.rstrip("/")
+        trimmed = origin.strip().rstrip("/")
+        if _is_valid_http_url(trimmed) and trimmed.startswith("http://"):
+            return trimmed
     raise ValueError(
         "Cannot construct actionable email link: no valid absolute frontend origin configured. "
         "Please configure FRONTEND_URL or a valid origin in ALLOWED_ORIGINS."
@@ -559,9 +574,49 @@ def send_account_reactivated_email(
 
 
 
+def _extract_provider_from_dispatch(dispatch_result: Any) -> str | None:
+    """Extracts the provider strictly from an explicit provider value or dispatch metadata, never from recipient text."""
+    if not dispatch_result:
+        return None
+    if isinstance(dispatch_result, (list, tuple)):
+        for item in dispatch_result:
+            extracted = _extract_provider_from_dispatch(item)
+            if extracted:
+                return extracted
+        return None
+    if isinstance(dispatch_result, dict):
+        prov = dispatch_result.get("provider")
+        if isinstance(prov, str) and prov.strip():
+            return prov.strip().lower()
+    if hasattr(dispatch_result, "provider"):
+        prov = getattr(dispatch_result, "provider")
+        if isinstance(prov, str) and prov.strip():
+            return prov.strip().lower()
+    if isinstance(dispatch_result, str):
+        val = dispatch_result.strip().lower()
+        if val in ("resend", "brevo", "smtp", "console"):
+            return val
+        match = re.search(r"\bvia\s+(resend|brevo|smtp|console)\b", val)
+        if match:
+            return match.group(1)
+        if "logged to console" in val:
+            return "console"
+    return None
+
+
 def get_from_email_for_provider(provider: str | None = None, dispatch_result: Any = None) -> str:
     """Returns the sender email address configured for the selected provider."""
-    chosen = (provider or settings.EMAIL_PROVIDER).lower()
+    explicit_provider = (provider or "").strip().lower()
+    if explicit_provider and explicit_provider != "auto":
+        chosen = explicit_provider
+    else:
+        # Determine provider strictly from dispatch metadata or request-local state, never recipient text
+        extracted = _extract_provider_from_dispatch(dispatch_result) or effective_provider_var.get()
+        if extracted and extracted != "auto":
+            chosen = extracted
+        else:
+            chosen = (provider or settings.EMAIL_PROVIDER).lower()
+
     if chosen == "resend":
         return settings.RESEND_FROM_EMAIL or "noreply@infraquip.in"
     if chosen == "brevo":
@@ -569,14 +624,6 @@ def get_from_email_for_provider(provider: str | None = None, dispatch_result: An
     if chosen == "smtp":
         return settings.SMTP_FROM_EMAIL or settings.SMTP_USER or "noreply@infraquip.in"
     if chosen == "auto":
-        # Check effective sender recorded by dispatch result or last successful dispatch
-        res_str = str(dispatch_result).lower() if dispatch_result else (_last_dispatch_provider or "").lower()
-        if "brevo" in res_str:
-            return getattr(settings, "BREVO_FROM_EMAIL", "") or settings.SMTP_FROM_EMAIL or "noreply@infraquip.in"
-        if "smtp" in res_str:
-            return settings.SMTP_FROM_EMAIL or settings.SMTP_USER or "noreply@infraquip.in"
-        if "resend" in res_str:
-            return settings.RESEND_FROM_EMAIL or "noreply@infraquip.in"
         if settings.RESEND_API_KEY:
             return settings.RESEND_FROM_EMAIL or "noreply@infraquip.in"
         if getattr(settings, "BREVO_API_KEY", ""):
@@ -588,7 +635,7 @@ def get_from_email_for_provider(provider: str | None = None, dispatch_result: An
 
 def send_test_email(to: str, provider: str | None = None) -> tuple[bool, str]:
     """Diagnostic function to test email delivery and return descriptive status."""
-    global _last_dispatch_provider
+    effective_provider_var.set(None)
     chosen_provider = (provider or settings.EMAIL_PROVIDER).lower()
     subject = "InfraQuip Email Service Diagnostic Test"
     base_url = _get_base_url()
@@ -607,6 +654,7 @@ def send_test_email(to: str, provider: str | None = None) -> tuple[bool, str]:
 
     if chosen_provider == "console":
         _send(to, subject, html, provider="console")
+        effective_provider_var.set("console")
         return True, f"Email logged to console for {to}"
 
     if chosen_provider == "resend":
@@ -614,7 +662,7 @@ def send_test_email(to: str, provider: str | None = None) -> tuple[bool, str]:
             return False, "RESEND_API_KEY is not configured."
         ok = _send_resend(to, subject, html)
         if ok:
-            _last_dispatch_provider = "resend"
+            effective_provider_var.set("resend")
             return True, f"Email sent successfully via Resend to {to}"
         return False, "Resend send failed. Check server logs for details."
 
@@ -623,7 +671,7 @@ def send_test_email(to: str, provider: str | None = None) -> tuple[bool, str]:
             return False, "BREVO_API_KEY is not configured."
         ok = _send_brevo(to, subject, html)
         if ok:
-            _last_dispatch_provider = "brevo"
+            effective_provider_var.set("brevo")
             return True, f"Email sent successfully via Brevo to {to}"
         return False, "Brevo send failed. Check server logs for details."
 
@@ -632,14 +680,14 @@ def send_test_email(to: str, provider: str | None = None) -> tuple[bool, str]:
             return False, "SMTP_HOST or SMTP_USER is not configured."
         ok = _send_smtp(to, subject, html)
         if ok:
-            _last_dispatch_provider = "smtp"
+            effective_provider_var.set("smtp")
             return True, f"Email sent successfully via SMTP to {to}"
         return False, "SMTP send failed. Note: Render free tier blocks outbound SMTP ports 25, 465, 587. Use Resend or Brevo."
 
     # Auto dispatch or fallback using chosen_provider
     ok = _send(to, subject, html, provider=chosen_provider)
     if ok:
-        provider_name = _last_dispatch_provider or chosen_provider
+        provider_name = effective_provider_var.get() or chosen_provider
         return True, f"Email sent successfully via {provider_name.capitalize()} to {to}"
     return False, "Email dispatch failed. Neither Resend, Brevo, nor SMTP succeeded. Ensure API credentials are set on Render."
 
