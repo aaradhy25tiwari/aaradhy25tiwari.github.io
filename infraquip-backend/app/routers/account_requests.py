@@ -19,6 +19,8 @@ from app.services.email_service import (
     send_account_request_received_email,
     send_account_approved_email,
     send_account_rejected_email,
+    send_account_already_exists_email,
+    send_account_request_pending_reminder_email,
 )
 from app.core.rate_limiter import limiter, check_auth_rate_limit, get_authenticated_user_key
 from typing import Literal
@@ -129,8 +131,19 @@ async def submit_account_request(
     existing_user = await db.execute(
         select(User).where(User.email == payload.email)
     )
-    if existing_req.scalar_one_or_none() or existing_user.scalar_one_or_none():
-        # Generic response to prevent email existence enumeration
+    req_row = existing_req.scalar_one_or_none()
+    user_row = existing_user.scalar_one_or_none()
+    if user_row:
+        # Notify user that their account is already active
+        background_tasks.add_task(
+            send_account_already_exists_email, payload.email, payload.full_name
+        )
+        return {"message": "Your request has been received. If eligible, you will receive an email update shortly."}
+    if req_row:
+        # Notify user that their previous request is pending review
+        background_tasks.add_task(
+            send_account_request_pending_reminder_email, payload.email, payload.full_name
+        )
         return {"message": "Your request has been received. If eligible, you will receive an email update shortly."}
 
     req = AccountRequest(

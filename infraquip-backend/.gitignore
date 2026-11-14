@@ -57,3 +57,5 @@ ENV/
 .DS_Store
 *.pem
 *.md
+
+test_email.py

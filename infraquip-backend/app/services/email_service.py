@@ -12,29 +12,63 @@ logger = logging.getLogger(__name__)
 
 
 def _send_resend(to: str, subject: str, html: str) -> bool:
-    """Send via Resend API."""
+    """Send via Resend API (HTTPS port 443 — works seamlessly on Render/Cloud)."""
+    if not settings.RESEND_API_KEY:
+        return False
     try:
         import resend
         resend.api_key = settings.RESEND_API_KEY
-        from_email = settings.RESEND_FROM_EMAIL or "noreply@infraquip.com"
+        from_email = settings.RESEND_FROM_EMAIL or "noreply@infraquip.in"
         from_name = settings.RESEND_FROM_NAME or "InfraQuip"
-        resend.Emails.send({
+        resp = resend.Emails.send({
             "from": f"{from_name} <{from_email}>",
             "to": [to],
             "subject": subject,
             "html": html,
         })
-        logger.info(f"Email sent via Resend to {to} (Subject: {subject})")
+        logger.info(f"Email sent via Resend to {to} (Subject: {subject}, id: {getattr(resp, 'id', resp)})")
         return True
     except Exception as e:
         logger.error(f"Resend email send failed to {to}: {e}")
         return False
 
 
+def _send_brevo(to: str, subject: str, html: str) -> bool:
+    """Send via Brevo (Sendinblue) HTTPS API (port 443 — works seamlessly on Render/Cloud)."""
+    brevo_key = getattr(settings, "BREVO_API_KEY", "")
+    if not brevo_key:
+        return False
+    try:
+        import httpx
+        from_email = getattr(settings, "BREVO_FROM_EMAIL", "") or settings.SMTP_FROM_EMAIL or "noreply@infraquip.in"
+        from_name = getattr(settings, "BREVO_FROM_NAME", "") or "InfraQuip"
+        payload = {
+            "sender": {"name": from_name, "email": from_email},
+            "to": [{"email": to}],
+            "subject": subject,
+            "htmlContent": html,
+        }
+        headers = {
+            "api-key": brevo_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        resp = httpx.post("https://api.brevo.com/v3/smtp/email", json=payload, headers=headers, timeout=10.0)
+        if resp.status_code in (200, 201, 202):
+            logger.info(f"Email sent via Brevo to {to} (Subject: {subject})")
+            return True
+        else:
+            logger.error(f"Brevo API error ({resp.status_code}): {resp.text}")
+            return False
+    except Exception as e:
+        logger.error(f"Brevo email send failed to {to}: {e}")
+        return False
+
+
 def _send_smtp(to: str, subject: str, html: str) -> bool:
     """Send via standard SMTP (Gmail App Password, Brevo, Mailgun, Amazon SES, etc.)."""
     try:
-        from_email = settings.SMTP_FROM_EMAIL or settings.SMTP_USER or "noreply@infraquip.com"
+        from_email = settings.SMTP_FROM_EMAIL or settings.SMTP_USER or "noreply@infraquip.in"
         from_name = settings.SMTP_FROM_NAME or "InfraQuip"
         
         msg = MIMEMultipart("alternative")
@@ -59,25 +93,45 @@ def _send_smtp(to: str, subject: str, html: str) -> bool:
         server.quit()
         logger.info(f"Email sent via SMTP to {to} (Subject: {subject})")
         return True
+    except (ConnectionRefusedError, TimeoutError, OSError) as e:
+        logger.error(
+            f"SMTP email connection failed to {to} ({settings.SMTP_HOST}:{settings.SMTP_PORT}): {e}. "
+            "Note: Cloud hosting platforms (like Render free/starter tiers) block outbound SMTP ports 25, 465, and 587. "
+            "Use an HTTPS API provider like Resend (RESEND_API_KEY) or Brevo (BREVO_API_KEY) for cloud deployments."
+        )
+        return False
     except Exception as e:
         logger.error(f"SMTP email send failed to {to}: {e}")
         return False
 
 
-def _send(to: str, subject: str, html: str) -> None:
-    """Dispatches email based on configured provider (Resend, SMTP, or mock logger)."""
+def _send(to: str, subject: str, html: str) -> bool:
+    """Dispatches email based on configured provider (Resend, Brevo, SMTP, or mock logger)."""
     provider = settings.EMAIL_PROVIDER.lower()
     
-    if provider == "resend" or (provider == "auto" and settings.RESEND_API_KEY):
+    # 1. Resend API (HTTPS port 443 — recommended for Render/Cloud)
+    if provider in ("resend", "auto") and settings.RESEND_API_KEY:
         if _send_resend(to, subject, html):
-            return
+            return True
 
-    if provider == "smtp" or (provider == "auto" and settings.SMTP_HOST and settings.SMTP_USER):
+    # 2. Brevo API (HTTPS port 443 — works seamlessly on Render/Cloud)
+    if provider in ("brevo", "auto") and getattr(settings, "BREVO_API_KEY", ""):
+        if _send_brevo(to, subject, html):
+            return True
+
+    # 3. SMTP (Works on local dev, but blocked on Render free tier ports 25/465/587)
+    if provider in ("smtp", "auto") and settings.SMTP_HOST and settings.SMTP_USER:
         if _send_smtp(to, subject, html):
-            return
+            return True
 
-    # Fallback to local console log
-    logger.info(f"[EMAIL MOCK - NO SMTP/RESEND CONFIGURED] To: {to} | Subject: {subject}")
+    # 4. Fallback to local console log
+    logger.warning(
+        f"[EMAIL MOCK - NO EMAIL SENT] To: {to} | Subject: {subject} | "
+        f"Provider: {provider} | Resend configured: {bool(settings.RESEND_API_KEY)} | "
+        f"Brevo configured: {bool(getattr(settings, 'BREVO_API_KEY', ''))} | "
+        f"SMTP configured: {bool(settings.SMTP_HOST and settings.SMTP_USER)}"
+    )
+    return False
 
 
 EMAIL_FOOTER = """
@@ -92,8 +146,14 @@ EMAIL_FOOTER = """
 
 
 def _get_base_url() -> str:
+    if getattr(settings, "FRONTEND_URL", ""):
+        return settings.FRONTEND_URL.rstrip("/")
+    for origin in settings.ALLOWED_ORIGINS.split(","):
+        origin = origin.strip()
+        if origin.startswith("https://"):
+            return origin.rstrip("/")
     origins = settings.ALLOWED_ORIGINS.split(",")
-    return origins[0].strip() if origins else "http://localhost:3000"
+    return origins[0].strip().rstrip("/") if origins else "https://infraquip.in"
 
 
 def send_welcome_email(email: str, full_name: str, role: str) -> None:
@@ -476,3 +536,106 @@ def send_account_reactivated_email(
     """
     _send(email, "Your InfraQuip account is reactivated — new temporary password inside", html)
 
+
+
+def send_test_email(to: str, provider: str | None = None) -> tuple[bool, str]:
+    """Diagnostic function to test email delivery and return descriptive status."""
+    chosen_provider = (provider or settings.EMAIL_PROVIDER).lower()
+    subject = "InfraQuip Email Service Diagnostic Test"
+    base_url = _get_base_url()
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 20px; color: #1f2937;">
+      <h2 style="color: #f59e0b; margin-top: 0;">InfraQuip Diagnostic Test Email</h2>
+      <p>This is a live test email sent from InfraQuip to verify delivery.</p>
+      <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 13px;">
+        <p style="margin: 0 0 6px;"><strong>Recipient:</strong> {to}</p>
+        <p style="margin: 0 0 6px;"><strong>Tested Provider:</strong> {chosen_provider}</p>
+        <p style="margin: 0;"><strong>Base URL:</strong> {base_url}</p>
+      </div>
+      {EMAIL_FOOTER}
+    </div>
+    """
+
+    if chosen_provider == "resend":
+        if not settings.RESEND_API_KEY:
+            return False, "RESEND_API_KEY is not configured."
+        ok = _send_resend(to, subject, html)
+        return (True, f"Email sent successfully via Resend to {to}") if ok else (False, "Resend send failed. Check server logs for details.")
+
+    if chosen_provider == "brevo":
+        if not getattr(settings, "BREVO_API_KEY", ""):
+            return False, "BREVO_API_KEY is not configured."
+        ok = _send_brevo(to, subject, html)
+        return (True, f"Email sent successfully via Brevo to {to}") if ok else (False, "Brevo send failed. Check server logs for details.")
+
+    if chosen_provider == "smtp":
+        if not settings.SMTP_HOST or not settings.SMTP_USER:
+            return False, "SMTP_HOST or SMTP_USER is not configured."
+        ok = _send_smtp(to, subject, html)
+        return (True, f"Email sent successfully via SMTP to {to}") if ok else (False, "SMTP send failed. Note: Render free tier blocks outbound SMTP ports 25, 465, 587. Use Resend or Brevo.")
+
+    # Auto dispatch
+    ok = _send(to, subject, html)
+    if ok:
+        return True, f"Email sent successfully to {to}"
+    return False, "Email dispatch failed. Neither Resend, Brevo, nor SMTP succeeded. Ensure API credentials are set on Render."
+
+
+def send_account_already_exists_email(email: str, full_name: str) -> None:
+    """Sent when an applicant requests an account using an email already registered in InfraQuip."""
+    base_url = _get_base_url()
+    login_url = f"{base_url}/login"
+    forgot_url = f"{base_url}/forgot-password"
+
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px; color: #1f2937;">
+      <div style="text-align: center; margin-bottom: 32px;">
+        <h1 style="color: #f59e0b; font-size: 28px; margin: 0; font-weight: 800;">InfraQuip</h1>
+        <p style="color: #6b7280; margin: 4px 0 0; font-size: 14px;">Construction Equipment Marketplace</p>
+      </div>
+      <h2 style="color: #111827; font-size: 20px; font-weight: 700;">Account Already Registered</h2>
+      <p style="color: #4b5563; line-height: 1.6; font-size: 15px;">
+        Hi {full_name}, we received a request to create an account for <strong>{email}</strong>, but an account with this email address is already active on InfraQuip.
+      </p>
+      <div style="margin: 28px 0; padding: 20px; background: #fef3c7; border-radius: 12px; border: 1px solid #fde68a;">
+        <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.5;">
+          🔑 If you already have an account, you can log in directly or reset your password if you forgot your credentials.
+        </p>
+      </div>
+      <div style="text-align: center; margin: 32px 0;">
+        <a href="{login_url}"
+           style="display: inline-block; background: #f59e0b; color: #111827; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 15px; margin-right: 12px;">
+          Log In
+        </a>
+        <a href="{forgot_url}"
+           style="display: inline-block; background: #111827; color: #f9fafb; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 15px;">
+          Reset Password
+        </a>
+      </div>
+      {EMAIL_FOOTER}
+    </div>
+    """
+    _send(email, "Your InfraQuip account already exists", html)
+
+
+def send_account_request_pending_reminder_email(email: str, full_name: str) -> None:
+    """Sent when an applicant resubmits while their previous account request is still pending review."""
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px; color: #1f2937;">
+      <div style="text-align: center; margin-bottom: 32px;">
+        <h1 style="color: #f59e0b; font-size: 28px; margin: 0; font-weight: 800;">InfraQuip</h1>
+        <p style="color: #6b7280; margin: 4px 0 0; font-size: 14px;">Construction Equipment Marketplace</p>
+      </div>
+      <h2 style="color: #111827; font-size: 20px; font-weight: 700;">Your Request is Already Under Review</h2>
+      <p style="color: #4b5563; line-height: 1.6; font-size: 15px;">
+        Hi {full_name}, we already have an active access request on file for <strong>{email}</strong>.
+      </p>
+      <div style="margin: 28px 0; padding: 20px; background: #fef3c7; border-radius: 12px; border: 1px solid #fde68a;">
+        <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.5;">
+          ⏳ Our admin team reviews all business submissions within 24 hours. Once verified, you will receive an approval email with your login credentials.
+        </p>
+      </div>
+      {EMAIL_FOOTER}
+    </div>
+    """
+    _send(email, "Your InfraQuip access request is pending review", html)

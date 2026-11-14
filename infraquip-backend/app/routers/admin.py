@@ -1744,3 +1744,29 @@ async def delete_admin_category(
 
     return {"message": f"Category '{cat.name}' has been deleted."}
 
+
+
+class AdminTestEmailPayload(BaseModel):
+    to_email: str
+    provider: Optional[str] = None
+
+
+@router.post("/email/test")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def admin_test_email(
+    request: Request,
+    payload: AdminTestEmailPayload,
+    admin: AdminUser,
+):
+    """Admin diagnostic endpoint to test email delivery and return debug info."""
+    from app.services.email_service import send_test_email
+    success, detail = send_test_email(payload.to_email, payload.provider)
+    return {
+        "success": success,
+        "detail": detail,
+        "configured_provider": settings.EMAIL_PROVIDER,
+        "has_resend_key": bool(settings.RESEND_API_KEY),
+        "has_brevo_key": bool(getattr(settings, "BREVO_API_KEY", "")),
+        "has_smtp_user": bool(settings.SMTP_USER),
+        "from_email": settings.SMTP_FROM_EMAIL or settings.RESEND_FROM_EMAIL or "noreply@infraquip.in",
+    }

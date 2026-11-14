@@ -48,11 +48,14 @@ class Settings(BaseSettings):
     UPSTASH_REDIS_REST_TOKEN: str = ""
     REDIS_URL: str = "redis://localhost:6379"
 
-    # ── Email Settings (Resend & SMTP support for Free Providers) ───
-    EMAIL_PROVIDER: str = "auto"  # "auto", "resend", "smtp", "console"
+    # ── Email Settings (Resend, Brevo & SMTP support) ─────────────
+    EMAIL_PROVIDER: str = "auto"  # "auto", "resend", "brevo", "smtp", "console"
     RESEND_API_KEY: str = ""
-    RESEND_FROM_EMAIL: str = "noreply@infraquip.com"
+    RESEND_FROM_EMAIL: str = "noreply@infraquip.in"
     RESEND_FROM_NAME: str = "InfraQuip"
+    BREVO_API_KEY: str = ""
+    BREVO_FROM_EMAIL: str = "noreply@infraquip.in"
+    BREVO_FROM_NAME: str = "InfraQuip"
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
@@ -60,6 +63,7 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = ""
     SMTP_FROM_NAME: str = "InfraQuip"
     SMTP_USE_TLS: bool = True
+    FRONTEND_URL: str = "https://infraquip.in"
 
     # ── Razorpay ─────────────────────────────────────────────────
     RAZORPAY_KEY_ID: str = ""
