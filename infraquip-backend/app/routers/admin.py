@@ -1759,8 +1759,9 @@ async def admin_test_email(
     admin: AdminUser,
 ):
     """Admin diagnostic endpoint to test email delivery and return debug info."""
-    from app.services.email_service import send_test_email
-    success, detail = send_test_email(payload.to_email, payload.provider)
+    from app.services.email_service import send_test_email, get_from_email_for_provider
+    success, detail = await asyncio.to_thread(send_test_email, payload.to_email, payload.provider)
+    from_email = get_from_email_for_provider(payload.provider)
     return {
         "success": success,
         "detail": detail,
@@ -1768,5 +1769,5 @@ async def admin_test_email(
         "has_resend_key": bool(settings.RESEND_API_KEY),
         "has_brevo_key": bool(getattr(settings, "BREVO_API_KEY", "")),
         "has_smtp_user": bool(settings.SMTP_USER),
-        "from_email": settings.SMTP_FROM_EMAIL or settings.RESEND_FROM_EMAIL or "noreply@infraquip.in",
+        "from_email": from_email,
     }

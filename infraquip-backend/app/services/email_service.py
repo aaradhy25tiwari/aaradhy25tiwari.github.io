@@ -105,29 +105,33 @@ def _send_smtp(to: str, subject: str, html: str) -> bool:
         return False
 
 
-def _send(to: str, subject: str, html: str) -> bool:
-    """Dispatches email based on configured provider (Resend, Brevo, SMTP, or mock logger)."""
-    provider = settings.EMAIL_PROVIDER.lower()
+def _send(to: str, subject: str, html: str, provider: str | None = None) -> bool:
+    """Dispatches email based on configured provider (Resend, Brevo, SMTP, or console/mock)."""
+    active_provider = (provider or settings.EMAIL_PROVIDER).lower()
     
+    if active_provider == "console":
+        logger.info(f"[EMAIL CONSOLE] To: {to} | Subject: {subject}")
+        return True
+
     # 1. Resend API (HTTPS port 443 — recommended for Render/Cloud)
-    if provider in ("resend", "auto") and settings.RESEND_API_KEY:
+    if active_provider in ("resend", "auto") and settings.RESEND_API_KEY:
         if _send_resend(to, subject, html):
             return True
 
     # 2. Brevo API (HTTPS port 443 — works seamlessly on Render/Cloud)
-    if provider in ("brevo", "auto") and getattr(settings, "BREVO_API_KEY", ""):
+    if active_provider in ("brevo", "auto") and getattr(settings, "BREVO_API_KEY", ""):
         if _send_brevo(to, subject, html):
             return True
 
     # 3. SMTP (Works on local dev, but blocked on Render free tier ports 25/465/587)
-    if provider in ("smtp", "auto") and settings.SMTP_HOST and settings.SMTP_USER:
+    if active_provider in ("smtp", "auto") and settings.SMTP_HOST and settings.SMTP_USER:
         if _send_smtp(to, subject, html):
             return True
 
     # 4. Fallback to local console log
     logger.warning(
         f"[EMAIL MOCK - NO EMAIL SENT] To: {to} | Subject: {subject} | "
-        f"Provider: {provider} | Resend configured: {bool(settings.RESEND_API_KEY)} | "
+        f"Provider: {active_provider} | Resend configured: {bool(settings.RESEND_API_KEY)} | "
         f"Brevo configured: {bool(getattr(settings, 'BREVO_API_KEY', ''))} | "
         f"SMTP configured: {bool(settings.SMTP_HOST and settings.SMTP_USER)}"
     )
@@ -538,6 +542,25 @@ def send_account_reactivated_email(
 
 
 
+def get_from_email_for_provider(provider: str | None = None) -> str:
+    """Returns the sender email address configured for the selected provider."""
+    chosen = (provider or settings.EMAIL_PROVIDER).lower()
+    if chosen == "resend":
+        return settings.RESEND_FROM_EMAIL or "noreply@infraquip.in"
+    if chosen == "brevo":
+        return getattr(settings, "BREVO_FROM_EMAIL", "") or settings.SMTP_FROM_EMAIL or "noreply@infraquip.in"
+    if chosen == "smtp":
+        return settings.SMTP_FROM_EMAIL or settings.SMTP_USER or "noreply@infraquip.in"
+    if chosen == "auto":
+        if settings.RESEND_API_KEY:
+            return settings.RESEND_FROM_EMAIL or "noreply@infraquip.in"
+        if getattr(settings, "BREVO_API_KEY", ""):
+            return getattr(settings, "BREVO_FROM_EMAIL", "") or settings.SMTP_FROM_EMAIL or "noreply@infraquip.in"
+        if settings.SMTP_HOST and settings.SMTP_USER:
+            return settings.SMTP_FROM_EMAIL or settings.SMTP_USER or "noreply@infraquip.in"
+    return "noreply@infraquip.in"
+
+
 def send_test_email(to: str, provider: str | None = None) -> tuple[bool, str]:
     """Diagnostic function to test email delivery and return descriptive status."""
     chosen_provider = (provider or settings.EMAIL_PROVIDER).lower()
@@ -555,6 +578,10 @@ def send_test_email(to: str, provider: str | None = None) -> tuple[bool, str]:
       {EMAIL_FOOTER}
     </div>
     """
+
+    if chosen_provider == "console":
+        _send(to, subject, html, provider="console")
+        return True, f"Email logged to console for {to}"
 
     if chosen_provider == "resend":
         if not settings.RESEND_API_KEY:
@@ -574,8 +601,8 @@ def send_test_email(to: str, provider: str | None = None) -> tuple[bool, str]:
         ok = _send_smtp(to, subject, html)
         return (True, f"Email sent successfully via SMTP to {to}") if ok else (False, "SMTP send failed. Note: Render free tier blocks outbound SMTP ports 25, 465, 587. Use Resend or Brevo.")
 
-    # Auto dispatch
-    ok = _send(to, subject, html)
+    # Auto dispatch or fallback using chosen_provider
+    ok = _send(to, subject, html, provider=chosen_provider)
     if ok:
         return True, f"Email sent successfully to {to}"
     return False, "Email dispatch failed. Neither Resend, Brevo, nor SMTP succeeded. Ensure API credentials are set on Render."

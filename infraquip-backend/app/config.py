@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = ""
     SMTP_FROM_NAME: str = "InfraQuip"
     SMTP_USE_TLS: bool = True
-    FRONTEND_URL: str = "https://infraquip.in"
+    FRONTEND_URL: str = ""
 
     # ── Razorpay ─────────────────────────────────────────────────
     RAZORPAY_KEY_ID: str = ""
