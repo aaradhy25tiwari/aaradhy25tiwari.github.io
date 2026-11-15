@@ -573,6 +573,48 @@ def send_account_reactivated_email(
     _send(email, "Your InfraQuip account is reactivated — new temporary password inside", html)
 
 
+def send_temporary_password_reissued_email(
+    email: str, full_name: str, temp_password: str
+) -> None:
+    """Sent when a new 24-hour temporary password is requested by user or reissued by admin."""
+    base_url = _get_base_url()
+    login_url = f"{base_url}/login"
+    
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px; color: #1f2937;">
+      <div style="text-align: center; margin-bottom: 32px;">
+        <h1 style="color: #f59e0b; font-size: 28px; margin: 0; font-weight: 800;">InfraQuip</h1>
+      </div>
+      <h2 style="color: #111827; font-size: 20px; font-weight: 700;">🔑 New Temporary Password Issued</h2>
+      <p style="color: #4b5563; line-height: 1.6; font-size: 15px;">
+        Hi {full_name}, a new temporary password has been generated for your InfraQuip account. Your previous temporary password had expired or was requested anew:
+      </p>
+      <div style="margin: 24px 0; padding: 24px; background: #111827; border-radius: 12px; font-family: monospace;">
+        <p style="margin: 0 0 6px; color: #9ca3af; font-size: 12px; text-transform: uppercase;">Login Email</p>
+        <p style="margin: 0 0 16px; color: #f9fafb; font-size: 16px; font-weight: 600;">{email}</p>
+        <p style="margin: 0 0 6px; color: #9ca3af; font-size: 12px; text-transform: uppercase;">New Temporary Password</p>
+        <p style="margin: 0; color: #f59e0b; font-size: 20px; font-weight: 700; letter-spacing: 0.08em;">{temp_password}</p>
+      </div>
+      <div style="margin: 20px 0; padding: 16px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 6px;">
+        <p style="margin: 0 0 4px; color: #92400e; font-size: 14px; font-weight: 700;">
+          ⏱️ Valid for 24 hours only
+        </p>
+        <p style="margin: 0; color: #b45309; font-size: 13px; line-height: 1.5;">
+          This temporary password will expire in 24 hours. Please log in promptly and set your new permanent password.
+        </p>
+      </div>
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="{login_url}"
+           style="display: inline-block; background: #f59e0b; color: #111827; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 15px;">
+          Log In to InfraQuip →
+        </a>
+      </div>
+      {EMAIL_FOOTER}
+    </div>
+    """
+    _send(email, "Your New InfraQuip Temporary Password", html)
+
+
 
 def _extract_provider_from_dispatch(dispatch_result: Any) -> str | None:
     """Extracts the provider strictly from an explicit provider value or dispatch metadata, never from recipient text."""

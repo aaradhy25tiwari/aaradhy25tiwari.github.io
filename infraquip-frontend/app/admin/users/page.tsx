@@ -19,6 +19,9 @@ interface AdminUser {
   reactivation_requested?: boolean;
   reactivation_requested_at?: string | null;
   reactivation_message?: string | null;
+  must_change_password?: boolean;
+  temp_password_expires_at?: string | null;
+  is_temp_password_expired?: boolean;
   created_at: string;
 }
 
@@ -76,6 +79,22 @@ export default function AdminUsersPage() {
     },
     onError: (err: any) => {
       setActionMessage({ text: err.message || "Failed to reactivate account.", type: "error" });
+      setTimeout(() => setActionMessage(null), 6000);
+    },
+  });
+
+  const reissueTempPasswordMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data } = await apiClient.post<{ message: string }>(`/admin/users/${userId}/reissue-temp-password`);
+      return data;
+    },
+    onSuccess: (res) => {
+      setActionMessage({ text: res.message, type: "success" });
+      queryClient.invalidateQueries({ queryKey: ["admin-users-list"] });
+      setTimeout(() => setActionMessage(null), 6000);
+    },
+    onError: (err: any) => {
+      setActionMessage({ text: err?.response?.data?.detail || err.message || "Failed to reissue temporary password.", type: "error" });
       setTimeout(() => setActionMessage(null), 6000);
     },
   });
@@ -218,6 +237,17 @@ export default function AdminUsersPage() {
                           {u.failed_login_attempts}/4 failed attempts
                         </span>
                       )}
+                      {u.is_temp_password_expired ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-[10px] font-semibold text-destructive">
+                          <AlertTriangle className="h-3 w-3" />
+                          Temp Pwd Expired
+                        </span>
+                      ) : u.must_change_password && u.temp_password_expires_at ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-500">
+                          <Clock className="h-3 w-3" />
+                          Temp Pwd Active
+                        </span>
+                      ) : null}
                     </div>
                   </td>
                   <td className="p-4 text-xs text-muted-foreground">{formatRelativeTime(u.created_at)}</td>
@@ -254,6 +284,34 @@ export default function AdminUsersPage() {
                           Reactivate
                         </button>
                       )}
+
+                      {/* Reissue Temporary Password Button */}
+                      <button
+                        onClick={() => {
+                          if (
+                            confirm(
+                              `Reissue temporary password for ${u.full_name || u.email}?\n\nA fresh 24-hour temporary password will be generated and emailed directly to ${u.email}.`
+                            )
+                          ) {
+                            reissueTempPasswordMutation.mutate(u.id);
+                          }
+                        }}
+                        disabled={reissueTempPasswordMutation.isPending || reactivateMutation.isPending}
+                        className={cn(
+                          "flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold transition cursor-pointer",
+                          u.is_temp_password_expired
+                            ? "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20"
+                            : "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
+                        )}
+                        title="Generate and email a fresh 24-hour temporary password"
+                      >
+                        {reissueTempPasswordMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <KeyRound className="h-3.5 w-3.5" />
+                        )}
+                        {u.is_temp_password_expired ? "Reissue Expired Pwd" : "Send Temp Pwd"}
+                      </button>
 
                       <button
                         onClick={() => {

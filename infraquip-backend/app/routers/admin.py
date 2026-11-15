@@ -420,6 +420,8 @@ async def list_users(
     result = await db.execute(stmt.offset(offset).limit(per_page))
     users = result.scalars().all()
 
+    from datetime import datetime, timezone
+    now_utc = datetime.now(timezone.utc)
     items = [
         AdminUserResponse(
             id=str(u.id),
@@ -433,6 +435,17 @@ async def list_users(
             reactivation_requested=u.reactivation_requested or False,
             reactivation_requested_at=u.reactivation_requested_at,
             reactivation_message=u.reactivation_message,
+            must_change_password=bool(u.must_change_password),
+            temp_password_expires_at=u.temp_password_expires_at,
+            is_temp_password_expired=bool(
+                u.temp_password_expires_at
+                and (
+                    u.temp_password_expires_at
+                    if u.temp_password_expires_at.tzinfo
+                    else u.temp_password_expires_at.replace(tzinfo=timezone.utc)
+                )
+                < now_utc
+            ),
             created_at=u.created_at,
         )
         for u in users
@@ -819,6 +832,75 @@ async def reactivate_user(
     return {
         "success": True,
         "message": f"Account for {user.email} has been reactivated. A new temporary password (valid for 24 hours) has been sent to their email.",
+    }
+
+
+# ── POST /admin/users/{user_id}/reissue-temp-password ─────────
+@router.post("/users/{user_id}/reissue-temp-password")
+@limiter.limit(settings.RATE_LIMIT_ADMIN, key_func=get_authenticated_user_key)
+async def reissue_user_temporary_password(
+    user_id: str,
+    request: Request,
+    admin: AdminUser,
+    background_tasks: BackgroundTasks,
+    db: DBSession,
+):
+    """Admin reissues a fresh 24-hour temporary password for a user and emails it."""
+    from datetime import datetime, timezone, timedelta
+    from supabase import create_client
+    from app.services.email_service import send_temporary_password_reissued_email
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format.")
+
+    result = await db.execute(select(User).where(User.id == user_uuid))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    temp_password = _gen_temp_password()
+    supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+    if user.auth_uid:
+        try:
+            supabase.auth.admin.update_user_by_id(
+                str(user.auth_uid),
+                {"password": temp_password},
+            )
+        except Exception as e:
+            logger.error("Failed to update auth credentials for user %s: %s", user.email, e)
+            raise HTTPException(status_code=502, detail="Authentication service temporarily unavailable.")
+    else:
+        try:
+            resp = supabase.auth.admin.create_user({
+                "email": user.email,
+                "password": temp_password,
+                "email_confirm": True,
+            })
+            user.auth_uid = uuid.UUID(resp.user.id)
+        except Exception as e:
+            logger.error("Failed to create auth user for %s: %s", user.email, e)
+            raise HTTPException(status_code=502, detail="Authentication service temporarily unavailable.")
+
+    user.failed_login_attempts = 0
+    user.must_change_password = True
+    user.temp_password_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    if user.is_banned:
+        user.is_banned = False
+        user.reactivation_requested = False
+    await db.commit()
+
+    background_tasks.add_task(
+        send_temporary_password_reissued_email,
+        user.email,
+        user.full_name or "User",
+        temp_password,
+    )
+
+    return {
+        "success": True,
+        "message": f"New temporary password generated and emailed to {user.email} (valid for 24 hours).",
     }
 
 

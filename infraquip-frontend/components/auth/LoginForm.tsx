@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, EyeOff, Loader2, AlertTriangle, ShieldAlert, HardHat, Plus } from "lucide-react";
+import { Eye, EyeOff, Loader2, AlertTriangle, ShieldAlert, HardHat, Plus, Clock, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import Link from "next/link";
@@ -45,6 +45,26 @@ export function LoginForm() {
   const [isBlocked, setIsBlocked] = useState(false);
   const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null);
   const [attemptedEmail, setAttemptedEmail] = useState("");
+  const [isTempPasswordExpired, setIsTempPasswordExpired] = useState(false);
+  const [isRequestingTempPwd, setIsRequestingTempPwd] = useState(false);
+  const [tempPwdSentMsg, setTempPwdSentMsg] = useState<string | null>(null);
+
+  const handleQuickRequestTempPwd = async () => {
+    if (!attemptedEmail) return;
+    setIsRequestingTempPwd(true);
+    setServerError(null);
+    try {
+      const apiClient = (await import("@/lib/api/client")).default;
+      const { data } = await apiClient.post<{ message: string }>("/auth/request-temporary-password", {
+        email: attemptedEmail,
+      });
+      setTempPwdSentMsg(data.message || "A new 24-hour temporary password has been emailed to you!");
+    } catch (err: any) {
+      setServerError(err?.response?.data?.detail || "Failed to request new temporary password.");
+    } finally {
+      setIsRequestingTempPwd(false);
+    }
+  };
 
   const {
     register,
@@ -55,6 +75,8 @@ export function LoginForm() {
   const onSubmit = async (data: FormData) => {
     setServerError(null);
     setIsBlocked(false);
+    setIsTempPasswordExpired(false);
+    setTempPwdSentMsg(null);
     
     // Check if it's an email (has @) or a phone number
     const isEmail = data.emailOrPhone.includes("@");
@@ -144,11 +166,13 @@ export function LoginForm() {
         }
       } catch (loginErr: any) {
         // If temporary password has expired or user is blocked
-        if (loginErr?.response?.status === 400 || loginErr?.message?.includes("expired")) {
+        const errDetail = loginErr?.response?.data?.detail || loginErr?.message || "";
+        if (loginErr?.response?.status === 400 || errDetail.toLowerCase().includes("expired")) {
           await supabase.auth.signOut({ scope: "local" });
+          setIsTempPasswordExpired(true);
           setServerError(
-            loginErr?.message ||
-              "Your temporary password has expired (valid for 24 hours). Please use 'Forgot Password' or request reactivation."
+            errDetail ||
+              "Your temporary password has expired (valid for 24 hours). Please request a new temporary password below."
           );
           return;
         }
@@ -215,9 +239,14 @@ export function LoginForm() {
             <label htmlFor="password" className="text-sm font-medium text-foreground">
               Password
             </label>
-            <Link href="/forgot-password" className="text-xs text-primary hover:underline">
-              Forgot password?
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link href="/request-temporary-password" className="text-xs text-muted-foreground hover:text-foreground">
+                Temp password expired?
+              </Link>
+              <Link href="/forgot-password" className="text-xs text-primary hover:underline">
+                Forgot password?
+              </Link>
+            </div>
           </div>
           <div className="relative">
             <input
@@ -266,7 +295,47 @@ export function LoginForm() {
           </div>
         )}
 
-        {serverError && !isBlocked && attemptsRemaining !== null && attemptsRemaining < 4 && (
+        {isTempPasswordExpired && (
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/25 p-4 text-xs text-amber-600 dark:text-amber-400 space-y-3">
+            <div className="flex items-start gap-2.5">
+              <Clock className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-500" />
+              <div className="space-y-1">
+                <p className="font-semibold text-sm">Temporary Password Expired</p>
+                <p className="leading-relaxed">
+                  {tempPwdSentMsg || serverError || "Your temporary password was valid for 24 hours and has expired. You can request a fresh one to be sent to your email."}
+                </p>
+              </div>
+            </div>
+            {!tempPwdSentMsg ? (
+              <div className="pt-1 flex flex-col sm:flex-row gap-2">
+                <button
+                  type="button"
+                  onClick={handleQuickRequestTempPwd}
+                  disabled={isRequestingTempPwd || !attemptedEmail}
+                  className="inline-flex items-center justify-center px-3 py-2 rounded-lg bg-amber-500 text-black text-xs font-semibold hover:bg-amber-400 transition cursor-pointer"
+                >
+                  {isRequestingTempPwd ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Sending...</>
+                  ) : (
+                    "Email Me a Fresh Temporary Password →"
+                  )}
+                </button>
+                <Link
+                  href={`/request-temporary-password${attemptedEmail ? `?email=${encodeURIComponent(attemptedEmail)}` : ""}`}
+                  className="inline-flex items-center justify-center px-3 py-2 rounded-lg border border-border bg-background text-xs font-medium hover:bg-muted transition text-foreground"
+                >
+                  Request Form
+                </Link>
+              </div>
+            ) : (
+              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                ✅ {tempPwdSentMsg} Check your inbox and spam folder, then log in.
+              </div>
+            )}
+          </div>
+        )}
+
+        {serverError && !isBlocked && !isTempPasswordExpired && attemptsRemaining !== null && attemptsRemaining < 4 && (
           <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3.5 text-xs text-amber-500 flex items-start gap-2.5">
             <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-500" />
             <div className="space-y-1">
@@ -278,7 +347,7 @@ export function LoginForm() {
           </div>
         )}
 
-        {serverError && !isBlocked && (attemptsRemaining === null || attemptsRemaining >= 4) && (
+        {serverError && !isBlocked && !isTempPasswordExpired && (attemptsRemaining === null || attemptsRemaining >= 4) && (
           <div className="rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
             {serverError}
           </div>

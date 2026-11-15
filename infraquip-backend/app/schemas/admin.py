@@ -70,6 +70,9 @@ class AdminUserResponse(BaseModel):
     reactivation_requested: Optional[bool] = False
     reactivation_requested_at: Optional[datetime] = None
     reactivation_message: Optional[str] = None
+    must_change_password: Optional[bool] = False
+    temp_password_expires_at: Optional[datetime] = None
+    is_temp_password_expired: Optional[bool] = False
     created_at: datetime
 
 

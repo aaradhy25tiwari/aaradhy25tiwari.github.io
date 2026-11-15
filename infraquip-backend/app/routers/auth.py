@@ -232,7 +232,7 @@ async def login_success(
         if exp < now:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Your temporary password has expired (valid for 24 hours). Please use 'Forgot Password' or request reactivation.",
+                detail="Your temporary password has expired (valid for 24 hours). Please request a new temporary password on the login screen or use 'Forgot Password'.",
             )
 
     # First login / valid login sets user to verified and resets failed attempts
@@ -244,6 +244,100 @@ async def login_success(
         "success": True,
         "must_change_password": user.must_change_password,
         "is_verified": user.is_verified,
+    }
+
+
+# ── POST /auth/request-temporary-password ──────────────────────
+class RequestTemporaryPasswordPayload(BaseModel):
+    email: EmailStr
+
+
+@router.post("/request-temporary-password", status_code=status.HTTP_200_OK)
+async def request_temporary_password(
+    request: Request,
+    payload: RequestTemporaryPasswordPayload,
+    background_tasks: BackgroundTasks,
+    db: DBSession,
+):
+    """Request a fresh 24-hour temporary password if previous temporary password has expired or user must change password."""
+    await check_auth_rate_limit(request, payload.email)
+    from datetime import datetime, timezone, timedelta
+    from app.routers.account_requests import _gen_temp_password
+    from app.services.email_service import send_temporary_password_reissued_email
+    from supabase import create_client
+
+    email_clean = str(payload.email).strip().lower()
+    result = await db.execute(select(User).where(User.email == email_clean))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        return {
+            "success": True,
+            "message": "If an eligible account with an expired temporary password exists for this email, a new temporary password has been emailed.",
+        }
+
+    if user.is_banned:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is blocked. Please submit an account reactivation request.",
+        )
+
+    is_eligible = (
+        bool(user.must_change_password)
+        or user.temp_password_expires_at is not None
+        or not user.is_verified
+    )
+    if not is_eligible:
+        return {
+            "success": False,
+            "eligible": False,
+            "message": "This account already has an active permanent password. Please use 'Forgot Password' on the login page to reset your password.",
+        }
+
+    temp_password = _gen_temp_password()
+    supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+    if user.auth_uid:
+        try:
+            supabase.auth.admin.update_user_by_id(
+                str(user.auth_uid),
+                {"password": temp_password},
+            )
+        except Exception as e:
+            logger.error("Failed to update Supabase password for %s: %s", user.email, e)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Authentication service temporarily unavailable. Please try again.",
+            )
+    else:
+        try:
+            resp = supabase.auth.admin.create_user({
+                "email": user.email,
+                "password": temp_password,
+                "email_confirm": True,
+            })
+            user.auth_uid = uuid.UUID(resp.user.id)
+        except Exception as e:
+            logger.error("Failed to create Supabase auth user for %s: %s", user.email, e)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Authentication service temporarily unavailable. Please try again.",
+            )
+
+    user.failed_login_attempts = 0
+    user.must_change_password = True
+    user.temp_password_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    await db.commit()
+
+    background_tasks.add_task(
+        send_temporary_password_reissued_email,
+        user.email,
+        user.full_name or "User",
+        temp_password,
+    )
+
+    return {
+        "success": True,
+        "message": "A fresh temporary password (valid for 24 hours) has been sent to your registered email address.",
     }
 
 
