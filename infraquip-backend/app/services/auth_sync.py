@@ -42,17 +42,26 @@ def sync_supabase_user_password(
         })
         return uuid.UUID(resp.user.id), True
     except Exception as create_err:
-        # Reconcile existing external identity if already present in Supabase Auth
+        # Reconcile existing external identity across all pages if already present in Supabase Auth
         try:
-            users_list = supabase.auth.admin.list_users()
-            for ext_user in (users_list or []):
-                if getattr(ext_user, "email", "").strip().lower() == email_clean:
-                    matched_id = uuid.UUID(ext_user.id)
-                    supabase.auth.admin.update_user_by_id(
-                        str(matched_id),
-                        {"password": password},
-                    )
-                    return matched_id, False
+            page = 1
+            per_page = 50
+            while True:
+                users_page = supabase.auth.admin.list_users(page=page, per_page=per_page)
+                if not users_page:
+                    break
+                for ext_user in users_page:
+                    ext_email = getattr(ext_user, "email", None)
+                    if ext_email and isinstance(ext_email, str) and ext_email.strip().lower() == email_clean:
+                        matched_id = uuid.UUID(str(ext_user.id))
+                        supabase.auth.admin.update_user_by_id(
+                            str(matched_id),
+                            {"password": password},
+                        )
+                        return matched_id, False
+                if len(users_page) < per_page:
+                    break
+                page += 1
         except Exception as lookup_err:
             logger.error("Failed to reconcile existing Supabase identity for %s: %s", email_clean, lookup_err)
         raise create_err

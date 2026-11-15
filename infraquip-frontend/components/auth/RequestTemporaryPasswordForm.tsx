@@ -24,9 +24,14 @@ type OtpFormData = z.infer<typeof otpSchema>;
 export function RequestTemporaryPasswordForm() {
   const searchParams = useSearchParams();
   const prefilledEmail = searchParams?.get("email") || "";
+  const initialStep =
+    (searchParams?.get("step") === "otp" || searchParams?.get("otp_sent") === "true") && prefilledEmail
+      ? "otp"
+      : "email";
 
-  const [step, setStep] = useState<"email" | "otp" | "success">("email");
+  const [step, setStep] = useState<"email" | "otp" | "success">(initialStep);
   const [email, setEmail] = useState(prefilledEmail);
+  const [verifiedEmail, setVerifiedEmail] = useState("");
   const [serverError, setServerError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isPermanentPassword, setIsPermanentPassword] = useState(false);
@@ -93,22 +98,32 @@ export function RequestTemporaryPasswordForm() {
 
   const onOtpSubmit = async (data: OtpFormData) => {
     setServerError(null);
+    const targetEmail = email.trim().toLowerCase();
 
     try {
       const resp = await apiClient.post<{
         success: boolean;
         message: string;
       }>("/auth/verify-temporary-password-otp", {
-        email: email.trim().toLowerCase(),
+        email: targetEmail,
         otp: data.otp.trim(),
       });
 
+      // Avoid selecting success if user navigated to a different email flow
+      if (email.trim().toLowerCase() !== targetEmail) {
+        return;
+      }
+
+      setVerifiedEmail(targetEmail);
       setSuccessMessage(
         resp.data.message ||
           "Identity verified! A fresh temporary password (valid for 24 hours) has been sent to your email address."
       );
       setStep("success");
     } catch (err: any) {
+      if (email.trim().toLowerCase() !== targetEmail) {
+        return;
+      }
       const detail = err?.response?.data?.detail || err?.message || "Failed to verify code.";
       setServerError(detail);
     }
@@ -120,9 +135,22 @@ export function RequestTemporaryPasswordForm() {
     setResendSuccess(false);
 
     try {
-      await apiClient.post("/auth/request-temporary-password", {
+      const resp = await apiClient.post<{
+        success: boolean;
+        message: string;
+        eligible?: boolean;
+        requires_otp?: boolean;
+      }>("/auth/request-temporary-password", {
         email: email.trim().toLowerCase(),
       });
+
+      if (resp.data.eligible === false) {
+        setIsPermanentPassword(true);
+        setServerError(resp.data.message);
+        setStep("email");
+        return;
+      }
+
       setResendSuccess(true);
       resetOtp();
       setTimeout(() => setResendSuccess(false), 5000);
@@ -154,7 +182,7 @@ export function RequestTemporaryPasswordForm() {
         </div>
 
         <Link
-          href={`/login${email ? `?email=${encodeURIComponent(email)}` : ""}`}
+          href={`/login${(verifiedEmail || email) ? `?email=${encodeURIComponent(verifiedEmail || email)}` : ""}`}
           className="inline-flex items-center justify-center w-full px-4 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition shadow-sm"
         >
           Proceed to Log In →
@@ -169,11 +197,13 @@ export function RequestTemporaryPasswordForm() {
         <div className="flex items-center justify-between">
           <button
             type="button"
+            disabled={isSubmittingOtp}
             onClick={() => {
+              if (isSubmittingOtp) return;
               setStep("email");
               setServerError(null);
             }}
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition"
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Back
           </button>

@@ -362,7 +362,7 @@ export function LoginForm() {
               <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-emerald-600 dark:text-emerald-400 font-medium space-y-2">
                 <p>✅ {tempPwdSentMsg} Check your inbox and spam folder.</p>
                 <Link
-                  href={`/request-temporary-password${attemptedEmail ? `?email=${encodeURIComponent(attemptedEmail)}` : ""}`}
+                  href={`/request-temporary-password?email=${encodeURIComponent(attemptedEmail)}&step=otp&otp_sent=true`}
                   className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300 underline hover:opacity-80"
                 >
                   Enter Verification Code →

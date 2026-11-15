@@ -252,7 +252,7 @@ def send_temporary_password_otp_email(email: str, otp: str, full_name: str | Non
       {EMAIL_FOOTER}
     </div>
     """
-    _send(email, f"Your InfraQuip Temporary Password Code: {otp}", html)
+    _send(email, "Your InfraQuip Temporary Password Verification Code", html)
 
 def send_password_reset_otp_email(email: str, otp: str, full_name: str | None = None) -> None:
     greeting = f"Hi {full_name}," if full_name else "Hello,"

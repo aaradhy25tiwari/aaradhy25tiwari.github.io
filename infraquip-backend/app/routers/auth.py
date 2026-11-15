@@ -358,7 +358,30 @@ async def verify_temporary_password_otp(
 
     email_clean = str(payload.email).strip().lower()
 
-    # 1. Verify OTP record
+    # 1. Find User & check status / eligibility rule before consuming OTP or modifying credentials
+    user_result = await db.execute(select(User).where(User.email == email_clean))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    if user.is_banned:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is blocked. Please submit an account reactivation request.",
+        )
+
+    # Recheck the exact same account eligibility rule used by /request-temporary-password
+    is_eligible = (
+        bool(user.must_change_password)
+        or not user.is_verified
+    )
+    if not is_eligible:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account already has an active permanent password. Please use 'Forgot Password' on the login page to reset your credentials.",
+        )
+
+    # 2. Verify OTP record with pessimistic row lock
     result = await db.execute(
         select(PasswordResetOTP)
         .where(
@@ -371,21 +394,14 @@ async def verify_temporary_password_otp(
     )
     otp_record = result.scalars().first()
     if not otp_record or not otp_record.is_valid():
+        # Consume bounded attempt budget for incorrect OTP guesses before rejection
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        if user.failed_login_attempts >= 4:
+            user.is_banned = True
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired verification code. Please request a new one.",
-        )
-
-    # 2. Find User
-    user_result = await db.execute(select(User).where(User.email == email_clean))
-    user = user_result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found.")
-
-    if user.is_banned:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your account is blocked. Please submit an account reactivation request.",
         )
 
     # 3. Mark OTP as used
@@ -432,7 +448,12 @@ async def verify_temporary_password_otp(
             detail="Failed to commit credentials update. Please try again.",
         )
 
-    # 8. Dispatch temporary password email in background
+    # 8. Reset rate limit counters on successful identity verification
+    from app.core.rate_limiter import auth_backoff_tracker, get_client_ip
+    await auth_backoff_tracker.reset_key(f"account:{email_clean}")
+    await auth_backoff_tracker.reset_key(f"ip:{get_client_ip(request)}")
+
+    # 9. Dispatch temporary password email in background
     background_tasks.add_task(
         send_temporary_password_reissued_email,
         user.email,
