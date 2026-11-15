@@ -358,8 +358,12 @@ async def verify_temporary_password_otp(
 
     email_clean = str(payload.email).strip().lower()
 
-    # 1. Find User & check status / eligibility rule before consuming OTP or modifying credentials
-    user_result = await db.execute(select(User).where(User.email == email_clean))
+    # 1. Find User with row lock to serialize attempts and check status / eligibility
+    user_result = await db.execute(
+        select(User)
+        .where(User.email == email_clean)
+        .with_for_update()
+    )
     user = user_result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -395,6 +399,7 @@ async def verify_temporary_password_otp(
     otp_record = result.scalars().first()
     if not otp_record or not otp_record.is_valid():
         # Consume bounded attempt budget for incorrect OTP guesses before rejection
+        # Serialized under User row lock: no lost updates across concurrent requests
         user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
         if user.failed_login_attempts >= 4:
             user.is_banned = True
@@ -407,10 +412,23 @@ async def verify_temporary_password_otp(
     # 3. Mark OTP as used
     otp_record.is_used = True
 
-    # 4. Generate fresh 24h temporary password
+    # 4. Revalidate eligibility under synchronization immediately before updating Supabase credentials
+    await db.refresh(user)
+    is_still_eligible = (
+        bool(user.must_change_password)
+        or not user.is_verified
+    )
+    if not is_still_eligible or user.is_banned:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account already has an active permanent password. Please use 'Forgot Password' on the login page to reset your credentials.",
+        )
+
+    # 5. Generate fresh 24h temporary password
     temp_password = _gen_temp_password()
 
-    # 5. Sync/reconcile with Supabase Auth
+    # 6. Sync/reconcile with Supabase Auth
     supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
     try:
         auth_uid, was_created = sync_supabase_user_password(
@@ -426,13 +444,13 @@ async def verify_temporary_password_otp(
             detail="Authentication service temporarily unavailable. Please try again.",
         )
 
-    # 6. Update user record
+    # 7. Update user record
     user.auth_uid = auth_uid
     user.failed_login_attempts = 0
     user.must_change_password = True
     user.temp_password_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
 
-    # 7. Commit with compensating rollback if local commit fails
+    # 8. Commit with compensating rollback if local commit fails
     try:
         await db.commit()
     except Exception as commit_err:
@@ -448,12 +466,21 @@ async def verify_temporary_password_otp(
             detail="Failed to commit credentials update. Please try again.",
         )
 
-    # 8. Reset rate limit counters on successful identity verification
-    from app.core.rate_limiter import auth_backoff_tracker, get_client_ip
-    await auth_backoff_tracker.reset_key(f"account:{email_clean}")
-    await auth_backoff_tracker.reset_key(f"ip:{get_client_ip(request)}")
+    # 9. Reset rate limit counters on successful identity verification (best-effort)
+    try:
+        from app.core.rate_limiter import auth_backoff_tracker, get_client_ip
+        try:
+            await auth_backoff_tracker.reset_key(f"account:{email_clean}")
+        except Exception as e:
+            logger.warning("Failed to reset account backoff key for %s: %s", email_clean, e)
+        try:
+            await auth_backoff_tracker.reset_key(f"ip:{get_client_ip(request)}")
+        except Exception as e:
+            logger.warning("Failed to reset IP backoff key for %s: %s", email_clean, e)
+    except Exception as tracker_err:
+        logger.warning("Rate limiter tracker unavailable: %s", tracker_err)
 
-    # 9. Dispatch temporary password email in background
+    # 10. Dispatch temporary password email in background
     background_tasks.add_task(
         send_temporary_password_reissued_email,
         user.email,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -38,6 +38,11 @@ export function RequestTemporaryPasswordForm() {
   const [isBlocked, setIsBlocked] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
+
+  // Active flow references to avoid stale closure race conditions
+  const activeFlowIdRef = useRef(0);
+  const activeEmailRef = useRef(prefilledEmail.trim().toLowerCase());
+  const activeStepRef = useRef<"email" | "otp" | "success">(initialStep);
 
   // Email form
   const {
@@ -83,7 +88,11 @@ export function RequestTemporaryPasswordForm() {
         return;
       }
 
-      setEmail(data.email.trim().toLowerCase());
+      const targetEmail = data.email.trim().toLowerCase();
+      activeFlowIdRef.current += 1;
+      activeEmailRef.current = targetEmail;
+      activeStepRef.current = "otp";
+      setEmail(targetEmail);
       setStep("otp");
     } catch (err: any) {
       const status = err?.response?.status;
@@ -97,31 +106,35 @@ export function RequestTemporaryPasswordForm() {
   };
 
   const onOtpSubmit = async (data: OtpFormData) => {
+    const flowId = activeFlowIdRef.current;
+    const currentEmail = activeEmailRef.current;
+    if (!currentEmail || activeStepRef.current !== "otp") return;
+
     setServerError(null);
-    const targetEmail = email.trim().toLowerCase();
 
     try {
       const resp = await apiClient.post<{
         success: boolean;
         message: string;
       }>("/auth/verify-temporary-password-otp", {
-        email: targetEmail,
+        email: currentEmail,
         otp: data.otp.trim(),
       });
 
-      // Avoid selecting success if user navigated to a different email flow
-      if (email.trim().toLowerCase() !== targetEmail) {
+      // Avoid applying results if user navigated to a different flow
+      if (activeFlowIdRef.current !== flowId || activeEmailRef.current !== currentEmail || activeStepRef.current !== "otp") {
         return;
       }
 
-      setVerifiedEmail(targetEmail);
+      setVerifiedEmail(currentEmail);
       setSuccessMessage(
         resp.data.message ||
           "Identity verified! A fresh temporary password (valid for 24 hours) has been sent to your email address."
       );
+      activeStepRef.current = "success";
       setStep("success");
     } catch (err: any) {
-      if (email.trim().toLowerCase() !== targetEmail) {
+      if (activeFlowIdRef.current !== flowId || activeEmailRef.current !== currentEmail || activeStepRef.current !== "otp") {
         return;
       }
       const detail = err?.response?.data?.detail || err?.message || "Failed to verify code.";
@@ -130,6 +143,10 @@ export function RequestTemporaryPasswordForm() {
   };
 
   const handleResendOtp = async () => {
+    const flowId = activeFlowIdRef.current;
+    const currentEmail = activeEmailRef.current;
+    if (!currentEmail || activeStepRef.current !== "otp") return;
+
     setIsResending(true);
     setServerError(null);
     setResendSuccess(false);
@@ -141,23 +158,38 @@ export function RequestTemporaryPasswordForm() {
         eligible?: boolean;
         requires_otp?: boolean;
       }>("/auth/request-temporary-password", {
-        email: email.trim().toLowerCase(),
+        email: currentEmail,
       });
+
+      // Ignore stale response if user navigated away or changed flow
+      if (activeFlowIdRef.current !== flowId || activeEmailRef.current !== currentEmail || activeStepRef.current !== "otp") {
+        return;
+      }
 
       if (resp.data.eligible === false) {
         setIsPermanentPassword(true);
         setServerError(resp.data.message);
+        activeStepRef.current = "email";
         setStep("email");
         return;
       }
 
       setResendSuccess(true);
       resetOtp();
-      setTimeout(() => setResendSuccess(false), 5000);
+      setTimeout(() => {
+        if (activeFlowIdRef.current === flowId && activeStepRef.current === "otp") {
+          setResendSuccess(false);
+        }
+      }, 5000);
     } catch (err: any) {
+      if (activeFlowIdRef.current !== flowId || activeEmailRef.current !== currentEmail || activeStepRef.current !== "otp") {
+        return;
+      }
       setServerError(err?.response?.data?.detail || "Failed to resend code.");
     } finally {
-      setIsResending(false);
+      if (activeFlowIdRef.current === flowId) {
+        setIsResending(false);
+      }
     }
   };
 
@@ -197,11 +229,15 @@ export function RequestTemporaryPasswordForm() {
         <div className="flex items-center justify-between">
           <button
             type="button"
-            disabled={isSubmittingOtp}
+            disabled={isSubmittingOtp || isResending}
             onClick={() => {
-              if (isSubmittingOtp) return;
+              if (isSubmittingOtp || isResending) return;
+              activeFlowIdRef.current += 1;
+              activeStepRef.current = "email";
               setStep("email");
               setServerError(null);
+              setIsPermanentPassword(false);
+              setResendSuccess(false);
             }}
             className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
