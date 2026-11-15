@@ -245,26 +245,22 @@ async def approve_account_request(
     # Generate temp password
     temp_password = _gen_temp_password()
 
-    # Create Supabase Auth user
+    # Create or reconcile Supabase Auth user
+    from app.services.auth_sync import sync_supabase_user_password
     supabase = get_supabase()
     try:
-        auth_resp = supabase.auth.admin.create_user({
-            "email": req.email,
-            "password": temp_password,
-            "email_confirm": True,  # Pre-confirm — no email verification step
-            "user_metadata": {
-                "full_name": req.full_name,
-                "role": req.role,
-            },
-        })
+        auth_uid, was_created = sync_supabase_user_password(
+            supabase,
+            req.email,
+            temp_password,
+            current_auth_uid=req.supabase_user_id,
+        )
     except Exception as e:
         logger.error(f"Supabase user creation failed for account request {req.email}: {e}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to provision user credentials with authentication provider. Please try again.",
         )
-
-    auth_uid = auth_resp.user.id
     role_enum = {
         "vendor": UserRole.vendor,
         "broker": UserRole.broker,
@@ -286,7 +282,7 @@ async def approve_account_request(
     # Create app User row
     user = User(
         id=uuid.uuid4(),
-        auth_uid=uuid.UUID(auth_uid),
+        auth_uid=uuid.UUID(str(auth_uid)),
         email=req.email,
         full_name=req.full_name,
         phone=req.phone,
@@ -333,11 +329,24 @@ async def approve_account_request(
 
     # Update request record
     req.status = AccountRequestStatus.approved
-    req.supabase_user_id = uuid.UUID(auth_uid)
+    req.supabase_user_id = uuid.UUID(str(auth_uid))
     req.reviewed_at = datetime.now(timezone.utc)
     req.reviewed_by = admin.id
 
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as commit_err:
+        await db.rollback()
+        if was_created:
+            try:
+                supabase.auth.admin.delete_user(str(auth_uid))
+            except Exception as cleanup_err:
+                logger.warning("Failed to clean up orphan Supabase user %s: %s", auth_uid, cleanup_err)
+        logger.error("Commit failed approving account request for %s: %s", req.email, commit_err)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to commit account approval. Please try again.",
+        )
 
     # Send approval email with temp credentials
     background_tasks.add_task(

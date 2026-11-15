@@ -224,6 +224,36 @@ def send_welcome_email(email: str, full_name: str, role: str) -> None:
     _send(email, f"Welcome to InfraQuip, {full_name}!", html)
 
 
+def send_temporary_password_otp_email(email: str, otp: str, full_name: str | None = None) -> None:
+    """Sent to verify email ownership before issuing a fresh temporary password."""
+    greeting = f"Hi {full_name}," if full_name else "Hello,"
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px; color: #1f2937;">
+      <div style="text-align: center; margin-bottom: 32px;">
+        <h1 style="color: #f59e0b; font-size: 28px; margin: 0; font-weight: 800;">InfraQuip</h1>
+        <p style="color: #6b7280; margin: 4px 0 0; font-size: 14px;">Construction Equipment Marketplace</p>
+      </div>
+      <h2 style="color: #111827; font-size: 20px; font-weight: 700;">Temporary Password Verification Code</h2>
+      <p style="color: #4b5563; line-height: 1.6; font-size: 15px;">
+        {greeting} we received a request to issue a fresh temporary password for your InfraQuip account. Use the one-time verification code below to verify your identity:
+      </p>
+      <div style="margin: 28px 0; padding: 24px; background: #111827; border-radius: 14px; text-align: center;">
+        <p style="margin: 0 0 8px; color: #9ca3af; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Verification OTP Code</p>
+        <p style="margin: 0; color: #f59e0b; font-size: 36px; font-weight: 800; letter-spacing: 0.25em; font-family: monospace;">{otp}</p>
+      </div>
+      <div style="margin: 20px 0; padding: 14px 16px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px;">
+        <p style="margin: 0; color: #92400e; font-size: 13px;">
+          ⏱️ This OTP code is valid for <strong>15 minutes</strong>. Do not share this code with anyone.
+        </p>
+      </div>
+      <p style="color: #6b7280; font-size: 13px; line-height: 1.5;">
+        If you did not request this temporary password, please ignore this email. Your existing credentials remain untouched.
+      </p>
+      {EMAIL_FOOTER}
+    </div>
+    """
+    _send(email, f"Your InfraQuip Temporary Password Code: {otp}", html)
+
 def send_password_reset_otp_email(email: str, otp: str, full_name: str | None = None) -> None:
     greeting = f"Hi {full_name}," if full_name else "Hello,"
     html = f"""

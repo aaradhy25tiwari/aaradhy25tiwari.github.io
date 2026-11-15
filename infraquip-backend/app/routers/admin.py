@@ -785,30 +785,21 @@ async def reactivate_user(
     # Generate fresh compliant temporary password
     temp_password = _gen_temp_password()
 
-    # Update in Supabase Auth
+    # Update or reconcile in Supabase Auth
+    from app.services.auth_sync import sync_supabase_user_password
     supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
-    if user.auth_uid:
-        try:
-            supabase.auth.admin.update_user_by_id(
-                str(user.auth_uid),
-                {"password": temp_password},
-            )
-        except Exception as e:
-            logger.error("Failed to update auth credentials for reactivation: %s", e)
-            raise HTTPException(status_code=502, detail="Authentication service temporarily unavailable. Please try again.")
-    else:
-        try:
-            resp = supabase.auth.admin.create_user({
-                "email": user.email,
-                "password": temp_password,
-                "email_confirm": True,
-            })
-            user.auth_uid = uuid.UUID(resp.user.id)
-        except Exception as e:
-            logger.error("Failed to create auth credentials for reactivation: %s", e)
-            raise HTTPException(status_code=502, detail="Authentication service temporarily unavailable. Please try again.")
+    try:
+        auth_uid, was_created = sync_supabase_user_password(
+            supabase,
+            user.email,
+            temp_password,
+            current_auth_uid=user.auth_uid,
+        )
+    except Exception as e:
+        logger.error("Failed to update auth credentials for reactivation: %s", e)
+        raise HTTPException(status_code=502, detail="Authentication service temporarily unavailable. Please try again.")
 
-    # Unblock, reset counters, and set 24h expiration
+    user.auth_uid = auth_uid
     user.is_banned = False
     user.failed_login_attempts = 0
     user.reactivation_requested = False
@@ -816,10 +807,22 @@ async def reactivate_user(
     user.reactivation_message = None
     user.must_change_password = True
     user.temp_password_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
-    # User remains unverified until they log in with the new temp password
     user.is_verified = False
 
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as commit_err:
+        await db.rollback()
+        if was_created:
+            try:
+                supabase.auth.admin.delete_user(str(auth_uid))
+            except Exception as cleanup_err:
+                logger.warning("Failed to clean up orphan Supabase user %s: %s", auth_uid, cleanup_err)
+        logger.error("Commit failed during reactivation for %s: %s", user.email, commit_err)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to commit account reactivation. Please try again.",
+        )
 
     # Email new credentials to user
     background_tasks.add_task(
@@ -861,35 +864,41 @@ async def reissue_user_temporary_password(
         raise HTTPException(status_code=404, detail="User not found.")
 
     temp_password = _gen_temp_password()
+    from app.services.auth_sync import sync_supabase_user_password
     supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
-    if user.auth_uid:
-        try:
-            supabase.auth.admin.update_user_by_id(
-                str(user.auth_uid),
-                {"password": temp_password},
-            )
-        except Exception as e:
-            logger.error("Failed to update auth credentials for user %s: %s", user.email, e)
-            raise HTTPException(status_code=502, detail="Authentication service temporarily unavailable.")
-    else:
-        try:
-            resp = supabase.auth.admin.create_user({
-                "email": user.email,
-                "password": temp_password,
-                "email_confirm": True,
-            })
-            user.auth_uid = uuid.UUID(resp.user.id)
-        except Exception as e:
-            logger.error("Failed to create auth user for %s: %s", user.email, e)
-            raise HTTPException(status_code=502, detail="Authentication service temporarily unavailable.")
+    try:
+        auth_uid, was_created = sync_supabase_user_password(
+            supabase,
+            user.email,
+            temp_password,
+            current_auth_uid=user.auth_uid,
+        )
+    except Exception as e:
+        logger.error("Failed to sync Supabase user for %s: %s", user.email, e)
+        raise HTTPException(status_code=502, detail="Authentication service temporarily unavailable.")
 
+    user.auth_uid = auth_uid
     user.failed_login_attempts = 0
     user.must_change_password = True
     user.temp_password_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
     if user.is_banned:
         user.is_banned = False
         user.reactivation_requested = False
-    await db.commit()
+
+    try:
+        await db.commit()
+    except Exception as commit_err:
+        await db.rollback()
+        if was_created:
+            try:
+                supabase.auth.admin.delete_user(str(auth_uid))
+            except Exception as cleanup_err:
+                logger.warning("Failed to clean up orphan Supabase user %s: %s", auth_uid, cleanup_err)
+        logger.error("Commit failed during temporary password reissue for %s: %s", user.email, commit_err)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to commit user credentials update. Please try again.",
+        )
 
     background_tasks.add_task(
         send_temporary_password_reissued_email,

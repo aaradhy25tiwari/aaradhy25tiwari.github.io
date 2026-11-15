@@ -6,40 +6,59 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Loader2, Mail, CheckCircle, KeyRound, AlertTriangle, ArrowRight, ShieldAlert } from "lucide-react";
+import { Loader2, Mail, CheckCircle, KeyRound, AlertTriangle, ArrowRight, ShieldAlert, ArrowLeft, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import apiClient from "@/lib/api/client";
 
-const requestSchema = z.object({
+const emailSchema = z.object({
   email: z.string().email("Enter a valid email address"),
 });
 
-type RequestFormData = z.infer<typeof requestSchema>;
+const otpSchema = z.object({
+  otp: z.string().length(6, "Enter the complete 6-digit verification code"),
+});
+
+type EmailFormData = z.infer<typeof emailSchema>;
+type OtpFormData = z.infer<typeof otpSchema>;
 
 export function RequestTemporaryPasswordForm() {
   const searchParams = useSearchParams();
   const prefilledEmail = searchParams?.get("email") || "";
 
+  const [step, setStep] = useState<"email" | "otp" | "success">("email");
+  const [email, setEmail] = useState(prefilledEmail);
   const [serverError, setServerError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isPermanentPassword, setIsPermanentPassword] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
 
+  // Email form
   const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-    watch,
-  } = useForm<RequestFormData>({
-    resolver: zodResolver(requestSchema),
+    register: registerEmail,
+    handleSubmit: handleSubmitEmail,
+    formState: { errors: emailErrors, isSubmitting: isSubmittingEmail },
+    watch: watchEmail,
+  } = useForm<EmailFormData>({
+    resolver: zodResolver(emailSchema),
     defaultValues: { email: prefilledEmail },
   });
 
-  const emailValue = watch("email");
+  // OTP form
+  const {
+    register: registerOtp,
+    handleSubmit: handleSubmitOtp,
+    formState: { errors: otpErrors, isSubmitting: isSubmittingOtp },
+    reset: resetOtp,
+  } = useForm<OtpFormData>({
+    resolver: zodResolver(otpSchema),
+  });
 
-  const onSubmit = async (data: RequestFormData) => {
+  const emailValue = watchEmail("email");
+
+  const onEmailSubmit = async (data: EmailFormData) => {
     setServerError(null);
-    setSuccessMessage(null);
     setIsPermanentPassword(false);
     setIsBlocked(false);
 
@@ -48,6 +67,7 @@ export function RequestTemporaryPasswordForm() {
         success: boolean;
         message: string;
         eligible?: boolean;
+        requires_otp?: boolean;
       }>("/auth/request-temporary-password", {
         email: data.email.trim().toLowerCase(),
       });
@@ -58,10 +78,8 @@ export function RequestTemporaryPasswordForm() {
         return;
       }
 
-      setSuccessMessage(
-        resp.data.message ||
-          "A fresh temporary password (valid for 24 hours) has been sent to your registered email address."
-      );
+      setEmail(data.email.trim().toLowerCase());
+      setStep("otp");
     } catch (err: any) {
       const status = err?.response?.status;
       const detail = err?.response?.data?.detail || err?.message || "Failed to request temporary password.";
@@ -73,7 +91,49 @@ export function RequestTemporaryPasswordForm() {
     }
   };
 
-  if (successMessage) {
+  const onOtpSubmit = async (data: OtpFormData) => {
+    setServerError(null);
+
+    try {
+      const resp = await apiClient.post<{
+        success: boolean;
+        message: string;
+      }>("/auth/verify-temporary-password-otp", {
+        email: email.trim().toLowerCase(),
+        otp: data.otp.trim(),
+      });
+
+      setSuccessMessage(
+        resp.data.message ||
+          "Identity verified! A fresh temporary password (valid for 24 hours) has been sent to your email address."
+      );
+      setStep("success");
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || "Failed to verify code.";
+      setServerError(detail);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setIsResending(true);
+    setServerError(null);
+    setResendSuccess(false);
+
+    try {
+      await apiClient.post("/auth/request-temporary-password", {
+        email: email.trim().toLowerCase(),
+      });
+      setResendSuccess(true);
+      resetOtp();
+      setTimeout(() => setResendSuccess(false), 5000);
+    } catch (err: any) {
+      setServerError(err?.response?.data?.detail || "Failed to resend code.");
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  if (step === "success") {
     return (
       <div className="card-surface p-6 sm:p-8 space-y-6 text-center">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
@@ -94,7 +154,7 @@ export function RequestTemporaryPasswordForm() {
         </div>
 
         <Link
-          href={`/login${emailValue ? `?email=${encodeURIComponent(emailValue)}` : ""}`}
+          href={`/login${email ? `?email=${encodeURIComponent(email)}` : ""}`}
           className="inline-flex items-center justify-center w-full px-4 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition shadow-sm"
         >
           Proceed to Log In →
@@ -103,6 +163,102 @@ export function RequestTemporaryPasswordForm() {
     );
   }
 
+  if (step === "otp") {
+    return (
+      <div className="card-surface p-6 sm:p-8 space-y-6">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => {
+              setStep("email");
+              setServerError(null);
+            }}
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Back
+          </button>
+          <span className="text-xs text-muted-foreground font-mono">{email}</span>
+        </div>
+
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+            <KeyRound className="h-3.5 w-3.5" /> Step 2: Verify Identity
+          </div>
+          <h2 className="text-xl font-bold">Enter Verification Code</h2>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            We sent a 6-digit one-time code to <strong className="text-foreground">{email}</strong>. Enter it below to receive your new temporary password.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmitOtp(onOtpSubmit)} className="space-y-4" noValidate>
+          <div className="space-y-1.5">
+            <label htmlFor="otp" className="text-sm font-medium text-foreground">
+              6-Digit Verification Code
+            </label>
+            <input
+              id="otp"
+              type="text"
+              maxLength={6}
+              placeholder="123456"
+              autoComplete="one-time-code"
+              {...registerOtp("otp")}
+              className={`w-full rounded-xl border bg-background px-4 py-3 text-center font-mono text-xl tracking-widest outline-none transition-all
+                focus:ring-2 focus:ring-primary/20 focus:border-primary
+                ${otpErrors.otp ? "border-destructive" : "border-border"}`}
+            />
+            {otpErrors.otp && (
+              <p className="text-xs text-destructive text-center">{otpErrors.otp.message}</p>
+            )}
+          </div>
+
+          {resendSuccess && (
+            <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-xs text-emerald-600 dark:text-emerald-400 text-center font-medium">
+              ✅ A new verification code has been sent to your email.
+            </div>
+          )}
+
+          {serverError && (
+            <div className="rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 text-xs text-destructive text-center">
+              {serverError}
+            </div>
+          )}
+
+          <Button
+            type="submit"
+            className="w-full btn-amber-glow"
+            size="lg"
+            disabled={isSubmittingOtp}
+          >
+            {isSubmittingOtp ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Verifying & Generating Password...
+              </>
+            ) : (
+              <>
+                Verify & Receive Temporary Password
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </>
+            )}
+          </Button>
+
+          <div className="text-center pt-2">
+            <button
+              type="button"
+              onClick={handleResendOtp}
+              disabled={isResending}
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3 w-3 ${isResending ? "animate-spin" : ""}`} />
+              Didn&apos;t receive code? Resend
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  // Step === "email"
   return (
     <div className="card-surface p-6 sm:p-8 space-y-6">
       <div className="space-y-2">
@@ -112,11 +268,11 @@ export function RequestTemporaryPasswordForm() {
         </div>
         <h2 className="text-xl font-bold">Request a New Temporary Password</h2>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          If your account was approved or reactivated but your 24-hour temporary password has expired, enter your registered email below to receive a fresh one.
+          If your account was approved or reactivated but your 24-hour temporary password has expired, enter your registered email below to receive a verification code.
         </p>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+      <form onSubmit={handleSubmitEmail(onEmailSubmit)} className="space-y-4" noValidate>
         <div className="space-y-1.5">
           <label htmlFor="email" className="text-sm font-medium text-foreground">
             Registered Email Address
@@ -127,15 +283,15 @@ export function RequestTemporaryPasswordForm() {
               type="email"
               placeholder="you@company.com"
               autoComplete="email"
-              {...register("email")}
+              {...registerEmail("email")}
               className={`w-full rounded-xl border bg-background px-4 py-3 pl-10 text-sm outline-none transition-all
                 focus:ring-2 focus:ring-primary/20 focus:border-primary
-                ${errors.email ? "border-destructive" : "border-border"}`}
+                ${emailErrors.email ? "border-destructive" : "border-border"}`}
             />
             <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           </div>
-          {errors.email && (
-            <p className="text-xs text-destructive">{errors.email.message}</p>
+          {emailErrors.email && (
+            <p className="text-xs text-destructive">{emailErrors.email.message}</p>
           )}
         </div>
 
@@ -157,7 +313,7 @@ export function RequestTemporaryPasswordForm() {
         {serverError && isPermanentPassword && (
           <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-4 text-xs text-amber-600 dark:text-amber-400 space-y-2">
             <div className="flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-500" />
               <p className="font-semibold">{serverError}</p>
             </div>
             <Link
@@ -179,16 +335,16 @@ export function RequestTemporaryPasswordForm() {
           type="submit"
           className="w-full btn-amber-glow"
           size="lg"
-          disabled={isSubmitting}
+          disabled={isSubmittingEmail}
         >
-          {isSubmitting ? (
+          {isSubmittingEmail ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Sending Temporary Password...
+              Sending Verification Code...
             </>
           ) : (
             <>
-              Email New Temporary Password
+              Send Verification Code
               <ArrowRight className="h-4 w-4 ml-2" />
             </>
           )}

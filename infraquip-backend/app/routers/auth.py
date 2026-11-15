@@ -259,12 +259,12 @@ async def request_temporary_password(
     background_tasks: BackgroundTasks,
     db: DBSession,
 ):
-    """Request a fresh 24-hour temporary password if previous temporary password has expired or user must change password."""
+    """Request an expiring 6-digit verification code to prove email ownership before temporary password issuance."""
     await check_auth_rate_limit(request, payload.email)
+    import secrets
     from datetime import datetime, timezone, timedelta
-    from app.routers.account_requests import _gen_temp_password
-    from app.services.email_service import send_temporary_password_reissued_email
-    from supabase import create_client
+    from app.models.password_reset_otp import PasswordResetOTP
+    from app.services.email_service import send_temporary_password_otp_email
 
     email_clean = str(payload.email).strip().lower()
     result = await db.execute(select(User).where(User.email == email_clean))
@@ -273,7 +273,8 @@ async def request_temporary_password(
     if not user:
         return {
             "success": True,
-            "message": "If an eligible account with an expired temporary password exists for this email, a new temporary password has been emailed.",
+            "requires_otp": True,
+            "message": "If an eligible account exists for this email, a 6-digit verification code has been sent to your email.",
         }
 
     if user.is_banned:
@@ -282,52 +283,156 @@ async def request_temporary_password(
             detail="Your account is blocked. Please submit an account reactivation request.",
         )
 
+    # Check eligibility: user must have must_change_password=True, or not yet verified (first login pending).
     is_eligible = (
         bool(user.must_change_password)
-        or user.temp_password_expires_at is not None
         or not user.is_verified
     )
     if not is_eligible:
         return {
             "success": False,
             "eligible": False,
-            "message": "This account already has an active permanent password. Please use 'Forgot Password' on the login page to reset your password.",
+            "requires_otp": False,
+            "message": "This account already has an active permanent password. Please use 'Forgot Password' on the login page to reset your credentials.",
         }
 
-    temp_password = _gen_temp_password()
-    supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
-    if user.auth_uid:
-        try:
-            supabase.auth.admin.update_user_by_id(
-                str(user.auth_uid),
-                {"password": temp_password},
-            )
-        except Exception as e:
-            logger.error("Failed to update Supabase password for %s: %s", user.email, e)
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Authentication service temporarily unavailable. Please try again.",
-            )
-    else:
-        try:
-            resp = supabase.auth.admin.create_user({
-                "email": user.email,
-                "password": temp_password,
-                "email_confirm": True,
-            })
-            user.auth_uid = uuid.UUID(resp.user.id)
-        except Exception as e:
-            logger.error("Failed to create Supabase auth user for %s: %s", user.email, e)
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Authentication service temporarily unavailable. Please try again.",
-            )
+    # Invalidate previous unused OTPs for this email
+    prior_otps = await db.execute(
+        select(PasswordResetOTP).where(
+            PasswordResetOTP.email == email_clean,
+            PasswordResetOTP.is_used == False,
+        )
+    )
+    for prior in prior_otps.scalars().all():
+        prior.is_used = True
 
+    # Generate 6-digit numeric OTP valid for 15 minutes
+    otp_code = "".join(secrets.choice("0123456789") for _ in range(6))
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+    otp_entry = PasswordResetOTP(
+        id=uuid.uuid4(),
+        email=email_clean,
+        otp=otp_code,
+        expires_at=expires_at,
+        is_used=False,
+    )
+    db.add(otp_entry)
+    await db.commit()
+
+    background_tasks.add_task(
+        send_temporary_password_otp_email,
+        email_clean,
+        otp_code,
+        user.full_name,
+    )
+
+    return {
+        "success": True,
+        "eligible": True,
+        "requires_otp": True,
+        "message": "A 6-digit verification code has been sent to your email. Enter the code to receive your temporary password.",
+    }
+
+
+# ── POST /auth/verify-temporary-password-otp ───────────────────
+class VerifyTemporaryPasswordOtpPayload(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+@router.post("/verify-temporary-password-otp", status_code=status.HTTP_200_OK)
+async def verify_temporary_password_otp(
+    request: Request,
+    payload: VerifyTemporaryPasswordOtpPayload,
+    background_tasks: BackgroundTasks,
+    db: DBSession,
+):
+    """Verify proof of email ownership using OTP, then safely issue a fresh 24h temporary password."""
+    await check_auth_rate_limit(request, payload.email)
+    from datetime import datetime, timezone, timedelta
+    from app.models.password_reset_otp import PasswordResetOTP
+    from app.routers.account_requests import _gen_temp_password
+    from app.services.email_service import send_temporary_password_reissued_email
+    from app.services.auth_sync import sync_supabase_user_password
+    from supabase import create_client
+
+    email_clean = str(payload.email).strip().lower()
+
+    # 1. Verify OTP record
+    result = await db.execute(
+        select(PasswordResetOTP)
+        .where(
+            PasswordResetOTP.email == email_clean,
+            PasswordResetOTP.otp == payload.otp.strip(),
+            PasswordResetOTP.is_used == False,
+        )
+        .order_by(PasswordResetOTP.created_at.desc())
+        .with_for_update()
+    )
+    otp_record = result.scalars().first()
+    if not otp_record or not otp_record.is_valid():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code. Please request a new one.",
+        )
+
+    # 2. Find User
+    user_result = await db.execute(select(User).where(User.email == email_clean))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    if user.is_banned:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is blocked. Please submit an account reactivation request.",
+        )
+
+    # 3. Mark OTP as used
+    otp_record.is_used = True
+
+    # 4. Generate fresh 24h temporary password
+    temp_password = _gen_temp_password()
+
+    # 5. Sync/reconcile with Supabase Auth
+    supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+    try:
+        auth_uid, was_created = sync_supabase_user_password(
+            supabase,
+            user.email,
+            temp_password,
+            current_auth_uid=user.auth_uid,
+        )
+    except Exception as e:
+        logger.error("Failed to sync Supabase password for %s: %s", user.email, e)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Authentication service temporarily unavailable. Please try again.",
+        )
+
+    # 6. Update user record
+    user.auth_uid = auth_uid
     user.failed_login_attempts = 0
     user.must_change_password = True
     user.temp_password_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
-    await db.commit()
 
+    # 7. Commit with compensating rollback if local commit fails
+    try:
+        await db.commit()
+    except Exception as commit_err:
+        await db.rollback()
+        if was_created:
+            try:
+                supabase.auth.admin.delete_user(str(auth_uid))
+            except Exception as cleanup_err:
+                logger.warning("Failed to clean up orphan Supabase user: %s", cleanup_err)
+        logger.error("Commit failed during temporary password issuance for %s: %s", user.email, commit_err)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to commit credentials update. Please try again.",
+        )
+
+    # 8. Dispatch temporary password email in background
     background_tasks.add_task(
         send_temporary_password_reissued_email,
         user.email,
@@ -337,7 +442,7 @@ async def request_temporary_password(
 
     return {
         "success": True,
-        "message": "A fresh temporary password (valid for 24 hours) has been sent to your registered email address.",
+        "message": "Identity verified! A fresh temporary password (valid for 24 hours) has been sent to your email address.",
     }
 
 
@@ -627,40 +732,43 @@ async def reset_password(
         raise HTTPException(status_code=404, detail="User not found.")
 
     # 4. Update in Supabase Auth
+    from app.services.auth_sync import sync_supabase_user_password
     supabase = get_supabase()
-    supabase_uid = str(user.auth_uid) if user.auth_uid else None
+    try:
+        auth_uid, was_created = sync_supabase_user_password(
+            supabase,
+            user.email,
+            payload.new_password,
+            current_auth_uid=user.auth_uid,
+        )
+        user.auth_uid = auth_uid
+    except Exception as e:
+        logger.error(f"Supabase password reset failed for {user.email}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Authentication service temporarily unavailable. Please try again.",
+        )
 
-    if supabase_uid:
-        try:
-            supabase.auth.admin.update_user_by_id(
-                supabase_uid,
-                {"password": payload.new_password},
-            )
-        except Exception as e:
-            logger.error(f"Supabase password reset failed for {user.email}: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Authentication service temporarily unavailable. Please try again.",
-            )
-    else:
-        try:
-            resp = supabase.auth.admin.create_user({
-                "email": user.email,
-                "password": payload.new_password,
-                "email_confirm": True,
-            })
-            user.auth_uid = uuid.UUID(resp.user.id)
-        except Exception as e:
-            logger.error(f"Supabase user creation during reset failed for {user.email}: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Authentication service temporarily unavailable. Please try again.",
-            )
-
-    # 5. Mark OTP as used and clear must_change_password
+    # 5. Mark OTP as used, clear must_change_password & temp_password_expires_at
     otp_record.is_used = True
     user.must_change_password = False
-    await db.commit()
+    user.temp_password_expires_at = None
+    user.failed_login_attempts = 0
+
+    try:
+        await db.commit()
+    except Exception as commit_err:
+        await db.rollback()
+        if was_created:
+            try:
+                supabase.auth.admin.delete_user(str(auth_uid))
+            except Exception as cleanup_err:
+                logger.warning("Failed to clean up orphan Supabase user %s: %s", auth_uid, cleanup_err)
+        logger.error("Commit failed during password reset for %s: %s", user.email, commit_err)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update password. Please try again.",
+        )
 
     return {"message": "Password reset successfully. You can now log in with your new password."}
 

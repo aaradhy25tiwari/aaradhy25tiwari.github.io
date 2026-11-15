@@ -46,6 +46,7 @@ export function LoginForm() {
   const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null);
   const [attemptedEmail, setAttemptedEmail] = useState("");
   const [isTempPasswordExpired, setIsTempPasswordExpired] = useState(false);
+  const [isPermanentPassword, setIsPermanentPassword] = useState(false);
   const [isRequestingTempPwd, setIsRequestingTempPwd] = useState(false);
   const [tempPwdSentMsg, setTempPwdSentMsg] = useState<string | null>(null);
 
@@ -53,12 +54,26 @@ export function LoginForm() {
     if (!attemptedEmail) return;
     setIsRequestingTempPwd(true);
     setServerError(null);
+    setIsPermanentPassword(false);
     try {
       const apiClient = (await import("@/lib/api/client")).default;
-      const { data } = await apiClient.post<{ message: string }>("/auth/request-temporary-password", {
+      const { data } = await apiClient.post<{
+        success: boolean;
+        message: string;
+        eligible?: boolean;
+        requires_otp?: boolean;
+      }>("/auth/request-temporary-password", {
         email: attemptedEmail,
       });
-      setTempPwdSentMsg(data.message || "A new 24-hour temporary password has been emailed to you!");
+
+      if (data.eligible === false) {
+        setIsPermanentPassword(true);
+        setServerError(data.message);
+        setTempPwdSentMsg(null);
+        return;
+      }
+
+      setTempPwdSentMsg(data.message || "A verification code has been sent to your email.");
     } catch (err: any) {
       setServerError(err?.response?.data?.detail || "Failed to request new temporary password.");
     } finally {
@@ -76,6 +91,7 @@ export function LoginForm() {
     setServerError(null);
     setIsBlocked(false);
     setIsTempPasswordExpired(false);
+    setIsPermanentPassword(false);
     setTempPwdSentMsg(null);
     
     // Check if it's an email (has @) or a phone number
@@ -295,7 +311,22 @@ export function LoginForm() {
           </div>
         )}
 
-        {isTempPasswordExpired && (
+        {isPermanentPassword && (
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-4 text-xs text-amber-600 dark:text-amber-400 space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-500" />
+              <p className="font-semibold">{serverError}</p>
+            </div>
+            <Link
+              href={`/forgot-password${attemptedEmail ? `?email=${encodeURIComponent(attemptedEmail)}` : ""}`}
+              className="inline-flex items-center gap-1 font-semibold text-primary underline hover:opacity-80"
+            >
+              Go to Reset Password (OTP) →
+            </Link>
+          </div>
+        )}
+
+        {!isPermanentPassword && isTempPasswordExpired && (
           <div className="rounded-xl bg-amber-500/10 border border-amber-500/25 p-4 text-xs text-amber-600 dark:text-amber-400 space-y-3">
             <div className="flex items-start gap-2.5">
               <Clock className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-500" />
@@ -328,14 +359,20 @@ export function LoginForm() {
                 </Link>
               </div>
             ) : (
-              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-emerald-600 dark:text-emerald-400 font-medium">
-                ✅ {tempPwdSentMsg} Check your inbox and spam folder, then log in.
+              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-emerald-600 dark:text-emerald-400 font-medium space-y-2">
+                <p>✅ {tempPwdSentMsg} Check your inbox and spam folder.</p>
+                <Link
+                  href={`/request-temporary-password${attemptedEmail ? `?email=${encodeURIComponent(attemptedEmail)}` : ""}`}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300 underline hover:opacity-80"
+                >
+                  Enter Verification Code →
+                </Link>
               </div>
             )}
           </div>
         )}
 
-        {serverError && !isBlocked && !isTempPasswordExpired && attemptsRemaining !== null && attemptsRemaining < 4 && (
+        {serverError && !isBlocked && !isTempPasswordExpired && !isPermanentPassword && attemptsRemaining !== null && attemptsRemaining < 4 && (
           <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3.5 text-xs text-amber-500 flex items-start gap-2.5">
             <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-500" />
             <div className="space-y-1">
@@ -347,7 +384,7 @@ export function LoginForm() {
           </div>
         )}
 
-        {serverError && !isBlocked && !isTempPasswordExpired && (attemptsRemaining === null || attemptsRemaining >= 4) && (
+        {serverError && !isBlocked && !isTempPasswordExpired && !isPermanentPassword && (attemptsRemaining === null || attemptsRemaining >= 4) && (
           <div className="rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
             {serverError}
           </div>
