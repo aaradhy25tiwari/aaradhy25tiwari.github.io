@@ -68,9 +68,16 @@ export function EnquiryFormPage({ machineId }: { machineId: string }) {
   const mutation = useMutation({
     mutationFn: async (payload: FormData) => {
       const isRent = payload.requirement_type === "rent";
-      const val = isRent && payload.duration_value ? parseInt(payload.duration_value, 10) : undefined;
+      let val: number | undefined = undefined;
+      if (isRent && payload.duration_value !== undefined && payload.duration_value !== "") {
+        const rawNum = typeof payload.duration_value === "number" ? payload.duration_value : Number(payload.duration_value);
+        if (!Number.isFinite(rawNum) || !Number.isInteger(rawNum) || rawNum <= 0) {
+          throw new Error("Rental duration must be a positive integer.");
+        }
+        val = rawNum;
+      }
       const mult = payload.duration_unit === "months" ? 30 : payload.duration_unit === "weeks" ? 7 : 1;
-      const required_duration_days = isRent && val ? val * mult : undefined;
+      const required_duration_days = isRent && val !== undefined ? val * mult : undefined;
 
       const res = await apiClient.post<{ id: string; enquiry_number?: string; message: string }>("/enquiries", {
         machine_id: machineId,

@@ -56,6 +56,7 @@ export function HeroSection() {
       const matched = apiCategories.find((c) => c.name.toLowerCase() === category.toLowerCase());
       params.set("category", matched?.name || category.toLowerCase());
     }
+    params.set("listing_type", "rent");
     
     router.push(`/machines?${params.toString()}`);
   };

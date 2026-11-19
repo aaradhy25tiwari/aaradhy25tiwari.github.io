@@ -59,6 +59,8 @@ async def lifespan(app: FastAPI):
         from app.database import engine
         from sqlalchemy import text
         async with engine.begin() as conn:
+            await conn.execute(text("SET LOCAL lock_timeout = '2s';"))
+            await conn.execute(text("SET LOCAL statement_timeout = '5s';"))
             await conn.execute(text("ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS enquiry_number VARCHAR(50);"))
             await conn.execute(text("ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS duration_unit VARCHAR(20);"))
             await conn.execute(text("ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS duration_value INTEGER;"))
@@ -67,6 +69,48 @@ async def lifespan(app: FastAPI):
         logger.info("Enquiries schema columns verified/updated.")
     except Exception as e:
         logger.warning(f"Auto-schema check note: {e}")
+        # Verify required columns and unique index are present before permitting startup
+        try:
+            from app.database import engine
+            from sqlalchemy import text
+            async with engine.connect() as check_conn:
+                res_cols = await check_conn.execute(
+                    text("""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = 'enquiries'
+                          AND column_name IN ('enquiry_number', 'duration_unit', 'duration_value', 'pincode');
+                    """)
+                )
+                cols = {row[0] for row in res_cols.fetchall()}
+                required_cols = {"enquiry_number", "duration_unit", "duration_value", "pincode"}
+
+                res_idx = await check_conn.execute(
+                    text("""
+                        SELECT indexname
+                        FROM pg_indexes
+                        WHERE tablename = 'enquiries'
+                          AND indexname = 'idx_enquiries_enquiry_number';
+                    """)
+                )
+                has_index = res_idx.scalar_one_or_none() is not None
+
+                if cols != required_cols or not has_index:
+                    missing = required_cols - cols
+                    logger.error(
+                        f"Enquiries schema incompatible after failed migration: missing_columns={missing}, has_index={has_index}"
+                    )
+                    raise RuntimeError(
+                        f"Enquiries schema is incompatible and auto-migration failed: {e}"
+                    ) from e
+                logger.info("Enquiries schema confirmed compatible despite migration note.")
+        except RuntimeError:
+            raise
+        except Exception as check_err:
+            logger.error(f"Failed to verify enquiries schema compatibility: {check_err}")
+            raise RuntimeError(
+                f"Cannot verify database schema compatibility after migration failure: {e}"
+            ) from check_err
 
     ping_task = asyncio.create_task(self_ping())
     yield

@@ -94,15 +94,26 @@ apiClient.interceptors.response.use(
     const originalConfig = error.config as (AxiosRequestConfig & { _retry?: boolean }) | undefined;
 
     // Token expired / Unauthorized — attempt single-flight refresh
-    if (status === 401 && originalConfig && !originalConfig._retry) {
-      originalConfig._retry = true;
-      const newToken = await getRefreshedToken();
-      if (newToken) {
-        originalConfig.headers = {
-          ...originalConfig.headers,
-          Authorization: `Bearer ${newToken}`,
-        };
-        return apiClient(originalConfig);
+    if (status === 401) {
+      if (originalConfig && !originalConfig._retry) {
+        originalConfig._retry = true;
+        const newToken = await getRefreshedToken();
+        if (newToken) {
+          originalConfig.headers = {
+            ...originalConfig.headers,
+            Authorization: `Bearer ${newToken}`,
+          };
+          return apiClient(originalConfig);
+        }
+      } else if (originalConfig?._retry) {
+        // Terminal 401: user account rejected even with refreshed session
+        try {
+          const supabase = getSupabaseClient();
+          await supabase.auth.signOut({ scope: "local" });
+        } catch {
+          /* ignore */
+        }
+        redirectIfProtectedPath();
       }
     }
 
@@ -120,7 +131,13 @@ apiClient.interceptors.response.use(
       message = "Request timed out. Please try again.";
     }
 
-    return Promise.reject(new Error(message));
+    const normalizedError = Object.assign(new Error(message), {
+      response: error.response,
+      status: status,
+      code: error.code,
+    });
+
+    return Promise.reject(normalizedError);
   }
 );
 

@@ -19,17 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-function getSecureRandomInt(max: number): number {
-  const array = new Uint32Array(1);
-  const limit = Math.floor(0x100000000 / max) * max;
-  let val: number;
-  do {
-    crypto.getRandomValues(array);
-    val = array[0];
-  } while (val >= limit);
-  return val % max;
-}
+import { TempPasswordControl, validateTempPassword } from "@/components/shared/TempPasswordControl";
 
 // ── Types ──────────────────────────────────────────────────────
 type RequestStatus = "pending" | "approved" | "rejected";
@@ -160,46 +150,13 @@ function ApproveModal({
 }) {
   const [mode, setMode] = useState<"auto" | "manual">("auto");
   const [manualPassword, setManualPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-
-  const generateRandomPassword = () => {
-    const uppers = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-    const lowers = "abcdefghjkmnpqrstuvwxyz";
-    const digits = "23456789";
-    const specials = "@#$!%*?";
-    const all = uppers + lowers + digits + specials;
-    const parts = [
-      uppers[getSecureRandomInt(uppers.length)],
-      uppers[getSecureRandomInt(uppers.length)],
-      lowers[getSecureRandomInt(lowers.length)],
-      lowers[getSecureRandomInt(lowers.length)],
-      digits[getSecureRandomInt(digits.length)],
-      digits[getSecureRandomInt(digits.length)],
-      specials[getSecureRandomInt(specials.length)],
-      specials[getSecureRandomInt(specials.length)],
-    ];
-    while (parts.length < 12) {
-      parts.push(all[getSecureRandomInt(all.length)]);
-    }
-    for (let i = parts.length - 1; i > 0; i--) {
-      const j = getSecureRandomInt(i + 1);
-      [parts[i], parts[j]] = [parts[j], parts[i]];
-    }
-    setManualPassword(parts.join(""));
-    setShowPassword(true);
-  };
-
-  const hasLength = manualPassword.length >= 8;
-  const hasUpper = /[A-Z]/.test(manualPassword);
-  const hasLower = /[a-z]/.test(manualPassword);
-  const hasNumber = /[0-9]/.test(manualPassword);
-  const isManualValid = hasLength && hasUpper && hasLower && hasNumber;
+  const validation = validateTempPassword(manualPassword);
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (mode === "manual") {
-      if (!isManualValid || loading) return;
-      onConfirm(manualPassword.trim());
+      if (!validation.isValid || loading) return;
+      onConfirm(validation.trimmed);
     } else {
       if (loading) return;
       onConfirm(undefined);
@@ -253,115 +210,15 @@ function ApproveModal({
           )}
         </div>
 
-        {/* Mode Selector */}
-        <div className="space-y-2">
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Temporary Password Generation
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <button
-              type="button"
-              onClick={() => setMode("auto")}
-              className={cn(
-                "flex flex-col text-left p-3 rounded-xl border text-xs transition",
-                mode === "auto"
-                  ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary"
-                  : "border-border bg-background hover:bg-muted/50 text-muted-foreground"
-              )}
-            >
-              <span className="font-semibold text-foreground flex items-center justify-between">
-                Auto-generate
-                {mode === "auto" && <span className="h-2 w-2 rounded-full bg-primary" />}
-              </span>
-              <span className="mt-1 text-[11px] leading-relaxed">
-                Creates a secure 12-char password automatically.
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setMode("manual");
-                if (!manualPassword) generateRandomPassword();
-              }}
-              className={cn(
-                "flex flex-col text-left p-3 rounded-xl border text-xs transition",
-                mode === "manual"
-                  ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary"
-                  : "border-border bg-background hover:bg-muted/50 text-muted-foreground"
-              )}
-            >
-              <span className="font-semibold text-foreground flex items-center justify-between">
-                Set Manually
-                {mode === "manual" && <span className="h-2 w-2 rounded-full bg-primary" />}
-              </span>
-              <span className="mt-1 text-[11px] leading-relaxed">
-                Provide or customize a specific temporary password.
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {/* Manual Password Input (when mode === "manual") */}
-        {mode === "manual" && (
-          <div className="space-y-3 pt-1 animate-in fade-in">
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                  <Key className="h-3.5 w-3.5 text-primary" />
-                  Manual Temporary Password
-                </label>
-                <button
-                  type="button"
-                  onClick={generateRandomPassword}
-                  className="text-[11px] text-primary hover:underline flex items-center gap-1 font-medium"
-                >
-                  <Sparkles className="h-3 w-3" /> Auto-suggest strong
-                </button>
-              </div>
-
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={manualPassword}
-                  onChange={(e) => setManualPassword(e.target.value)}
-                  placeholder="Enter temporary password..."
-                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm font-mono outline-none transition focus:ring-2 focus:ring-primary/20 focus:border-primary pr-20"
-                />
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition"
-                    title={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Validation Checklist */}
-            <div className="grid grid-cols-2 gap-1.5 text-[11px] bg-muted/30 p-2.5 rounded-lg border border-border/50">
-              <div className={cn("flex items-center gap-1.5", hasLength ? "text-emerald-500 font-medium" : "text-muted-foreground")}>
-                <Check className={cn("h-3 w-3", hasLength ? "text-emerald-500" : "opacity-40")} />
-                8+ characters
-              </div>
-              <div className={cn("flex items-center gap-1.5", hasUpper ? "text-emerald-500 font-medium" : "text-muted-foreground")}>
-                <Check className={cn("h-3 w-3", hasUpper ? "text-emerald-500" : "opacity-40")} />
-                1 uppercase letter
-              </div>
-              <div className={cn("flex items-center gap-1.5", hasLower ? "text-emerald-500 font-medium" : "text-muted-foreground")}>
-                <Check className={cn("h-3 w-3", hasLower ? "text-emerald-500" : "opacity-40")} />
-                1 lowercase letter
-              </div>
-              <div className={cn("flex items-center gap-1.5", hasNumber ? "text-emerald-500 font-medium" : "text-muted-foreground")}>
-                <Check className={cn("h-3 w-3", hasNumber ? "text-emerald-500" : "opacity-40")} />
-                1 number (0-9)
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Shared Temporary Password Control */}
+        <TempPasswordControl
+          mode={mode}
+          onModeChange={setMode}
+          manualPassword={manualPassword}
+          onManualPasswordChange={setManualPassword}
+          inputId="approve-manual-password-input"
+          disabled={loading}
+        />
 
         {/* Notice */}
         <p className="text-[11px] text-muted-foreground">
@@ -383,7 +240,7 @@ function ApproveModal({
           </Button>
           <Button
             className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
-            disabled={loading || (mode === "manual" && !isManualValid)}
+            disabled={loading || (mode === "manual" && !validation.isValid)}
             onClick={handleSubmit}
           >
             {loading ? (

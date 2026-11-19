@@ -9,6 +9,7 @@ from typing import Optional, List, Union
 from datetime import datetime, date
 from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload, joinedload
 from pydantic import BaseModel, Field
 
@@ -173,10 +174,11 @@ async def create_enquiry(
             v_res = await db.execute(select(VendorProfile.company_name).where(VendorProfile.user_id == current_user.id))
             customer_company = v_res.scalar_one_or_none()
 
-    # Calculate required duration in days from duration_value and duration_unit if not explicitly given
+    # Calculate required duration in days normalized from duration_value and duration_unit
     duration_days = payload.required_duration_days
-    if not duration_days and payload.duration_value:
-        multiplier = 30 if payload.duration_unit == "months" else 7 if payload.duration_unit == "weeks" else 1
+    if payload.duration_value is not None:
+        unit = (payload.duration_unit or "days").lower()
+        multiplier = 30 if unit == "months" else 7 if unit == "weeks" else 1
         duration_days = payload.duration_value * multiplier
 
     # Parse required_from date safely for asyncpg
@@ -198,40 +200,55 @@ async def create_enquiry(
         except ValueError:
             req_type = RequirementType.rent
 
-    # Generate unique human-readable enquiry number
-    enquiry_number = None
+    # Allocate unique enquiry_number and insert using savepoint to recover from collision
+    enquiry = None
     for _ in range(5):
         candidate = _generate_enquiry_number()
         try:
-            exists = await db.execute(select(Enquiry.id).where(Enquiry.enquiry_number == candidate))
-            if not exists.scalar_one_or_none():
-                enquiry_number = candidate
-                break
-        except Exception as ex:
-            logger.warning(f"Could not check uniqueness of enquiry_number against DB: {ex}")
-            enquiry_number = candidate
+            async with db.begin_nested():
+                enquiry = Enquiry(
+                    id=uuid.uuid4(),
+                    enquiry_number=candidate,
+                    customer_id=current_user.id,
+                    vendor_id=vendor_uuid,
+                    machine_id=machine_uuid,
+                    requirement_type=req_type,
+                    customer_company=customer_company,
+                    required_from=req_date,
+                    duration_unit=payload.duration_unit,
+                    duration_value=payload.duration_value,
+                    required_duration_days=duration_days,
+                    location_of_use=payload.location_of_use,
+                    pincode=payload.pincode,
+                    message=payload.message,
+                    status=EnquiryStatus.pending,
+                )
+                db.add(enquiry)
+                await db.flush()
+            # Successfully flushed with candidate number
             break
+        except IntegrityError as ie:
+            orig = getattr(ie, "orig", None)
+            constraint_name = getattr(orig, "constraint_name", None)
+            if not constraint_name and hasattr(orig, "__cause__") and orig.__cause__:
+                constraint_name = getattr(orig.__cause__, "constraint_name", None)
 
-    enquiry = Enquiry(
-        id=uuid.uuid4(),
-        enquiry_number=enquiry_number,
-        customer_id=current_user.id,
-        vendor_id=vendor_uuid,
-        machine_id=machine_uuid,
-        requirement_type=req_type,
-        customer_company=customer_company,
-        required_from=req_date,
-        duration_unit=payload.duration_unit,
-        duration_value=payload.duration_value,
-        required_duration_days=duration_days,
-        location_of_use=payload.location_of_use,
-        pincode=payload.pincode,
-        message=payload.message,
-        status=EnquiryStatus.pending,
-    )
-    db.add(enquiry)
+            if constraint_name == "idx_enquiries_enquiry_number":
+                logger.warning(
+                    f"Enquiry number collision on constraint '{constraint_name}' for candidate {candidate}, "
+                    "retrying with savepoint rollback..."
+                )
+                enquiry = None
+                continue
+            raise
 
-    # Increment enquiries count on machine
+    if not enquiry:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not generate unique enquiry number. Please try again.",
+        )
+
+    # Increment enquiries count on machine only once for valid inserted enquiry
     if machine:
         await db.execute(
             update(Machine).where(Machine.id == machine.id)

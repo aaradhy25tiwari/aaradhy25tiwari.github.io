@@ -32,7 +32,7 @@ class Enquiry(Base):
     customer_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
     # ── Enquiry Fields ─────────────────────────────────────────
-    enquiry_number = Column(String(50), unique=True, index=True, nullable=True)
+    enquiry_number = Column(String(50), nullable=True)
     requirement_type = Column(Enum(RequirementType), nullable=False)
     customer_company = Column(String(300), nullable=True)
     required_from = Column(Date, nullable=True)
@@ -68,7 +68,7 @@ class Enquiry(Base):
         Index("idx_enquiries_customer_id", "customer_id"),
         Index("idx_enquiries_machine_id", "machine_id"),
         Index("idx_enquiries_status", "status"),
-        Index("idx_enquiries_enquiry_number", "enquiry_number"),
+        Index("idx_enquiries_enquiry_number", "enquiry_number", unique=True),
     )
 
     def __repr__(self) -> str:

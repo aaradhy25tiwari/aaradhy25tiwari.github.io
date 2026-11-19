@@ -28,13 +28,36 @@ export function useAuth() {
       const { data } = await apiClient.get<User>("/auth/me");
       setState({ user: data, loading: false, error: null });
     } catch (err: any) {
-      // Backend profile fetch failed (likely network timeout or invalid token).
+      const status = err?.status ?? err?.response?.status;
+      // If the backend explicitly rejects the account (401 or 403), perform session cleanup and do not fall back
+      if (status === 401 || status === 403) {
+        try {
+          await supabase.auth.signOut({ scope: "local" });
+        } catch {
+          /* ignore */
+        }
+        setState({ user: null, loading: false, error: null });
+        return;
+      }
+      // Backend profile fetch failed due to network timeout or server error.
       // Fallback: read from local session so we don't log them out if session is still good
       try {
-        const { data: { session } } = await supabase.auth
+        const { data: sessionData, error: sessionError } = await supabase.auth
           .getSession()
-          .catch(() => ({ data: { session: null } }));
+          .catch((e) => ({ data: { session: null }, error: e }));
 
+        if (sessionError) {
+          // A rejected lookup is NOT confirmed session absence.
+          // Preserve any existing authenticated user and expose a recoverable error.
+          setState((prev) => ({
+            user: prev.user,
+            loading: false,
+            error: err?.message || "Session verification error",
+          }));
+          return;
+        }
+
+        const session = sessionData?.session;
         if (session?.user) {
           const sbUser = session.user;
           const meta = sbUser.user_metadata ?? {};
@@ -53,12 +76,17 @@ export function useAuth() {
           });
           return;
         }
+
+        // Confirmed session absence (session is null and no sessionError)
+        setState({ user: null, loading: false, error: null });
       } catch (fallbackErr) {
         console.debug("Local session fallback error:", fallbackErr);
+        setState((prev) => ({
+          user: prev.user,
+          loading: false,
+          error: err?.message || "Session verification error",
+        }));
       }
-      
-      // If we completely failed to get any valid session, clear user state cleanly
-      setState({ user: null, loading: false, error: null });
     }
   }, [supabase.auth]);
 
@@ -72,10 +100,16 @@ export function useAuth() {
       } else if (session) {
         fetchUser();
       } else {
+        // Confirmed session absence
         setState({ user: null, loading: false, error: null });
       }
     }).catch(() => {
-      setState({ user: null, loading: false, error: null });
+      // Inconclusive initial probe: remain in neutral unknown/error state without clearing pre-existing user
+      setState((prev) => ({
+        user: prev.user,
+        loading: false,
+        error: "Failed to initialize session.",
+      }));
     });
 
     // Listen for auth state changes
