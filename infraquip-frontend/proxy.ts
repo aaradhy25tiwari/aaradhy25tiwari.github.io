@@ -9,12 +9,18 @@ const GUEST_ONLY_ROUTES = ["/login", "/register"];
 function isAuthInvalidError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const error = err as { status?: number; code?: string; name?: string; message?: string };
+  const message = (error.message || "").toLowerCase();
+
+  // Configuration errors (e.g. invalid API key) should never invalidate session cookies
+  if (message.includes("api key") || message.includes("invalid api key")) {
+    return false;
+  }
+
   // HTTP 400 or 401 strongly indicates invalid credentials or expired/invalid refresh token
   if (error.status === 400 || error.status === 401) {
     return true;
   }
   const code = (error.code || error.name || "").toLowerCase();
-  const message = (error.message || "").toLowerCase();
   return (
     code.includes("session_not_found") ||
     code.includes("refreshtokennotfound") ||
@@ -26,6 +32,27 @@ function isAuthInvalidError(err: unknown): boolean {
 }
 
 export async function proxy(request: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // Handle missing or placeholder runtime key before authentication to ensure
+  // configuration errors preserve session cookies rather than triggering clearStaleCookies.
+  const isUnconfigured =
+    !supabaseUrl ||
+    !supabaseAnonKey ||
+    supabaseUrl.includes("placeholder") ||
+    supabaseAnonKey.includes("placeholder");
+
+  if (isUnconfigured) {
+    const path = request.nextUrl.pathname;
+    if (PROTECTED_ROUTES.some((route) => path.startsWith(route) || path === route)) {
+      const redirectUrl = new URL("/login", request.url);
+      redirectUrl.searchParams.set("redirectTo", path);
+      return NextResponse.redirect(redirectUrl);
+    }
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
   const deletedCookies = new Set<string>();
 
@@ -58,8 +85,8 @@ export async function proxy(request: NextRequest) {
   };
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
