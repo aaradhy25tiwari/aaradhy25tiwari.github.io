@@ -43,12 +43,12 @@ export function MachineCard({ machine, className, onToggleWishlist }: MachineCar
     <Link
       href={`/machines/${machine.slug}`}
       className={cn(
-        "group flex flex-col bg-card border border-border rounded-xl overflow-hidden hover:border-primary/50 transition-colors relative",
+        "group flex flex-col h-full bg-card border border-border rounded-xl overflow-hidden hover:border-primary/50 transition-colors relative",
         className
       )}
     >
       {/* Image Container */}
-      <div className="relative aspect-[4/3] w-full bg-muted overflow-hidden">
+      <div className="relative aspect-[4/3] w-full bg-muted overflow-hidden shrink-0">
         <Image
           src={machine.primary_image?.display_url || fallbackImage}
           alt={machine.title}
@@ -59,7 +59,7 @@ export function MachineCard({ machine, className, onToggleWishlist }: MachineCar
         />
         
         {/* Badges */}
-        <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
+        <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 pointer-events-none">
           {machine.availability ? (
             <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md tracking-wider uppercase shadow-sm">
               Available
@@ -102,42 +102,48 @@ export function MachineCard({ machine, className, onToggleWishlist }: MachineCar
 
       {/* Content */}
       <div className="flex flex-col flex-1 p-4">
-        {/* Title & Location */}
-        <div className="mb-2">
-          <h3 className="font-semibold text-card-foreground line-clamp-1 group-hover:text-primary transition-colors">
-            {machine.title}
-          </h3>
-          <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
-            <MapPin className="w-3.5 h-3.5" />
-            <span className="truncate">
-              {machine.city}, {machine.state}
-              {machine.distance_km && ` • ${Math.round(machine.distance_km)} km away`}
-            </span>
-          </div>
-        </div>
-
-        {/* Quick Specs */}
-        <div className="flex flex-wrap gap-y-2 gap-x-4 mb-4 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5">
-            <Settings2 className="w-3.5 h-3.5" />
-            <span className="capitalize">{machine.condition}</span>
-          </div>
-          {machine.hmr && (
-            <div className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5" />
-              <span>{machine.hmr} hrs</span>
+        {/* Main Info */}
+        <div className="flex-1">
+          {/* Title & Location */}
+          <div className="mb-2">
+            <h3
+              className="font-semibold text-card-foreground text-sm sm:text-[15px] leading-snug break-words group-hover:text-primary transition-colors min-h-[2.5rem]"
+              title={machine.title}
+            >
+              {machine.title}
+            </h3>
+            <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground">
+              <MapPin className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">
+                {machine.city}, {machine.state}
+                {machine.distance_km && ` • ${Math.round(machine.distance_km)} km away`}
+              </span>
             </div>
-          )}
-          <div className="flex items-center gap-1.5">
-            <span className="font-medium text-foreground px-1.5 py-0.5 bg-muted rounded">
-              {machine.year_of_manufacture}
-            </span>
+          </div>
+
+          {/* Quick Specs */}
+          <div className="flex items-center gap-x-3 gap-y-1.5 my-3 text-xs text-muted-foreground min-h-[24px] flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <Settings2 className="w-3.5 h-3.5 shrink-0" />
+              <span className="capitalize">{machine.condition}</span>
+            </div>
+            {machine.hmr && (
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 shrink-0" />
+                <span>{machine.hmr} hrs</span>
+              </div>
+            )}
+            <div className="flex items-center gap-1.5">
+              <span className="font-medium text-foreground px-1.5 py-0.5 bg-muted rounded text-[11px]">
+                {machine.year_of_manufacture}
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Footer: Price & Vendor */}
-        <div className="mt-auto pt-3 border-t border-border flex flex-wrap items-end justify-between gap-2">
-          <div>
+        <div className="mt-auto pt-3 border-t border-border flex items-end justify-between gap-2 min-h-[52px]">
+          <div className="min-w-0">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-0.5">
               {isRent ? "Rental Rate" : "Asking Price"}
             </p>
@@ -146,22 +152,27 @@ export function MachineCard({ machine, className, onToggleWishlist }: MachineCar
                 {getPriceDisplay()}
               </p>
               {machine.is_negotiable && !machine.contact_for_price && (
-                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 dark:text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 dark:text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded shrink-0">
                   Negotiable
                 </span>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-1.5 max-w-[55%]">
-            <div className="truncate text-right">
-              <p className="text-xs font-medium text-foreground truncate" title={machine.vendor_name || "InfraQuip Verified Partner"}>
-                {machine.vendor_name || "InfraQuip Partner"}
-              </p>
-            </div>
+          {/* Vendor / Verified badge */}
+          <div
+            className={cn(
+              "flex items-center gap-1.5 shrink-0 max-w-[48%] min-w-0 text-xs font-medium",
+              machine.vendor_is_verified ? "text-amber-600 dark:text-amber-400 font-semibold" : "text-muted-foreground"
+            )}
+            title={machine.vendor_name || (machine.vendor_is_verified ? "InfraQuip Verified Partner" : "InfraQuip Partner")}
+          >
+            <span className="truncate">
+              {!machine.vendor_name || machine.vendor_name.toLowerCase().includes("infraquip")
+                ? (machine.vendor_is_verified ? "InfraQuip Verified" : "InfraQuip Partner")
+                : machine.vendor_name}
+            </span>
             {machine.vendor_is_verified && (
-              <span title="InfraQuip Verified Partner" className="inline-flex shrink-0">
-                <BadgeCheck className="w-4 h-4 text-amber-500" />
-              </span>
+              <BadgeCheck className="w-4 h-4 text-amber-500 shrink-0" />
             )}
           </div>
         </div>

@@ -53,6 +53,21 @@ async def self_ping():
 async def lifespan(app: FastAPI):
     """Application startup / shutdown events."""
     logger.info(f"Starting {settings.APP_NAME} [{settings.APP_ENV}]")
+
+    # Safe idempotent migration check for enquiry enhancements
+    try:
+        from app.database import engine
+        from sqlalchemy import text
+        async with engine.begin() as conn:
+            await conn.execute(text("ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS enquiry_number VARCHAR(50);"))
+            await conn.execute(text("ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS duration_unit VARCHAR(20);"))
+            await conn.execute(text("ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS duration_value INTEGER;"))
+            await conn.execute(text("ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS pincode VARCHAR(20);"))
+            await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_enquiries_enquiry_number ON enquiries (enquiry_number);"))
+        logger.info("Enquiries schema columns verified/updated.")
+    except Exception as e:
+        logger.warning(f"Auto-schema check note: {e}")
+
     ping_task = asyncio.create_task(self_ping())
     yield
     logger.info("Shutting down...")

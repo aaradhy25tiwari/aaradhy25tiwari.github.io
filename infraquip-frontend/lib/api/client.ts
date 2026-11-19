@@ -34,46 +34,42 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
-// ── Response Interceptor: normalize errors ────────────────────
-apiClient.interceptors.response.use(
-  (response) => response,
-  async (error: AxiosError<{ detail: string | { msg: string }[] }>) => {
-    const status = error.response?.status;
+// Mutex promise to deduplicate concurrent refresh attempts
+let refreshPromise: Promise<string | null> | null = null;
 
-    // Token expired / Unauthorized — attempt refresh
-    if (status === 401) {
+async function getRefreshedToken(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
       try {
         const supabase = getSupabaseClient();
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        // Only try refreshing if we thought we had a session
-        if (session) {
-          const { data, error: refreshError } = await supabase.auth.refreshSession();
-          
-          if (!refreshError && data.session) {
-            // Retry original request with new token
-            const originalConfig = error.config as AxiosRequestConfig;
-            originalConfig.headers = {
-              ...originalConfig.headers,
-              Authorization: `Bearer ${data.session.access_token}`,
-            };
-            return apiClient(originalConfig);
-          } else {
-            // Refresh failed or token invalid — clean up local state and return to guest home page
-            try {
-              await supabase.auth.signOut({ scope: "local" });
-            } catch {
-              /* ignore */
-            }
-            redirectIfProtectedPath();
-          }
-        } else {
-          // No session exists, but received 401 on a protected page — go to guest home page
+        const { data: { session } } = await supabase.auth
+          .getSession()
+          .catch(() => ({ data: { session: null }, error: null }));
+
+        if (!session) {
           redirectIfProtectedPath();
+          return null;
         }
+
+        const { data, error } = await supabase.auth
+          .refreshSession()
+          .catch((err) => ({ data: { session: null }, error: err }));
+
+        if (!error && data?.session?.access_token) {
+          return data.session.access_token;
+        }
+
+        // Refresh failed or token invalid — clean up session and notify auth subscribers
+        try {
+          await supabase.auth.signOut({ scope: "local" });
+        } catch {
+          /* ignore */
+        }
+
+        redirectIfProtectedPath();
+        return null;
       } catch (e) {
-        // Refresh failed catastrophically (e.g. network failure)
-        console.debug("Session refresh failed", e);
+        console.debug("Session refresh exception caught:", e);
         try {
           const supabase = getSupabaseClient();
           await supabase.auth.signOut({ scope: "local" });
@@ -81,6 +77,32 @@ apiClient.interceptors.response.use(
           /* ignore */
         }
         redirectIfProtectedPath();
+        return null;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+  }
+  return refreshPromise;
+}
+
+// ── Response Interceptor: normalize errors ────────────────────
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError<{ detail: string | { msg: string }[] }>) => {
+    const status = error.response?.status;
+    const originalConfig = error.config as (AxiosRequestConfig & { _retry?: boolean }) | undefined;
+
+    // Token expired / Unauthorized — attempt single-flight refresh
+    if (status === 401 && originalConfig && !originalConfig._retry) {
+      originalConfig._retry = true;
+      const newToken = await getRefreshedToken();
+      if (newToken) {
+        originalConfig.headers = {
+          ...originalConfig.headers,
+          Authorization: `Bearer ${newToken}`,
+        };
+        return apiClient(originalConfig);
       }
     }
 

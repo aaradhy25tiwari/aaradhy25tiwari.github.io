@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -11,13 +11,16 @@ import { Loader2, Send, CheckCircle, ArrowLeft } from "lucide-react";
 import apiClient from "@/lib/api/client";
 import { formatINR, cn, scrollToTop } from "@/lib/utils";
 import type { Machine } from "@/types/machine";
+import { useAuth } from "@/hooks/useAuth";
 
 const schema = z.object({
   requirement_type: z.enum(["rent", "buy"]),
   customer_company: z.string().max(300).optional(),
   required_from: z.string().optional(),
-  required_duration_days: z.string().optional(),
+  duration_unit: z.enum(["days", "weeks", "months"]),
+  duration_value: z.string().optional(),
   location_of_use: z.string().max(200).optional(),
+  pincode: z.string().max(20).optional(),
   message: z.string().max(2000).optional(),
 });
 
@@ -25,7 +28,15 @@ type FormData = z.infer<typeof schema>;
 
 export function EnquiryFormPage({ machineId }: { machineId: string }) {
   const router = useRouter();
+  const { user } = useAuth();
   const [success, setSuccess] = useState(false);
+  const [submittedEnquiryNumber, setSubmittedEnquiryNumber] = useState<string | null>(null);
+
+  const userCompany =
+    user?.customer_profile?.company_name ||
+    user?.broker_profile?.company_name ||
+    user?.vendor_profile?.company_name ||
+    "";
 
   const { data: machine, isLoading } = useQuery<Machine>({
     queryKey: ["machine", machineId],
@@ -36,22 +47,50 @@ export function EnquiryFormPage({ machineId }: { machineId: string }) {
     enabled: !!machineId,
   });
 
-  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<FormData>({
+  const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { requirement_type: "rent" },
+    defaultValues: {
+      requirement_type: "rent",
+      duration_unit: "days",
+      duration_value: "1",
+      customer_company: userCompany,
+    },
   });
+
+  useEffect(() => {
+    if (userCompany) {
+      setValue("customer_company", userCompany, { shouldDirty: false });
+    }
+  }, [userCompany, setValue]);
 
   const reqType = watch("requirement_type");
 
   const mutation = useMutation({
     mutationFn: async (payload: FormData) => {
-      await apiClient.post("/enquiries", {
-        ...payload,
+      const isRent = payload.requirement_type === "rent";
+      const val = isRent && payload.duration_value ? parseInt(payload.duration_value, 10) : undefined;
+      const mult = payload.duration_unit === "months" ? 30 : payload.duration_unit === "weeks" ? 7 : 1;
+      const required_duration_days = isRent && val ? val * mult : undefined;
+
+      const res = await apiClient.post<{ id: string; enquiry_number?: string; message: string }>("/enquiries", {
         machine_id: machineId,
-        vendor_id: machine?.vendor?.id,
+        vendor_id: machine?.vendor?.id && !machine.vendor.id.startsWith("IQ-") ? machine.vendor.id : undefined,
+        requirement_type: payload.requirement_type,
+        customer_company: payload.customer_company || userCompany || undefined,
+        required_from: payload.required_from || undefined,
+        duration_unit: isRent ? payload.duration_unit : undefined,
+        duration_value: isRent ? val : undefined,
+        required_duration_days: isRent ? required_duration_days : undefined,
+        location_of_use: payload.location_of_use || undefined,
+        pincode: payload.pincode || undefined,
+        message: payload.message || undefined,
       });
+      return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data?.enquiry_number) {
+        setSubmittedEnquiryNumber(data.enquiry_number);
+      }
       setSuccess(true);
       scrollToTop();
     },
@@ -74,9 +113,14 @@ export function EnquiryFormPage({ machineId }: { machineId: string }) {
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
             <CheckCircle className="h-8 w-8" />
           </div>
-          <h2 className="mt-6 text-2xl font-semibold">Enquiry Sent!</h2>
+          <h2 className="mt-6 text-2xl font-semibold">Enquiry Submitted!</h2>
+          {submittedEnquiryNumber && (
+            <div className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/10 px-3 py-1 font-mono text-xs font-semibold text-primary">
+              Enquiry Reference: {submittedEnquiryNumber}
+            </div>
+          )}
           <p className="mt-3 text-sm text-muted-foreground">
-            Your enquiry has been sent to the vendor. They will typically respond within 24 hours.
+            Your enquiry has been submitted to the vendor. They will typically respond within 24 hours.
             You can track the status in your dashboard.
           </p>
           <div className="mt-6 flex items-center justify-center gap-3">
@@ -119,7 +163,7 @@ export function EnquiryFormPage({ machineId }: { machineId: string }) {
         )}
 
         <div className="rounded-2xl border border-border bg-card p-8">
-          <h1 className="text-2xl font-semibold">Send Rental Enquiry</h1>
+          <h1 className="text-2xl font-semibold">Submit Rental Enquiry</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Fill in the details below to check availability and request rental terms from the vendor.
           </p>
@@ -149,25 +193,69 @@ export function EnquiryFormPage({ machineId }: { machineId: string }) {
 
             <div className="space-y-2">
               <label htmlFor="customer_company" className="text-sm font-medium">Company Name (optional)</label>
-              <input id="customer_company" {...register("customer_company")} className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" />
+              <input
+                id="customer_company"
+                {...register("customer_company")}
+                placeholder="Your company or business name"
+                className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-4">
               <div className="space-y-2">
                 <label htmlFor="required_from" className="text-sm font-medium">Required From</label>
                 <input id="required_from" type="date" {...register("required_from")} className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" />
               </div>
+
               {reqType === "rent" && (
-                <div className="space-y-2">
-                  <label htmlFor="required_duration_days" className="text-sm font-medium">Duration (days)</label>
-                  <input id="required_duration_days" type="number" min={1} {...register("required_duration_days")} className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label htmlFor="duration_unit" className="text-sm font-medium">Duration Unit</label>
+                    <select
+                      id="duration_unit"
+                      {...register("duration_unit")}
+                      className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20 capitalize"
+                    >
+                      <option value="days">Days</option>
+                      <option value="weeks">Weeks</option>
+                      <option value="months">Months</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label htmlFor="duration_value" className="text-sm font-medium">Duration Value</label>
+                    <input
+                      id="duration_value"
+                      type="number"
+                      min={1}
+                      placeholder="e.g. 1"
+                      {...register("duration_value")}
+                      className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
                 </div>
               )}
             </div>
 
-            <div className="space-y-2">
-              <label htmlFor="location_of_use" className="text-sm font-medium">Location of Use (optional)</label>
-              <input id="location_of_use" {...register("location_of_use")} placeholder="City or project site address" className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-2 sm:col-span-2">
+                <label htmlFor="location_of_use" className="text-sm font-medium">Location of Use (optional)</label>
+                <input
+                  id="location_of_use"
+                  {...register("location_of_use")}
+                  placeholder="City or project site address"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div className="space-y-2 sm:col-span-1">
+                <label htmlFor="pincode" className="text-sm font-medium">Pincode (optional)</label>
+                <input
+                  id="pincode"
+                  {...register("pincode")}
+                  placeholder="e.g. 560001"
+                  maxLength={10}
+                  className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -177,19 +265,19 @@ export function EnquiryFormPage({ machineId }: { machineId: string }) {
 
             {mutation.error && (
               <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                {mutation.error.message}
+                {(mutation.error as any)?.response?.data?.detail || mutation.error.message || "Failed to submit enquiry. Please try again."}
               </div>
             )}
 
             <button
               type="submit"
               disabled={isSubmitting || mutation.isPending}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50 cursor-pointer"
             >
               {isSubmitting || mutation.isPending ? (
-                <><Loader2 className="h-4 w-4 animate-spin" /> Sending...</>
+                <><Loader2 className="h-4 w-4 animate-spin" /> Submitting...</>
               ) : (
-                <><Send className="h-4 w-4" /> Send Enquiry</>
+                <><Send className="h-4 w-4" /> Submit Enquiry</>
               )}
             </button>
           </form>

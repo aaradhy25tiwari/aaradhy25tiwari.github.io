@@ -20,14 +20,18 @@ export interface EnquiryMessage {
 
 export interface Enquiry {
   id: string;
+  enquiry_number?: string;
   machine_id?: string;
   vendor_id: string;
   customer_id: string;
   requirement_type: string;
   customer_company?: string;
   required_from?: string;
+  duration_unit?: string;
+  duration_value?: number;
   required_duration_days?: number;
   location_of_use?: string;
+  pincode?: string;
   message?: string;
   status: string;
   is_read_by_vendor: boolean;

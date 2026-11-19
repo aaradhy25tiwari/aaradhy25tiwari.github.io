@@ -2,8 +2,11 @@
 Enquiries Router — Customer creates enquiry, both parties message
 """
 import uuid
-from typing import Optional, List
-from datetime import datetime
+import secrets
+import string
+import logging
+from typing import Optional, List, Union
+from datetime import datetime, date
 from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload, joinedload
@@ -17,7 +20,16 @@ from app.services.email_service import send_enquiry_received_email
 from app.core.rate_limiter import limiter, get_authenticated_user_key
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+def _generate_enquiry_number() -> str:
+    """Generate a unique human-readable enquiry reference number (e.g., ENQ-20261118-K4X92)."""
+    date_part = datetime.utcnow().strftime("%Y%m%d")
+    rand_part = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(5))
+    return f"ENQ-{date_part}-{rand_part}"
 
 
 class EnquiryCreateRequest(BaseModel):
@@ -26,8 +38,11 @@ class EnquiryCreateRequest(BaseModel):
     requirement_type: str = "rent"  # rent | buy
     customer_company: Optional[str] = Field(None, max_length=300)
     required_from: Optional[str] = None  # ISO date string
+    duration_unit: Optional[str] = Field(None, max_length=20)
+    duration_value: Optional[int] = Field(None, ge=1)
     required_duration_days: Optional[int] = Field(None, ge=1)
     location_of_use: Optional[str] = Field(None, max_length=200)
+    pincode: Optional[str] = Field(None, max_length=20)
     message: Optional[str] = Field(None, max_length=2000)
 
 
@@ -70,10 +85,17 @@ async def create_enquiry(
         raise HTTPException(status_code=403, detail="Vendors cannot send enquiries.")
 
     # Validate machine exists (if provided)
+    machine = None
+    machine_uuid = None
     if payload.machine_id:
+        try:
+            machine_uuid = payload.machine_id if isinstance(payload.machine_id, uuid.UUID) else uuid.UUID(str(payload.machine_id))
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid machine_id format.")
+
         machine_result = await db.execute(
             select(Machine).where(
-                Machine.id == uuid.UUID(payload.machine_id),
+                Machine.id == machine_uuid,
                 Machine.status == MachineStatus.approved,
             )
         )
@@ -81,15 +103,22 @@ async def create_enquiry(
         if not machine:
             raise HTTPException(status_code=404, detail="Listing not found.")
 
+    # Serialize monthly enquiry count and insertion per customer
+    from app.models.user import User
+    await db.execute(
+        select(User.id).where(User.id == current_user.id).with_for_update()
+    )
+
     # Check monthly enquiry limit from subscription
     from app.models.subscription import Subscription
     from sqlalchemy import func
+    from sqlalchemy.orm import selectinload
     sub_result = await db.execute(
         select(Subscription)
-        .options(joinedload(Subscription.plan))
+        .options(selectinload(Subscription.plan))
         .where(Subscription.user_id == current_user.id, Subscription.status == "active")
         .order_by(Subscription.created_at.desc())
-        .with_for_update(of=Subscription)
+        .limit(1)
     )
     sub = sub_result.scalar_one_or_none()
 
@@ -108,46 +137,129 @@ async def create_enquiry(
                 detail=f"You've reached your monthly enquiry limit ({sub.plan.enquiry_limit_monthly}). Upgrade your plan.",
             )
 
-    # Assign vendor id (use admin as fallback if vendor_id is omitted)
+    # Assign vendor id:
+    # 1. If enquiring about a machine, always route to the machine's actual vendor
+    # 2. Otherwise try payload.vendor_id if a valid UUID
+    # 3. Fallback to admin or current user
     vendor_uuid = None
-    if payload.vendor_id:
-        vendor_uuid = uuid.UUID(payload.vendor_id)
-    else:
+    if machine and machine.vendor_id:
+        vendor_uuid = machine.vendor_id
+    elif payload.vendor_id:
+        if isinstance(payload.vendor_id, uuid.UUID):
+            vendor_uuid = payload.vendor_id
+        else:
+            try:
+                vendor_uuid = uuid.UUID(str(payload.vendor_id))
+            except (ValueError, TypeError):
+                vendor_uuid = None
+
+    if not vendor_uuid:
         from app.models.user import User
         admin_res = await db.execute(select(User).where(User.role == UserRole.admin).order_by(User.created_at.asc()).limit(1))
         admin = admin_res.scalar_one_or_none()
         vendor_uuid = admin.id if admin else current_user.id
 
+    # Resolve company name: prefer payload, fallback to profile from login details
+    customer_company = (payload.customer_company or "").strip() or None
+    if not customer_company and current_user:
+        from app.models.user import CustomerProfile, BrokerProfile, VendorProfile
+        if current_user.role == UserRole.customer:
+            c_res = await db.execute(select(CustomerProfile.company_name).where(CustomerProfile.user_id == current_user.id))
+            customer_company = c_res.scalar_one_or_none()
+        elif current_user.role == UserRole.broker:
+            b_res = await db.execute(select(BrokerProfile.company_name).where(BrokerProfile.user_id == current_user.id))
+            customer_company = b_res.scalar_one_or_none()
+        elif current_user.role == UserRole.vendor:
+            v_res = await db.execute(select(VendorProfile.company_name).where(VendorProfile.user_id == current_user.id))
+            customer_company = v_res.scalar_one_or_none()
+
+    # Calculate required duration in days from duration_value and duration_unit if not explicitly given
+    duration_days = payload.required_duration_days
+    if not duration_days and payload.duration_value:
+        multiplier = 30 if payload.duration_unit == "months" else 7 if payload.duration_unit == "weeks" else 1
+        duration_days = payload.duration_value * multiplier
+
+    # Parse required_from date safely for asyncpg
+    req_date = None
+    if payload.required_from:
+        if isinstance(payload.required_from, date):
+            req_date = payload.required_from
+        elif isinstance(payload.required_from, str) and payload.required_from.strip():
+            try:
+                req_date = date.fromisoformat(payload.required_from.strip()[:10])
+            except ValueError:
+                req_date = None
+
+    # Parse requirement_type safely
+    req_type = RequirementType.rent
+    if payload.requirement_type:
+        try:
+            req_type = RequirementType(payload.requirement_type.lower())
+        except ValueError:
+            req_type = RequirementType.rent
+
+    # Generate unique human-readable enquiry number
+    enquiry_number = None
+    for _ in range(5):
+        candidate = _generate_enquiry_number()
+        try:
+            exists = await db.execute(select(Enquiry.id).where(Enquiry.enquiry_number == candidate))
+            if not exists.scalar_one_or_none():
+                enquiry_number = candidate
+                break
+        except Exception as ex:
+            logger.warning(f"Could not check uniqueness of enquiry_number against DB: {ex}")
+            enquiry_number = candidate
+            break
+
     enquiry = Enquiry(
         id=uuid.uuid4(),
+        enquiry_number=enquiry_number,
         customer_id=current_user.id,
         vendor_id=vendor_uuid,
-        machine_id=uuid.UUID(payload.machine_id) if payload.machine_id else None,
-        requirement_type=payload.requirement_type,
-        customer_company=payload.customer_company,
-        required_from=payload.required_from,
-        required_duration_days=payload.required_duration_days,
+        machine_id=machine_uuid,
+        requirement_type=req_type,
+        customer_company=customer_company,
+        required_from=req_date,
+        duration_unit=payload.duration_unit,
+        duration_value=payload.duration_value,
+        required_duration_days=duration_days,
         location_of_use=payload.location_of_use,
+        pincode=payload.pincode,
         message=payload.message,
         status=EnquiryStatus.pending,
     )
     db.add(enquiry)
 
     # Increment enquiries count on machine
-    if payload.machine_id:
+    if machine:
         await db.execute(
             update(Machine).where(Machine.id == machine.id)
             .values(enquiries_count=Machine.enquiries_count + 1)
         )
 
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        logger.exception(f"Failed to commit enquiry to database: {exc}")
+        err_msg = str(exc)
+        if "column" in err_msg.lower() and ("does not exist" in err_msg.lower() or "undefined" in err_msg.lower()):
+            raise HTTPException(
+                status_code=500,
+                detail="Database schema updating. Please run 'alembic upgrade head' in backend.",
+            )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database error while saving enquiry: {err_msg[:120]}",
+        )
 
     # Send email notification to vendor in background
     from app.models.user import User
     vendor_result = await db.execute(select(User).where(User.id == vendor_uuid))
     vendor = vendor_result.scalar_one_or_none()
     if vendor:
-        machine_title = machine.title if payload.machine_id else "General Enquiry"
+        machine_title = machine.title if machine else "General Enquiry"
         background_tasks.add_task(
             send_enquiry_received_email,
             vendor.email,
@@ -155,9 +267,14 @@ async def create_enquiry(
             current_user.full_name,
             machine_title,
             f"{settings.ALLOWED_ORIGINS.split(',')[0]}/dashboard/vendor/enquiries/{str(enquiry.id)}",
+            enquiry_number=enquiry.enquiry_number,
         )
 
-    return {"id": str(enquiry.id), "message": "Enquiry sent successfully. The vendor will respond shortly."}
+    return {
+        "id": str(enquiry.id),
+        "enquiry_number": enquiry.enquiry_number,
+        "message": "Enquiry submitted successfully. The vendor will respond shortly.",
+    }
 
 
 # ── POST /enquiries/buy-request ─────────────────────────────────
@@ -307,11 +424,15 @@ async def get_enquiry(request: Request, enquiry_id: str, current_user: CurrentUs
 
     return {
         "id": str(enquiry.id),
+        "enquiry_number": enquiry.enquiry_number,
         "requirement_type": enquiry.requirement_type,
         "customer_company": enquiry.customer_company,
         "required_from": str(enquiry.required_from) if enquiry.required_from else None,
+        "duration_unit": getattr(enquiry, "duration_unit", None),
+        "duration_value": getattr(enquiry, "duration_value", None),
         "required_duration_days": enquiry.required_duration_days,
         "location_of_use": enquiry.location_of_use,
+        "pincode": getattr(enquiry, "pincode", None),
         "message": enquiry.message,
         "status": enquiry.status,
         "created_at": enquiry.created_at.isoformat(),

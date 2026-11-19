@@ -11,11 +11,15 @@ import { useAuth } from "@/hooks/useAuth";
 
 interface EnquiryDetail {
   id: string;
+  enquiry_number?: string;
   requirement_type: string;
   customer_company?: string;
   required_from?: string;
+  duration_unit?: string;
+  duration_value?: number;
   required_duration_days?: number;
   location_of_use?: string;
+  pincode?: string;
   message?: string;
   status: string;
   created_at: string;
@@ -87,7 +91,14 @@ export function EnquiryDetailPage({ enquiryId }: { enquiryId: string }) {
       <div className="rounded-2xl border border-border bg-card p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-semibold">{enquiry.customer_name || "Customer"}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold">{enquiry.customer_name || "Customer"}</h1>
+              {enquiry.enquiry_number && (
+                <span className="font-mono text-xs text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                  {enquiry.enquiry_number}
+                </span>
+              )}
+            </div>
             <p className="mt-1 text-sm text-muted-foreground">
               Re: {enquiry.machine_title || "General Enquiry"}
             </p>
@@ -119,13 +130,18 @@ export function EnquiryDetailPage({ enquiryId }: { enquiryId: string }) {
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Calendar className="h-4 w-4" />
               Needed from {enquiry.required_from}
-              {enquiry.required_duration_days && ` for ${enquiry.required_duration_days} day${enquiry.required_duration_days > 1 ? "s" : ""}`}
+              {(enquiry.duration_value && enquiry.duration_unit)
+                ? ` for ${enquiry.duration_value} ${enquiry.duration_unit}`
+                : enquiry.required_duration_days
+                ? ` for ${enquiry.required_duration_days} day${enquiry.required_duration_days > 1 ? "s" : ""}`
+                : ""}
             </div>
           )}
-          {enquiry.location_of_use && (
+          {(enquiry.location_of_use || enquiry.pincode) && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <MapPin className="h-4 w-4" />
               {enquiry.location_of_use}
+              {enquiry.pincode && ` (PIN: ${enquiry.pincode})`}
             </div>
           )}
         </div>

@@ -33,7 +33,6 @@ import { useAuth } from "@/hooks/useAuth";
 
 const NAV_LINKS = [
   { href: "/machines", label: "Rent Equipment" },
-  { href: "/buy", label: "Buy Equipment" },
   { href: "/login?role=vendor", label: "List Machines", guestOnly: true },
   { href: "/machines/excavators", label: "Excavators" },
   { href: "/machines/cranes", label: "Cranes" },

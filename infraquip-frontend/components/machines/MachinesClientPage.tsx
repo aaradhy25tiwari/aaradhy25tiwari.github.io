@@ -771,12 +771,19 @@ export function MachinesClientPage() {
             {/* Grid / Map */}
             {isLoading ? (
               <div className={viewMode === "grid" ? "grid-listings" : "space-y-4"}>
-                {Array.from({ length: 12 }).map((_, i) => (
-                  <div key={i} className="rounded-2xl border border-border bg-card overflow-hidden">
-                    <div className="skeleton h-48 w-full" />
-                    <div className="p-4 space-y-2">
-                      <div className="skeleton h-4 w-3/4 rounded" />
-                      <div className="skeleton h-3 w-1/2 rounded" />
+                {Array.from({ length: 9 }).map((_, i) => (
+                  <div key={i} className="rounded-xl border border-border bg-card overflow-hidden h-full flex flex-col">
+                    <div className="skeleton aspect-[4/3] w-full shrink-0" />
+                    <div className="p-4 flex-1 flex flex-col justify-between space-y-4">
+                      <div className="space-y-2">
+                        <div className="skeleton h-5 w-3/4 rounded" />
+                        <div className="skeleton h-3.5 w-1/2 rounded" />
+                        <div className="skeleton h-3.5 w-2/3 rounded mt-2" />
+                      </div>
+                      <div className="pt-3 border-t border-border flex items-center justify-between">
+                        <div className="skeleton h-6 w-28 rounded" />
+                        <div className="skeleton h-4 w-20 rounded" />
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -792,8 +799,9 @@ export function MachinesClientPage() {
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: Math.min(i * 0.03, 0.3) }}
+                      className={viewMode === "grid" ? "h-full flex flex-col" : ""}
                     >
-                      <MachineCard machine={machine} />
+                      <MachineCard machine={machine} className={viewMode === "grid" ? "h-full" : ""} />
                     </motion.div>
                   ))}
                 </div>

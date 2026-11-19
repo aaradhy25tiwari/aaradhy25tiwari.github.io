@@ -2,10 +2,31 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Search, CheckCircle2, Ban, UserCheck, Users, Clock, AlertTriangle, KeyRound } from "lucide-react";
+import {
+  Loader2, Search, CheckCircle2, Ban, UserCheck, Users, Clock,
+  AlertTriangle, KeyRound, Key, Eye, EyeOff, Sparkles, Check, XCircle, AlertCircle
+} from "lucide-react";
 import apiClient from "@/lib/api/client";
 import { formatRelativeTime, cn, scrollToTop } from "@/lib/utils";
 import { EmptyState } from "@/components/shared/EmptyState";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+function getSecureRandomInt(max: number): number {
+  const array = new Uint32Array(1);
+  const limit = Math.floor(0x100000000 / max) * max;
+  let val: number;
+  do {
+    crypto.getRandomValues(array);
+    val = array[0];
+  } while (val >= limit);
+  return val % max;
+}
 
 interface AdminUser {
   id: string;
@@ -33,11 +54,265 @@ interface UserListResponse {
   total_pages: number;
 }
 
+// ── Modal for Reactivation / Reissuing Temporary Password with Manual Option ──
+function UserTempPasswordModal({
+  user,
+  action,
+  onClose,
+  onConfirm,
+  loading,
+  error,
+}: {
+  user: AdminUser;
+  action: "reactivate" | "reissue";
+  onClose: () => void;
+  onConfirm: (tempPassword?: string) => void;
+  loading: boolean;
+  error?: string | null;
+}) {
+  const [mode, setMode] = useState<"auto" | "manual">("auto");
+  const [manualPassword, setManualPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
+  const generateRandomPassword = () => {
+    const uppers = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    const lowers = "abcdefghjkmnpqrstuvwxyz";
+    const digits = "23456789";
+    const specials = "@#$!%*?";
+    const all = uppers + lowers + digits + specials;
+    const parts = [
+      uppers[getSecureRandomInt(uppers.length)],
+      uppers[getSecureRandomInt(uppers.length)],
+      lowers[getSecureRandomInt(lowers.length)],
+      lowers[getSecureRandomInt(lowers.length)],
+      digits[getSecureRandomInt(digits.length)],
+      digits[getSecureRandomInt(digits.length)],
+      specials[getSecureRandomInt(specials.length)],
+      specials[getSecureRandomInt(specials.length)],
+    ];
+    while (parts.length < 12) {
+      parts.push(all[getSecureRandomInt(all.length)]);
+    }
+    for (let i = parts.length - 1; i > 0; i--) {
+      const j = getSecureRandomInt(i + 1);
+      [parts[i], parts[j]] = [parts[j], parts[i]];
+    }
+    setManualPassword(parts.join(""));
+    setShowPassword(true);
+  };
+
+  const hasLength = manualPassword.length >= 8;
+  const hasUpper = /[A-Z]/.test(manualPassword);
+  const hasLower = /[a-z]/.test(manualPassword);
+  const hasNumber = /[0-9]/.test(manualPassword);
+  const isManualValid = hasLength && hasUpper && hasLower && hasNumber;
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (mode === "manual") {
+      if (!isManualValid || loading) return;
+      onConfirm(manualPassword.trim());
+    } else {
+      if (loading) return;
+      onConfirm(undefined);
+    }
+  };
+
+  const title = action === "reactivate" ? "Reactivate Account" : "Issue Temporary Password";
+  const desc =
+    action === "reactivate"
+      ? "Reset failed login attempts, restore account access, and deliver temporary credentials."
+      : "Issue a fresh 24-hour temporary login password to the user.";
+
+  return (
+    <Dialog open={true} onOpenChange={(open) => { if (!open && !loading) onClose(); }}>
+      <DialogContent
+        className="w-full max-w-lg p-6 space-y-5 rounded-2xl"
+        onPointerDownOutside={(e) => { if (loading) e.preventDefault(); }}
+        onEscapeKeyDown={(e) => { if (loading) e.preventDefault(); }}
+      >
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary flex-shrink-0">
+              <KeyRound className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle className="font-semibold text-lg">{title}</DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5">{desc}</DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        {/* User info */}
+        <div className="rounded-xl border border-border/80 bg-muted/40 p-3.5 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-sm">{user.full_name || "User"}</span>
+            <span className="text-xs px-2 py-0.5 rounded-full font-medium capitalize bg-primary/10 text-primary">
+              {user.role}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">{user.email}</p>
+        </div>
+
+        {/* Mode Selector */}
+        <div className="space-y-2">
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Temporary Password Generation
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              onClick={() => setMode("auto")}
+              className={cn(
+                "flex flex-col text-left p-3 rounded-xl border text-xs transition",
+                mode === "auto"
+                  ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary"
+                  : "border-border bg-background hover:bg-muted/50 text-muted-foreground"
+              )}
+            >
+              <span className="font-semibold text-foreground flex items-center justify-between">
+                Auto-generate
+                {mode === "auto" && <span className="h-2 w-2 rounded-full bg-primary" />}
+              </span>
+              <span className="mt-1 text-[11px] leading-relaxed">
+                Creates a secure 12-char password automatically.
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMode("manual");
+                if (!manualPassword) generateRandomPassword();
+              }}
+              className={cn(
+                "flex flex-col text-left p-3 rounded-xl border text-xs transition",
+                mode === "manual"
+                  ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary"
+                  : "border-border bg-background hover:bg-muted/50 text-muted-foreground"
+              )}
+            >
+              <span className="font-semibold text-foreground flex items-center justify-between">
+                Set Manually
+                {mode === "manual" && <span className="h-2 w-2 rounded-full bg-primary" />}
+              </span>
+              <span className="mt-1 text-[11px] leading-relaxed">
+                Provide or customize a specific temporary password.
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Manual Input */}
+        {mode === "manual" && (
+          <div className="space-y-3 pt-1 animate-in fade-in">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                  <Key className="h-3.5 w-3.5 text-primary" />
+                  Manual Temporary Password
+                </label>
+                <button
+                  type="button"
+                  onClick={generateRandomPassword}
+                  className="text-[11px] text-primary hover:underline flex items-center gap-1 font-medium"
+                >
+                  <Sparkles className="h-3 w-3" /> Auto-suggest strong
+                </button>
+              </div>
+
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={manualPassword}
+                  onChange={(e) => setManualPassword(e.target.value)}
+                  placeholder="Enter temporary password..."
+                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm font-mono outline-none transition focus:ring-2 focus:ring-primary/20 focus:border-primary pr-20"
+                />
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition"
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Validation Checklist */}
+            <div className="grid grid-cols-2 gap-1.5 text-[11px] bg-muted/30 p-2.5 rounded-lg border border-border/50">
+              <div className={cn("flex items-center gap-1.5", hasLength ? "text-emerald-500 font-medium" : "text-muted-foreground")}>
+                <Check className={cn("h-3 w-3", hasLength ? "text-emerald-500" : "opacity-40")} />
+                8+ characters
+              </div>
+              <div className={cn("flex items-center gap-1.5", hasUpper ? "text-emerald-500 font-medium" : "text-muted-foreground")}>
+                <Check className={cn("h-3 w-3", hasUpper ? "text-emerald-500" : "opacity-40")} />
+                1 uppercase letter
+              </div>
+              <div className={cn("flex items-center gap-1.5", hasLower ? "text-emerald-500 font-medium" : "text-muted-foreground")}>
+                <Check className={cn("h-3 w-3", hasLower ? "text-emerald-500" : "opacity-40")} />
+                1 lowercase letter
+              </div>
+              <div className={cn("flex items-center gap-1.5", hasNumber ? "text-emerald-500 font-medium" : "text-muted-foreground")}>
+                <Check className={cn("h-3 w-3", hasNumber ? "text-emerald-500" : "opacity-40")} />
+                1 number (0-9)
+              </div>
+            </div>
+          </div>
+        )}
+
+        <p className="text-[11px] text-muted-foreground">
+          The temporary password is valid for 24 hours. The user must set their permanent password upon logging in.
+        </p>
+
+        {/* Error Display */}
+        {error && (
+          <div className="rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs p-3 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span className="flex-1 font-medium">{error}</span>
+          </div>
+        )}
+
+        {/* Footer actions */}
+        <div className="flex gap-3 pt-2">
+          <button
+            type="button"
+            className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted transition cursor-pointer"
+            onClick={onClose}
+            disabled={loading}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+            disabled={loading || (mode === "manual" && !isManualValid)}
+            onClick={handleSubmit}
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <><KeyRound className="h-4 w-4 mr-1" /> Confirm & Send</>
+            )}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function AdminUsersPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [actionMessage, setActionMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [tempPasswordTarget, setTempPasswordTarget] = useState<{
+    user: AdminUser;
+    action: "reactivate" | "reissue";
+  } | null>(null);
 
   const { data, isLoading } = useQuery<UserListResponse>({
     queryKey: ["admin-users-list", search, page],
@@ -68,29 +343,37 @@ export default function AdminUsersPage() {
   });
 
   const reactivateMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      const { data } = await apiClient.post<{ message: string }>(`/admin/users/${userId}/reactivate`);
+    mutationFn: async ({ userId, tempPassword }: { userId: string; tempPassword?: string }) => {
+      const { data } = await apiClient.post<{ message: string }>(
+        `/admin/users/${userId}/reactivate`,
+        tempPassword ? { temp_password: tempPassword } : {}
+      );
       return data;
     },
     onSuccess: (res) => {
       setActionMessage({ text: res.message, type: "success" });
       queryClient.invalidateQueries({ queryKey: ["admin-users-list"] });
+      setTempPasswordTarget(null);
       setTimeout(() => setActionMessage(null), 6000);
     },
     onError: (err: any) => {
-      setActionMessage({ text: err.message || "Failed to reactivate account.", type: "error" });
+      setActionMessage({ text: err?.response?.data?.detail || err.message || "Failed to reactivate account.", type: "error" });
       setTimeout(() => setActionMessage(null), 6000);
     },
   });
 
   const reissueTempPasswordMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      const { data } = await apiClient.post<{ message: string }>(`/admin/users/${userId}/reissue-temp-password`);
+    mutationFn: async ({ userId, tempPassword }: { userId: string; tempPassword?: string }) => {
+      const { data } = await apiClient.post<{ message: string }>(
+        `/admin/users/${userId}/reissue-temp-password`,
+        tempPassword ? { temp_password: tempPassword } : {}
+      );
       return data;
     },
     onSuccess: (res) => {
       setActionMessage({ text: res.message, type: "success" });
       queryClient.invalidateQueries({ queryKey: ["admin-users-list"] });
+      setTempPasswordTarget(null);
       setTimeout(() => setActionMessage(null), 6000);
     },
     onError: (err: any) => {
@@ -268,17 +551,12 @@ export default function AdminUsersPage() {
                       {(u.is_banned || u.reactivation_requested) && (
                         <button
                           onClick={() => {
-                            if (
-                              confirm(
-                                `Reactivate account for ${u.full_name || u.email}?\n\nThis will reset failed attempts, generate a new temporary password (valid for 24 hours), and email it to the user.`
-                              )
-                            ) {
-                              reactivateMutation.mutate(u.id);
-                            }
+                            setActionMessage(null);
+                            setTempPasswordTarget({ user: u, action: "reactivate" });
                           }}
-                          disabled={reactivateMutation.isPending}
+                          disabled={reactivateMutation.isPending || reissueTempPasswordMutation.isPending}
                           className="flex items-center gap-1 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition cursor-pointer"
-                          title="Generate new 24-hour temporary password and email to user"
+                          title="Reactivate user with auto or manual temporary password"
                         >
                           <KeyRound className="h-3.5 w-3.5" />
                           Reactivate
@@ -288,13 +566,8 @@ export default function AdminUsersPage() {
                       {/* Reissue Temporary Password Button */}
                       <button
                         onClick={() => {
-                          if (
-                            confirm(
-                              `Reissue temporary password for ${u.full_name || u.email}?\n\nA fresh 24-hour temporary password will be generated and emailed directly to ${u.email}.`
-                            )
-                          ) {
-                            reissueTempPasswordMutation.mutate(u.id);
-                          }
+                          setActionMessage(null);
+                          setTempPasswordTarget({ user: u, action: "reissue" });
                         }}
                         disabled={reissueTempPasswordMutation.isPending || reactivateMutation.isPending}
                         className={cn(
@@ -303,13 +576,9 @@ export default function AdminUsersPage() {
                             ? "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20"
                             : "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
                         )}
-                        title="Generate and email a fresh 24-hour temporary password"
+                        title="Generate or manually set and email a fresh 24-hour temporary password"
                       >
-                        {reissueTempPasswordMutation.isPending ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <KeyRound className="h-3.5 w-3.5" />
-                        )}
+                        <KeyRound className="h-3.5 w-3.5" />
                         {u.is_temp_password_expired ? "Reissue Expired Pwd" : "Send Temp Pwd"}
                       </button>
 
@@ -374,6 +643,33 @@ export default function AdminUsersPage() {
             </div>
           )}
         </div>
+      )}
+
+      {tempPasswordTarget && (
+        <UserTempPasswordModal
+          user={tempPasswordTarget.user}
+          action={tempPasswordTarget.action}
+          onClose={() => setTempPasswordTarget(null)}
+          error={actionMessage?.type === "error" ? actionMessage.text : null}
+          loading={
+            tempPasswordTarget.action === "reactivate"
+              ? reactivateMutation.isPending
+              : reissueTempPasswordMutation.isPending
+          }
+          onConfirm={(tempPassword) => {
+            if (tempPasswordTarget.action === "reactivate") {
+              reactivateMutation.mutate({
+                userId: tempPasswordTarget.user.id,
+                tempPassword,
+              });
+            } else {
+              reissueTempPasswordMutation.mutate({
+                userId: tempPasswordTarget.user.id,
+                tempPassword,
+              });
+            }
+          }}
+        />
       )}
     </div>
   );

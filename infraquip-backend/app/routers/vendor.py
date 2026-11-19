@@ -722,6 +722,7 @@ async def get_vendor_enquiries(
         "results": [
             {
                 "id": str(e.id),
+                "enquiry_number": getattr(e, "enquiry_number", None),
                 "requirement_type": e.requirement_type.value if hasattr(e.requirement_type, "value") else e.requirement_type,
                 "status": e.status.value if hasattr(e.status, "value") else e.status,
                 "is_read": e.is_read_by_vendor,
@@ -818,6 +819,7 @@ async def get_vendor_enquiry_thread(
 
     return {
         "id": str(enquiry.id),
+        "enquiry_number": getattr(enquiry, "enquiry_number", None),
         "requirement_type": enquiry.requirement_type.value if hasattr(enquiry.requirement_type, "value") else enquiry.requirement_type,
         "status": enquiry.status.value if hasattr(enquiry.status, "value") else enquiry.status,
         "customer_name": enquiry.customer.full_name if enquiry.customer else "Unknown",
@@ -825,8 +827,11 @@ async def get_vendor_enquiry_thread(
         "machine_title": enquiry.machine.title if enquiry.machine else None,
         "machine_slug": enquiry.machine.slug if enquiry.machine else None,
         "required_from": enquiry.required_from,
+        "duration_unit": getattr(enquiry, "duration_unit", None),
+        "duration_value": getattr(enquiry, "duration_value", None),
         "required_duration_days": enquiry.required_duration_days,
         "location_of_use": enquiry.location_of_use,
+        "pincode": getattr(enquiry, "pincode", None),
         "message": enquiry.message,
         "created_at": enquiry.created_at.isoformat(),
         "messages": [

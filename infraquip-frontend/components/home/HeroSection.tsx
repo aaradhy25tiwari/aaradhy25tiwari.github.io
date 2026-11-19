@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Search, MapPin, ChevronDown, LayoutDashboard, ArrowRight, ShieldCheck, PlusCircle } from "lucide-react";
+import { Search, MapPin, ChevronDown, LayoutDashboard, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { useAuth } from "@/hooks/useAuth";
@@ -25,7 +25,6 @@ export function HeroSection() {
   const [query, setQuery] = useState("");
   const [city, setCity] = useState("");
   const [category, setCategory] = useState("All Equipment");
-  const [listingType, setListingType] = useState<"rent" | "sale">("rent");
   const { user, loading } = useAuth();
 
   const { data: apiCategories = [] } = useQuery<{ id: string; name: string; slug: string }[]>({
@@ -58,11 +57,7 @@ export function HeroSection() {
       params.set("category", matched?.name || category.toLowerCase());
     }
     
-    if (listingType === "sale") {
-      router.push(`/buy?${params.toString()}`);
-    } else {
-      router.push(`/machines?${params.toString()}`);
-    }
+    router.push(`/machines?${params.toString()}`);
   };
 
   return (
@@ -99,7 +94,7 @@ export function HeroSection() {
           <p className="animate-slide-up delay-300
                         text-slate-300 font-medium
                         text-base sm:text-xl mb-8 sm:mb-12 max-w-xl leading-relaxed">
-            Rent or buy reliable heavy equipment for every project.
+            Rent reliable heavy equipment for every project.
             Trusted brands, verified vendors, and transparent pricing.
           </p>
 
@@ -120,27 +115,10 @@ export function HeroSection() {
               <div className="flex gap-2 relative z-10 -mb-[1px]">
                 <Button 
                   type="button"
-                  onClick={() => setListingType("rent")}
                   size="sm" 
-                  className={`font-bold rounded-t-lg rounded-b-none px-6 h-10 ${
-                    listingType === "rent" 
-                      ? "bg-amber-500 hover:bg-amber-600 text-slate-950 border-0" 
-                      : "bg-slate-900/50 hover:bg-slate-900/80 text-white border border-b-0 border-white/10"
-                  }`}
+                  className="font-bold rounded-t-lg rounded-b-none px-6 h-10 bg-amber-500 hover:bg-amber-600 text-slate-950 border-0"
                 >
                   RENT EQUIPMENT
-                </Button>
-                <Button 
-                  type="button"
-                  onClick={() => setListingType("sale")}
-                  size="sm" 
-                  className={`font-bold rounded-t-lg rounded-b-none px-6 h-10 ${
-                    listingType === "sale" 
-                      ? "bg-amber-500 hover:bg-amber-600 text-slate-950 border-0" 
-                      : "bg-slate-900/50 hover:bg-slate-900/80 text-white border border-b-0 border-white/10"
-                  }`}
-                >
-                  BUY EQUIPMENT
                 </Button>
                 <Button 
                   type="button"
@@ -152,7 +130,7 @@ export function HeroSection() {
                     }
                   }}
                   size="sm" 
-                  className="font-bold rounded-t-lg rounded-b-none px-4 sm:px-6 h-10 bg-slate-900/70 hover:bg-amber-500 hover:text-slate-950 text-amber-400 hover:text-slate-950 border border-b-0 border-white/10 transition-all flex items-center gap-1.5"
+                  className="font-bold rounded-t-lg rounded-b-none px-4 sm:px-6 h-10 bg-slate-900/70 hover:bg-amber-500 hover:text-slate-950 text-amber-400 border border-b-0 border-white/10 transition-all flex items-center gap-1.5"
                 >
                   <PlusCircle className="h-4 w-4" />
                   LIST MACHINES
@@ -173,11 +151,7 @@ export function HeroSection() {
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                     <input
                       type="text"
-                      placeholder={
-                        listingType === "sale"
-                          ? "Machinery to buy (e.g. Excavator, JCB 3DX, Crane)"
-                          : "Search rental equipment (e.g. Excavator 20 Ton)"
-                      }
+                      placeholder="Search rental equipment (e.g. Excavator 20 Ton)"
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       className="w-full rounded-xl pl-12 pr-4 h-14 py-0 text-base focus:outline-none focus:ring-2 focus:ring-amber-500/50
@@ -211,7 +185,7 @@ export function HeroSection() {
                     <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                     <input
                       type="text"
-                      placeholder={listingType === "sale" ? "Delivery City" : "Location"}
+                      placeholder="Location"
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
                       className="w-full rounded-xl pl-12 pr-4 h-14 py-0 text-base focus:outline-none focus:ring-2 focus:ring-amber-500/50
@@ -227,35 +201,10 @@ export function HeroSection() {
                     size="lg"
                     className="w-full sm:w-auto rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 px-8 h-14 py-0 gap-2 font-bold text-base shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all shrink-0"
                   >
-                    {listingType === "sale" ? (
-                      <>
-                        Find Machinery
-                        <ArrowRight className="h-5 w-5" />
-                      </>
-                    ) : (
-                      <>
-                        Search
-                        <Search className="h-5 w-5" />
-                      </>
-                    )}
+                    Search
+                    <Search className="h-5 w-5" />
                   </Button>
                 </div>
-
-                {listingType === "sale" && (
-                  <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-300">
-                    <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
-                      <ShieldCheck className="h-4 w-4" />
-                      Certified Pre-Owned &amp; New Machinery Sourcing · 100+ Point Inspection · Financing up to 80%
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => router.push("/buy")}
-                      className="font-semibold text-primary underline underline-offset-4 hover:text-primary/80 transition-colors"
-                    >
-                      Open Full Procurement RFQ Desk →
-                    </button>
-                  </div>
-                )}
               </form>
             </div>
           )}

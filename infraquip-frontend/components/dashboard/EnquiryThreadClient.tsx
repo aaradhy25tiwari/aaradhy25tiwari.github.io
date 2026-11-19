@@ -63,7 +63,14 @@ export function EnquiryThreadClient({ enquiryId }: { enquiryId: string }) {
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold">Enquiry for {enquiry.machine_title || "Equipment"}</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl font-bold">Enquiry for {enquiry.machine_title || "Equipment"}</h1>
+            {enquiry.enquiry_number && (
+              <span className="font-mono text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
+                {enquiry.enquiry_number}
+              </span>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground">From {enquiry.customer_name} &bull; {formatDate(enquiry.created_at)}</p>
         </div>
       </div>
@@ -173,11 +180,16 @@ export function EnquiryThreadClient({ enquiryId }: { enquiryId: string }) {
                 </div>
               )}
               
-              {enquiry.location_of_use && (
+              {(enquiry.location_of_use || enquiry.pincode) && (
                 <div className="flex items-start gap-3">
                   <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                   <div>
-                    <p className="font-medium text-muted-foreground">{enquiry.location_of_use}</p>
+                    {enquiry.location_of_use && (
+                      <p className="font-medium text-muted-foreground">{enquiry.location_of_use}</p>
+                    )}
+                    {enquiry.pincode && (
+                      <p className="text-xs text-muted-foreground font-mono">PIN: {enquiry.pincode}</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -200,10 +212,14 @@ export function EnquiryThreadClient({ enquiryId }: { enquiryId: string }) {
                 </div>
               )}
               
-              {enquiry.required_duration_days && (
+              {(enquiry.duration_value || enquiry.required_duration_days) && (
                 <div className="flex justify-between py-2">
                   <span className="text-muted-foreground">Duration</span>
-                  <span className="font-medium">{enquiry.required_duration_days} days</span>
+                  <span className="font-medium capitalize">
+                    {enquiry.duration_value && enquiry.duration_unit
+                      ? `${enquiry.duration_value} ${enquiry.duration_unit}`
+                      : `${enquiry.required_duration_days} days`}
+                  </span>
                 </div>
               )}
             </div>

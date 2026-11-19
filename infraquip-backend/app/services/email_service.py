@@ -8,7 +8,7 @@ import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import urlparse
 from app.config import settings
 
@@ -483,7 +483,10 @@ def send_enquiry_received_email(
     vendor_email: str, vendor_name: str,
     customer_name: str, machine_title: str,
     dashboard_url: str,
+    enquiry_number: Optional[str] = None,
 ) -> None:
+    enq_ref_html = f'<p style="color: #6b7280; font-size: 13px; margin: 4px 0 16px;">Enquiry Reference: <strong style="color: #111827;">{enquiry_number}</strong></p>' if enquiry_number else ""
+    subject = f"New Enquiry [{enquiry_number}]: {machine_title}" if enquiry_number else f"New Enquiry: {machine_title}"
     html = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px; color: #1f2937;">
       <div style="text-align: center; margin-bottom: 32px;">
@@ -493,6 +496,7 @@ def send_enquiry_received_email(
       <p style="color: #4b5563; line-height: 1.6; font-size: 15px;">
         Hi {vendor_name}, <strong>{customer_name}</strong> just submitted an enquiry for <strong>"{machine_title}"</strong>.
       </p>
+      {enq_ref_html}
       <div style="text-align: center; margin: 28px 0;">
         <a href="{dashboard_url}"
            style="display: inline-block; background: #f59e0b; color: #111827; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 15px;">
@@ -502,7 +506,7 @@ def send_enquiry_received_email(
       {EMAIL_FOOTER}
     </div>
     """
-    _send(vendor_email, f"New Enquiry: {machine_title}", html)
+    _send(vendor_email, subject, html)
 
 
 def send_payment_receipt_email(

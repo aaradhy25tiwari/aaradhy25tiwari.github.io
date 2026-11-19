@@ -115,6 +115,7 @@ async def get_customer_enquiries(request: Request, current_user: CustomerOrBroke
     return [
         EnquiryListItemResponse(
             id=str(e.id),
+            enquiry_number=getattr(e, "enquiry_number", None),
             machine_title=e.machine.title if e.machine else "General Enquiry",
             machine_slug=e.machine.slug if e.machine else None,
             requirement_type=e.requirement_type.value if hasattr(e.requirement_type, "value") else e.requirement_type,

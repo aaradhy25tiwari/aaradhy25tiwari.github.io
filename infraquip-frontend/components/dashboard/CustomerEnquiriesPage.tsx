@@ -8,6 +8,7 @@ import { formatRelativeTime, cn } from "@/lib/utils";
 
 interface EnquiryItem {
   id: string;
+  enquiry_number?: string;
   machine_title: string;
   requirement_type: string;
   status: string;
@@ -69,7 +70,14 @@ export function CustomerEnquiriesPage() {
               className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 transition hover:border-primary/30"
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{e.machine_title}</p>
+                <div className="flex items-center gap-2">
+                  <p className="truncate font-medium">{e.machine_title}</p>
+                  {e.enquiry_number && (
+                    <span className="font-mono text-[10px] text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">
+                      {e.enquiry_number}
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {e.requirement_type === "rent" ? "Wanting to rent" : "Wanting to buy"}
                 </p>

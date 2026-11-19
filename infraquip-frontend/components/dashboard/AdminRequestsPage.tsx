@@ -5,12 +5,31 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Clock, CheckCircle, XCircle, ChevronLeft, ChevronRight,
   User, Building2, MapPin, Phone, Hash, MessageSquare,
-  HardHat, Handshake, RefreshCw, Loader2
+  HardHat, Handshake, RefreshCw, Loader2, Key, Eye, EyeOff,
+  Sparkles, AlertCircle, Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, scrollToTop } from "@/lib/utils";
 import apiClient from "@/lib/api/client";
 import { EmptyState } from "@/components/shared/EmptyState";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+function getSecureRandomInt(max: number): number {
+  const array = new Uint32Array(1);
+  const limit = Math.floor(0x100000000 / max) * max;
+  let val: number;
+  do {
+    crypto.getRandomValues(array);
+    val = array[0];
+  } while (val >= limit);
+  return val % max;
+}
 
 // ── Types ──────────────────────────────────────────────────────
 type RequestStatus = "pending" | "approved" | "rejected";
@@ -122,6 +141,260 @@ function RejectModal({
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Approve modal with manual temporary password option ────────
+function ApproveModal({
+  request,
+  onClose,
+  onConfirm,
+  loading,
+  error,
+}: {
+  request: AccountRequest;
+  onClose: () => void;
+  onConfirm: (tempPassword?: string) => void;
+  loading: boolean;
+  error?: string | null;
+}) {
+  const [mode, setMode] = useState<"auto" | "manual">("auto");
+  const [manualPassword, setManualPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
+  const generateRandomPassword = () => {
+    const uppers = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    const lowers = "abcdefghjkmnpqrstuvwxyz";
+    const digits = "23456789";
+    const specials = "@#$!%*?";
+    const all = uppers + lowers + digits + specials;
+    const parts = [
+      uppers[getSecureRandomInt(uppers.length)],
+      uppers[getSecureRandomInt(uppers.length)],
+      lowers[getSecureRandomInt(lowers.length)],
+      lowers[getSecureRandomInt(lowers.length)],
+      digits[getSecureRandomInt(digits.length)],
+      digits[getSecureRandomInt(digits.length)],
+      specials[getSecureRandomInt(specials.length)],
+      specials[getSecureRandomInt(specials.length)],
+    ];
+    while (parts.length < 12) {
+      parts.push(all[getSecureRandomInt(all.length)]);
+    }
+    for (let i = parts.length - 1; i > 0; i--) {
+      const j = getSecureRandomInt(i + 1);
+      [parts[i], parts[j]] = [parts[j], parts[i]];
+    }
+    setManualPassword(parts.join(""));
+    setShowPassword(true);
+  };
+
+  const hasLength = manualPassword.length >= 8;
+  const hasUpper = /[A-Z]/.test(manualPassword);
+  const hasLower = /[a-z]/.test(manualPassword);
+  const hasNumber = /[0-9]/.test(manualPassword);
+  const isManualValid = hasLength && hasUpper && hasLower && hasNumber;
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (mode === "manual") {
+      if (!isManualValid || loading) return;
+      onConfirm(manualPassword.trim());
+    } else {
+      if (loading) return;
+      onConfirm(undefined);
+    }
+  };
+
+  return (
+    <Dialog open={true} onOpenChange={(open) => { if (!open && !loading) onClose(); }}>
+      <DialogContent
+        className="w-full max-w-lg p-6 space-y-5 rounded-2xl"
+        onPointerDownOutside={(e) => { if (loading) e.preventDefault(); }}
+        onEscapeKeyDown={(e) => { if (loading) e.preventDefault(); }}
+      >
+        {/* Header */}
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 flex-shrink-0">
+              <CheckCircle className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle className="font-semibold text-lg">Approve Account</DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                Issue temporary credentials and activate account access
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        {/* User Summary */}
+        <div className="rounded-xl border border-border/80 bg-muted/40 p-3.5 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-sm">{request.full_name}</span>
+            <span
+              className={cn(
+                "text-xs px-2 py-0.5 rounded-full font-medium capitalize",
+                request.role === "vendor"
+                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                  : request.role === "broker"
+                  ? "bg-violet-500/15 text-violet-600 dark:text-violet-400"
+                  : "bg-blue-500/15 text-blue-600 dark:text-blue-400"
+              )}
+            >
+              {request.role}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">{request.email}</p>
+          {request.company_name && (
+            <p className="text-xs text-muted-foreground font-medium flex items-center gap-1 pt-0.5">
+              <Building2 className="h-3 w-3" /> {request.company_name}
+            </p>
+          )}
+        </div>
+
+        {/* Mode Selector */}
+        <div className="space-y-2">
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Temporary Password Generation
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              onClick={() => setMode("auto")}
+              className={cn(
+                "flex flex-col text-left p-3 rounded-xl border text-xs transition",
+                mode === "auto"
+                  ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary"
+                  : "border-border bg-background hover:bg-muted/50 text-muted-foreground"
+              )}
+            >
+              <span className="font-semibold text-foreground flex items-center justify-between">
+                Auto-generate
+                {mode === "auto" && <span className="h-2 w-2 rounded-full bg-primary" />}
+              </span>
+              <span className="mt-1 text-[11px] leading-relaxed">
+                Creates a secure 12-char password automatically.
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMode("manual");
+                if (!manualPassword) generateRandomPassword();
+              }}
+              className={cn(
+                "flex flex-col text-left p-3 rounded-xl border text-xs transition",
+                mode === "manual"
+                  ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary"
+                  : "border-border bg-background hover:bg-muted/50 text-muted-foreground"
+              )}
+            >
+              <span className="font-semibold text-foreground flex items-center justify-between">
+                Set Manually
+                {mode === "manual" && <span className="h-2 w-2 rounded-full bg-primary" />}
+              </span>
+              <span className="mt-1 text-[11px] leading-relaxed">
+                Provide or customize a specific temporary password.
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Manual Password Input (when mode === "manual") */}
+        {mode === "manual" && (
+          <div className="space-y-3 pt-1 animate-in fade-in">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                  <Key className="h-3.5 w-3.5 text-primary" />
+                  Manual Temporary Password
+                </label>
+                <button
+                  type="button"
+                  onClick={generateRandomPassword}
+                  className="text-[11px] text-primary hover:underline flex items-center gap-1 font-medium"
+                >
+                  <Sparkles className="h-3 w-3" /> Auto-suggest strong
+                </button>
+              </div>
+
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={manualPassword}
+                  onChange={(e) => setManualPassword(e.target.value)}
+                  placeholder="Enter temporary password..."
+                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm font-mono outline-none transition focus:ring-2 focus:ring-primary/20 focus:border-primary pr-20"
+                />
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition"
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Validation Checklist */}
+            <div className="grid grid-cols-2 gap-1.5 text-[11px] bg-muted/30 p-2.5 rounded-lg border border-border/50">
+              <div className={cn("flex items-center gap-1.5", hasLength ? "text-emerald-500 font-medium" : "text-muted-foreground")}>
+                <Check className={cn("h-3 w-3", hasLength ? "text-emerald-500" : "opacity-40")} />
+                8+ characters
+              </div>
+              <div className={cn("flex items-center gap-1.5", hasUpper ? "text-emerald-500 font-medium" : "text-muted-foreground")}>
+                <Check className={cn("h-3 w-3", hasUpper ? "text-emerald-500" : "opacity-40")} />
+                1 uppercase letter
+              </div>
+              <div className={cn("flex items-center gap-1.5", hasLower ? "text-emerald-500 font-medium" : "text-muted-foreground")}>
+                <Check className={cn("h-3 w-3", hasLower ? "text-emerald-500" : "opacity-40")} />
+                1 lowercase letter
+              </div>
+              <div className={cn("flex items-center gap-1.5", hasNumber ? "text-emerald-500 font-medium" : "text-muted-foreground")}>
+                <Check className={cn("h-3 w-3", hasNumber ? "text-emerald-500" : "opacity-40")} />
+                1 number (0-9)
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Notice */}
+        <p className="text-[11px] text-muted-foreground">
+          The temporary password is valid for 24 hours. The user will be required to change it upon first login.
+        </p>
+
+        {/* Error message */}
+        {error && (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Footer actions */}
+        <div className="flex gap-3 pt-2">
+          <Button variant="outline" className="flex-1" onClick={onClose} disabled={loading}>
+            Cancel
+          </Button>
+          <Button
+            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
+            disabled={loading || (mode === "manual" && !isManualValid)}
+            onClick={handleSubmit}
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <><CheckCircle className="h-4 w-4 mr-1.5" /> Approve & Send</>
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -260,6 +533,8 @@ export function AdminRequestsPage() {
   const [statusFilter, setStatusFilter] = useState<RequestStatus | "all">("pending");
   const [page, setPage] = useState(1);
   const [rejectTarget, setRejectTarget] = useState<AccountRequest | null>(null);
+  const [approveTarget, setApproveTarget] = useState<AccountRequest | null>(null);
+  const [approveError, setApproveError] = useState<string | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
 
@@ -279,13 +554,21 @@ export function AdminRequestsPage() {
   });
 
   const approveMutation = useMutation({
-    mutationFn: (id: string) => apiClient.post(`/account-requests/admin/${id}/approve`),
+    mutationFn: ({ id, tempPassword }: { id: string; tempPassword?: string }) =>
+      apiClient.post(`/account-requests/admin/${id}/approve`, tempPassword ? { temp_password: tempPassword } : {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-account-requests"] });
       queryClient.invalidateQueries({ queryKey: ["account-request-stats"] });
       setApprovingId(null);
+      setApproveTarget(null);
+      setApproveError(null);
     },
-    onError: () => setApprovingId(null),
+    onError: (err: any) => {
+      setApprovingId(null);
+      const detail = err?.response?.data?.detail;
+      const message = typeof detail === "string" ? detail : (err?.message || "Failed to approve account request.");
+      setApproveError(message);
+    },
   });
 
   const rejectMutation = useMutation({
@@ -376,8 +659,8 @@ export function AdminRequestsPage() {
               req={req}
               approving={approvingId === req.id}
               onApprove={() => {
-                setApprovingId(req.id);
-                approveMutation.mutate(req.id);
+                setApproveError(null);
+                setApproveTarget(req);
               }}
               onReject={() => setRejectTarget(req)}
             />
@@ -416,6 +699,24 @@ export function AdminRequestsPage() {
             </Button>
           </div>
         </div>
+      )}
+
+      {/* Approve modal */}
+      {approveTarget && (
+        <ApproveModal
+          request={approveTarget}
+          onClose={() => {
+            setApproveTarget(null);
+            setApproveError(null);
+          }}
+          loading={approvingId === approveTarget.id}
+          error={approveError}
+          onConfirm={(tempPassword) => {
+            setApprovingId(approveTarget.id);
+            setApproveError(null);
+            approveMutation.mutate({ id: approveTarget.id, tempPassword });
+          }}
+        />
       )}
 
       {/* Reject modal */}

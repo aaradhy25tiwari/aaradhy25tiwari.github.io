@@ -6,7 +6,7 @@ import io
 import csv
 import asyncio
 from typing import Optional, List, Dict, Any, Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request, status, UploadFile, File
 from sqlalchemy import select, func, case
 from sqlalchemy.orm import selectinload, joinedload
@@ -33,11 +33,22 @@ from app.services.email_service import (
 )
 from app.core.rate_limiter import limiter, get_authenticated_user_key
 from app.config import settings
-from app.routers.account_requests import _gen_temp_password
+from app.routers.account_requests import _gen_temp_password, validate_temporary_password
 from app.services.category_sync import ensure_categories_synced_for_names, sync_all_categories_from_master
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+class AdminTempPasswordPayload(BaseModel):
+    temp_password: Optional[str] = Field(None, min_length=8, max_length=128)
+
+    @field_validator("temp_password", mode="before")
+    @classmethod
+    def normalize_temp_password(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
 
 # ── GET /admin/review-queue ────────────────────────────────────
@@ -772,6 +783,7 @@ async def reactivate_user(
     background_tasks: BackgroundTasks,
     current_user: AdminUser,
     db: DBSession,
+    payload: Optional[AdminTempPasswordPayload] = None,
 ):
     """Admin approves account reactivation: resets failed attempts, generates new 24h temp password, and emails user."""
     from datetime import datetime, timezone, timedelta
@@ -782,8 +794,11 @@ async def reactivate_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Generate fresh compliant temporary password
-    temp_password = _gen_temp_password()
+    # Set or generate fresh compliant temporary password
+    if payload and payload.temp_password and payload.temp_password.strip():
+        temp_password = validate_temporary_password(payload.temp_password)
+    else:
+        temp_password = _gen_temp_password()
 
     # Update or reconcile in Supabase Auth
     from app.services.auth_sync import sync_supabase_user_password
@@ -847,6 +862,7 @@ async def reissue_user_temporary_password(
     admin: AdminUser,
     background_tasks: BackgroundTasks,
     db: DBSession,
+    payload: Optional[AdminTempPasswordPayload] = None,
 ):
     """Admin reissues a fresh 24-hour temporary password for a user and emails it."""
     from datetime import datetime, timezone, timedelta
@@ -863,7 +879,10 @@ async def reissue_user_temporary_password(
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
 
-    temp_password = _gen_temp_password()
+    if payload and payload.temp_password and payload.temp_password.strip():
+        temp_password = validate_temporary_password(payload.temp_password)
+    else:
+        temp_password = _gen_temp_password()
     from app.services.auth_sync import sync_supabase_user_password
     supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
     try:

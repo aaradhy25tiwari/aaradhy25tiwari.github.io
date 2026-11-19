@@ -4,6 +4,7 @@ Account Requests Router — Gated registration & admin approval queue
 import uuid
 import secrets
 import string
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, status, Request
@@ -23,13 +24,13 @@ from app.services.email_service import (
     send_account_request_pending_reminder_email,
 )
 from app.core.rate_limiter import limiter, check_auth_rate_limit, get_authenticated_user_key
-from typing import Literal
+from typing import Any, Literal
 
 router = APIRouter()
 
 
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 import logging
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,43 @@ class AccountRequestCreate(BaseModel):
 
 class RejectPayload(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
+
+
+class ApproveAccountRequestPayload(BaseModel):
+    temp_password: str | None = Field(None, min_length=8, max_length=128)
+
+    @field_validator("temp_password", mode="before")
+    @classmethod
+    def normalize_temp_password(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+
+def validate_temporary_password(password: str) -> str:
+    """Validate that a manually provided temporary password satisfies system requirements."""
+    pwd = (password or "").strip()
+    if len(pwd) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Temporary password must be at least 8 characters long.",
+        )
+    if not re.search(r"[A-Z]", pwd):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Temporary password must contain at least one uppercase letter.",
+        )
+    if not re.search(r"[a-z]", pwd):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Temporary password must contain at least one lowercase letter.",
+        )
+    if not re.search(r"[0-9]", pwd):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Temporary password must contain at least one number.",
+        )
+    return pwd
 
 
 class AccountRequestOut(BaseModel):
@@ -226,6 +264,7 @@ async def approve_account_request(
     admin: AdminUser,
     background_tasks: BackgroundTasks,
     db: DBSession,
+    payload: ApproveAccountRequestPayload | None = None,
 ):
     """Approve a request: create Supabase user + app user with temp credentials."""
     result = await db.execute(
@@ -242,8 +281,11 @@ async def approve_account_request(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="A user with this email already exists.")
 
-    # Generate temp password
-    temp_password = _gen_temp_password()
+    # Determine temporary password: use custom if supplied, otherwise auto-generate
+    if payload and payload.temp_password and payload.temp_password.strip():
+        temp_password = validate_temporary_password(payload.temp_password)
+    else:
+        temp_password = _gen_temp_password()
 
     # Create or reconcile Supabase Auth user
     from app.services.auth_sync import sync_supabase_user_password

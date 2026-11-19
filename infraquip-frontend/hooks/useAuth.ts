@@ -28,10 +28,13 @@ export function useAuth() {
       const { data } = await apiClient.get<User>("/auth/me");
       setState({ user: data, loading: false, error: null });
     } catch (err: any) {
-      // Backend profile fetch failed (likely network timeout).
-      // Fallback: read from local session so we don't log them out!
+      // Backend profile fetch failed (likely network timeout or invalid token).
+      // Fallback: read from local session so we don't log them out if session is still good
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await supabase.auth
+          .getSession()
+          .catch(() => ({ data: { session: null } }));
+
         if (session?.user) {
           const sbUser = session.user;
           const meta = sbUser.user_metadata ?? {};
@@ -51,11 +54,11 @@ export function useAuth() {
           return;
         }
       } catch (fallbackErr) {
-        console.error("Local session fallback also failed", fallbackErr);
+        console.debug("Local session fallback error:", fallbackErr);
       }
       
-      // If we completely failed to get any session, then we clear
-      setState((prev) => ({ ...prev, loading: false, error: "Network error" }));
+      // If we completely failed to get any valid session, clear user state cleanly
+      setState({ user: null, loading: false, error: null });
     }
   }, [supabase.auth]);
 
@@ -63,7 +66,7 @@ export function useAuth() {
     // Initial session check
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) {
-        // Clear invalid stale tokens locally
+        // Clear invalid stale session locally and notify subscribers
         supabase.auth.signOut({ scope: "local" }).catch(() => {});
         setState({ user: null, loading: false, error: null });
       } else if (session) {
