@@ -76,10 +76,12 @@ async def lifespan(app: FastAPI):
             async with engine.connect() as check_conn:
                 res_cols = await check_conn.execute(
                     text("""
-                        SELECT column_name
-                        FROM information_schema.columns
-                        WHERE table_name = 'enquiries'
-                          AND column_name IN ('enquiry_number', 'duration_unit', 'duration_value', 'pincode');
+                        SELECT a.attname
+                        FROM pg_attribute a
+                        WHERE a.attrelid = 'enquiries'::regclass
+                          AND a.attnum > 0
+                          AND NOT a.attisdropped
+                          AND a.attname IN ('enquiry_number', 'duration_unit', 'duration_value', 'pincode');
                     """)
                 )
                 cols = {row[0] for row in res_cols.fetchall()}
@@ -87,10 +89,16 @@ async def lifespan(app: FastAPI):
 
                 res_idx = await check_conn.execute(
                     text("""
-                        SELECT indexname
-                        FROM pg_indexes
-                        WHERE tablename = 'enquiries'
-                          AND indexname = 'idx_enquiries_enquiry_number';
+                        SELECT 1
+                        FROM pg_index i
+                        JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+                        WHERE i.indrelid = 'enquiries'::regclass
+                          AND a.attname = 'enquiry_number'
+                          AND i.indisunique
+                          AND i.indisvalid
+                          AND i.indisready
+                          AND i.indpred IS NULL
+                        LIMIT 1;
                     """)
                 )
                 has_index = res_idx.scalar_one_or_none() is not None

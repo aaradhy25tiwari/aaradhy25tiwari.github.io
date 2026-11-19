@@ -24,6 +24,12 @@ export function useAuth() {
 
   // Fetch full user profile from our backend
   const fetchUser = useCallback(async () => {
+    // Capture session token associated with this request to guard against delayed 401s
+    const { data: initialData } = await supabase.auth
+      .getSession()
+      .catch(() => ({ data: { session: null } }));
+    const requestToken = initialData?.session?.access_token;
+
     try {
       const { data } = await apiClient.get<User>("/auth/me");
       setState({ user: data, loading: false, error: null });
@@ -31,6 +37,17 @@ export function useAuth() {
       const status = err?.status ?? err?.response?.status;
       // If the backend explicitly rejects the account (401 or 403), perform session cleanup and do not fall back
       if (status === 401 || status === 403) {
+        // Guard against signing out when the current session has changed to a newer session
+        const { data: currentData } = await supabase.auth
+          .getSession()
+          .catch(() => ({ data: { session: null } }));
+        const currentToken = currentData?.session?.access_token;
+
+        if (requestToken && currentToken && currentToken !== requestToken) {
+          // A newer session is now active; do not sign out or clear state for the newer session
+          return;
+        }
+
         try {
           await supabase.auth.signOut({ scope: "local" });
         } catch {
@@ -114,9 +131,13 @@ export function useAuth() {
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         if (event === "SIGNED_IN" && session) {
-          await fetchUser();
+          // Move profile verification outside the awaited callback so the internal Supabase
+          // auth lock is released and signOut can complete cleanly if verification fails.
+          setTimeout(() => {
+            fetchUser();
+          }, 0);
         } else if (event === "SIGNED_OUT") {
           setState({ user: null, loading: false, error: null });
           redirectIfProtectedPath();
